@@ -108,6 +108,7 @@ _AUTH_SETTING_DEFAULTS = {
     "bot_active_for_admins": "1", "working_hours_active": "0", "working_hours_system_enabled": "0",
     "match_registration_enabled": "1", "communications_enabled": "1", "team_mode_enabled": "0",
     "managers_can_create_teams": "0", "admin_direct_kick_enabled": "1",
+    "scan_enabled": "1", "scan_default_mode": "approval",
 }
 
 
@@ -120,12 +121,13 @@ async def prewarm_auth_settings():
 async def compute_caps(is_pishva: bool, admin):
     """(caps: set[str], feats: dict). caps شاملِ همه‌ی سوییچ‌های کلیِ سیستم هم هست.
     پیش‌فرضِ هر کلید دقیقاً همان مقداری‌ست که ربات برای همان کلید به‌کار می‌برد."""
-    match_reg, comms_on, team_mode, mgr_create, direct_global = await asyncio.gather(
+    match_reg, comms_on, team_mode, mgr_create, direct_global, scan_on = await asyncio.gather(
         db.get_setting("match_registration_enabled", "1"),
         db.get_setting("communications_enabled", "1"),
         db.get_setting("team_mode_enabled", "0"),
         db.get_setting("managers_can_create_teams", "0"),
         db.get_setting("admin_direct_kick_enabled", "1"),
+        db.get_setting("scan_enabled", "1"),
     )
     team_on = team_mode == "1"
     feats = {
@@ -144,6 +146,9 @@ async def compute_caps(is_pishva: bool, admin):
     caps = {k for k, v in role_caps(admin["role"], perms).items() if v}
     if match_reg != "1":
         caps.discard("match_create")
+        caps.discard("match_scan")
+    if scan_on != "1":
+        caps.discard("match_scan")      # کلید کلیِ «ثبت با عکس» خاموش = برای همه‌ی مدیرانِ غیرِ ارشد بسته
     if comms_on != "1":
         caps.discard("comms")
     if not team_on:
@@ -191,3 +196,25 @@ async def gate_reason():
 
 async def system_status() -> str:
     return await db.get_setting("system_status", "normal")
+
+
+# ─── «ثبت با عکس»: مستقیم یا با تأییدِ مدیر ارشد؟ ───────────────────
+# مدیر ارشد همیشه مستقیم ثبت می‌کند. برای بقیه:
+#   ۱) تنظیمِ اختصاصیِ همان مدیر (permissions["scan_mode"] = "direct" | "approval")
+#   ۲) وگرنه تنظیمِ کلی (scan_default_mode؛ پیش‌فرض "approval" = با تأیید)
+SCAN_MODES = ("direct", "approval")
+
+
+def scan_mode_override(perms: dict):
+    m = perms.get("scan_mode")
+    return m if m in SCAN_MODES else None
+
+
+async def scan_needs_approval(is_pishva: bool, admin) -> bool:
+    """True = ثبتِ نهایی فقط «درخواست» می‌سازد و باید مدیر ارشد تأیید کند."""
+    if is_pishva:
+        return False
+    own = scan_mode_override(parse_perms(admin)) if admin else None
+    if own:
+        return own == "approval"
+    return (await db.get_setting("scan_default_mode", "approval")) != "direct"

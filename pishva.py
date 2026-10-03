@@ -93,7 +93,8 @@ async def pishva_settings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "team_mode_enabled", "team_registration_enabled", "managers_can_create_teams",
         "admin_dashboard_enabled", "ai_online", "live_chess_enabled", "hub_enabled",
         "bug_report_to_pishva_enabled", "principal_panel_enabled", "admin_webpanel_enabled",
-        "admin_direct_kick_enabled", "top_players_mode"]
+        "admin_direct_kick_enabled", "top_players_mode",
+        "scan_enabled", "scan_default_mode"]
     # FIX: قبلاً این ۱۵ تا db.get_setting با asyncio.gather «هم‌زمان» صدا زده
     # می‌شدن، ولی چون Turso دور و کندِ‌رفت‌وبرگشته، هم‌زمانیِ سطحِ پایتون به
     # یک رفت‌وبرگشتِ شبکه‌ی واحد ختم نمی‌شد — چند موجِ رفت‌وبرگشتِ جدا
@@ -132,6 +133,8 @@ async def toggle_setting(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "setting_admin_webpanel": "admin_webpanel_enabled",
         "setting_admin_direct_kick": "admin_direct_kick_enabled",
         "setting_top_players_mode": "top_players_mode",
+        "setting_scan_enabled": "scan_enabled",
+        "setting_scan_mode": "scan_default_mode",
     }
     key = key_map.get(query.data)
     if key:
@@ -139,6 +142,10 @@ async def toggle_setting(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             # این یکی دوحالته‌ی "1"/"0" نیست — بین "auto" و "manual" سوییچ می‌کنه.
             current = await db.get_setting(key, "auto")
             new_val = "manual" if current != "manual" else "auto"
+        elif key == "scan_default_mode":
+            # دوحالته‌ی "direct" / "approval" (پیش‌فرض: با تأیید)
+            current = await db.get_setting(key, "approval")
+            new_val = "approval" if current == "direct" else "direct"
         else:
             current = await db.get_setting(key, "1")
             new_val = "0" if current == "1" else "1"
@@ -158,7 +165,8 @@ async def toggle_setting(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "team_mode_enabled", "team_registration_enabled", "managers_can_create_teams",
         "admin_dashboard_enabled", "ai_online", "live_chess_enabled", "hub_enabled",
         "bug_report_to_pishva_enabled", "principal_panel_enabled", "admin_webpanel_enabled",
-        "admin_direct_kick_enabled", "top_players_mode"]
+        "admin_direct_kick_enabled", "top_players_mode",
+        "scan_enabled", "scan_default_mode"]
     # FIX (کندیِ وحشتناکِ هر دکمه‌ی تنظیمات): این‌جا قبلاً، بعد از هر تاگل،
     # ۱۵ تا db.get_setting جداگانه صدا زده می‌شدن. حتی با asyncio.gather،
     # چون Turso دور و کندِ‌رفت‌وبرگشته، هم‌زمانیِ سطحِ پایتون به یک

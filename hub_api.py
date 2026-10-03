@@ -593,7 +593,7 @@ async def api_match_scan(request):
         cls = {429: web.HTTPTooManyRequests, 502: web.HTTPBadGateway, 503: web.HTTPServiceUnavailable,
                422: web.HTTPUnprocessableEntity}.get(e.status, web.HTTPBadRequest)
         raise hub._err(cls, e.code, message=e.message)
-    review["direct"] = bool(c.is_pishva)       # false = بعد از بازبینی برای تأییدِ مدیر ارشد می‌رود
+    review["direct"] = not await hub_caps.scan_needs_approval(c.is_pishva, c.admin)   # false = برای تأییدِ مدیر ارشد می‌رود
     return hub._json(review)
 
 
@@ -603,7 +603,8 @@ async def api_match_scan_commit(request):
     b = await _body(request)
     items = b.get("items")
     # مدیر ارشد: ثبتِ مستقیم در دسته‌های ≤۲۰؛ مدیر مسابقات: یک درخواستِ کامل (سقف MAX_ITEMS در clean_items)
-    if c.is_pishva and isinstance(items, list) and len(items) > SCAN_COMMIT_CHUNK:
+    needs_approval = await hub_caps.scan_needs_approval(c.is_pishva, c.admin)
+    if not needs_approval and isinstance(items, list) and len(items) > SCAN_COMMIT_CHUNK:
         raise _fail("too_many", f"در هر مرحله حداکثر {SCAN_COMMIT_CHUNK} مورد.")
     try:
         md = scan_svc.valid_date(b.get("date") or today_gregorian())
@@ -612,8 +613,8 @@ async def api_match_scan_commit(request):
     except ValueError as e:
         raise _fail("bad_request", str(e))
 
-    if not c.is_pishva:
-        # ── مدیر مسابقات: هیچ‌چیز ثبت نمی‌شود؛ فقط درخواست برای مدیر ارشد ──
+    if needs_approval:
+        # ── نیازمندِ تأیید: هیچ‌چیز ثبت نمی‌شود؛ فقط درخواست برای مدیر ارشد ──
         req_id = await scan_svc.submit_for_approval(c.uid, clean, md, tid)
         await db.log_action(c.uid, "scan_request", f"درخواستِ ثبت با عکس: {len(clean)} مسابقه", req_id)
 
@@ -625,7 +626,11 @@ async def api_match_scan_commit(request):
 
     created, failed = await scan_svc.commit_items(clean, md, tid, c.uid)
     if created:
-        await db.log_action(c.uid, "scan_commit", f"ثبت با عکس: {created} مسابقه")
+        await db.log_action(c.uid, "scan_commit", f"ثبت با عکس: {created} مسابقه" + ("" if c.is_pishva else " (مستقیم)"))
+        if not c.is_pishva:
+            # مدیرِ دارای دسترسیِ مستقیم: فقط خبر به مدیر ارشد (تأیید لازم نیست)
+            import match_scan_bot as msb
+            _spawn(msb.notify_pishva_direct_commit(_bot(), c.name, created))
     return hub._json({"ok": True, "mode": "direct", "created": created, "failed": failed})
 
 
@@ -1174,6 +1179,7 @@ def _admin_full(a):
         "role": a["role"], "role_label": ROLE_LABELS.get(a["role"], "مدیر"),
         "active": bool(a["is_active"]), "warnings": a["warnings"] or 0,
         "joined": str(a["joined_at"] or "")[:10], "last_active": _dt(a["last_active"] or ""),
+        "scan_mode": hub_caps.scan_mode_override(perms) or "default",
         "caps": eff, "overrides": {k: bool(v) for k, v in over.items() if k in hub_caps.CAP_KEYS},
         "defaults": {k: (k in hub_caps.ROLE_DEFAULTS.get(a["role"], set())) for k in hub_caps.CAP_KEYS},
         "perms": {k: bool(perms.get(k, k in ("notifications", "news", "match_management", "view_players",
@@ -1218,6 +1224,19 @@ async def api_admin_caps(request):
     await db.log_action(c.uid, "admin_permission", f"شخصی‌سازیِ دسترسیِ پنل من برای {_admin_name(a)}", a["telegram_id"])
     fresh = await db.get_admin(a["telegram_id"])
     return _ok(admin=_admin_full(fresh))
+
+
+@routes.post("/hub/api/admin/{id}/scan-mode")
+async def api_admin_scan_mode(request):
+    c = await _pishva_ctx(request)
+    a = await _admin_or_404(request)
+    mode = str((await _body(request)).get("mode") or "")
+    if mode not in ("default", "direct", "approval"):
+        raise _fail("bad_request", "حالتِ نامعتبر.")
+    await db.set_admin_permission(a["telegram_id"], "scan_mode", None if mode == "default" else mode)
+    label = {"default": "تنظیمِ کلی", "direct": "مستقیم", "approval": "با تأییدِ مدیر ارشد"}[mode]
+    await db.log_action(c.uid, "admin_permission", f"حالتِ ثبت با عکس → {label} برای {_admin_name(a)}", a["telegram_id"])
+    return _ok(admin=_admin_full(await db.get_admin(a["telegram_id"])))
 
 
 @routes.post("/hub/api/admin/{id}/perm")
@@ -1385,6 +1404,7 @@ SETTING_DEFS = [
     ("help_enabled", "راهنما", "عمومی", "1"),
     ("ai_online", "هوش مصنوعی", "عمومی", "1"),
     ("match_registration_enabled", "ثبتِ مسابقه", "مسابقات و تیم‌ها", "1"),
+    ("scan_enabled", "ثبت با عکس (برای مدیران)", "مسابقات و تیم‌ها", "1"),
     ("live_chess_enabled", "شطرنجِ زنده", "مسابقات و تیم‌ها", "1"),
     ("hub_enabled", "پنل من (هاب)", "مسابقات و تیم‌ها", "1"),
     ("team_mode_enabled", "حالتِ تیمی", "مسابقات و تیم‌ها", "0"),
@@ -1407,7 +1427,7 @@ async def _settings_payload():
     # همه‌ی کلیدها با یک رفت‌وبرگشتِ شبکه (قبلاً ~۲۷ خوانش پشتِ‌سرِهم)
     defaults = {k: d for k, _l, _g, d in SETTING_DEFS}
     defaults.update({
-        "top_players_mode": "auto",
+        "top_players_mode": "auto", "scan_default_mode": "approval",
         "announcement_group_id": "", "announcement_channel_id": "",
         "hijri_offset": "0", "repair_reason": "",
         "system_status": "normal", "repair_mode": "0", "bot_update_mode": "0",
@@ -1417,6 +1437,7 @@ async def _settings_payload():
     return {
         "items": [{"key": k, "label": l, "group": g, "on": v[k] == "1"} for k, l, g, _d in SETTING_DEFS],
         "top_players_mode": v["top_players_mode"],
+        "scan_default_mode": "direct" if v["scan_default_mode"] == "direct" else "approval",
         "texts": {
             "announcement_group_id": v["announcement_group_id"],
             "announcement_channel_id": v["announcement_channel_id"],
@@ -1444,6 +1465,9 @@ async def api_settings_toggle(request):
     if key == "top_players_mode":
         cur = await db.get_setting(key, "auto")
         new = "manual" if cur != "manual" else "auto"
+    elif key == "scan_default_mode":
+        cur = await db.get_setting(key, "approval")
+        new = "approval" if cur == "direct" else "direct"
     elif key in TOGGLE_KEYS:
         dflt = next(d for k, _l, _g, d in SETTING_DEFS if k == key)
         cur = await db.get_setting(key, dflt)

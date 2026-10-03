@@ -45,6 +45,13 @@ async def _can_scan(uid: int) -> bool:
     return "match_scan" in caps
 
 
+async def _needs_approval(uid: int) -> bool:
+    """True = ثبتِ نهایی فقط درخواست می‌سازد. مدیر ارشد همیشه مستقیم؛ بقیه طبقِ تنظیمِ همان مدیر/تنظیمِ کلی."""
+    if uid == PISHVA_ID:
+        return False
+    return await hub_caps.scan_needs_approval(False, await db.get_admin(uid))
+
+
 async def _admin_name(uid: int) -> str:
     if uid == PISHVA_ID:
         return "مدیر ارشد"
@@ -106,7 +113,7 @@ def _header(sc) -> str:
     return h
 
 
-def _review_view(sc, is_pishva: bool):
+def _review_view(sc, direct: bool):
     page = min(max(sc.get("page", 0), 0), _pages(sc) - 1)
     sc["page"] = page
     lo = page * ROWS_PER_PAGE
@@ -130,7 +137,7 @@ def _review_view(sc, is_pishva: bool):
                  Btn("🏅 تورنمنت", callback_data="mscan_tour", style="primary")])
     n_ready = sum(1 for r in sc["items"] if _ready(r))
     if n_ready:
-        label = f"✅ ثبتِ نهایی ({n_ready})" if is_pishva else f"📤 ارسال برای تأییدِ مدیر ارشد ({n_ready})"
+        label = f"✅ ثبتِ نهایی ({n_ready})" if direct else f"📤 ارسال برای تأییدِ مدیر ارشد ({n_ready})"
         rows.append([Btn(label, callback_data="mscan_go", style="success")])
     rows.append([Btn("❌ لغو", callback_data="mscan_cancel", style="danger")])
     return text, Markup(rows)
@@ -166,7 +173,7 @@ async def _show(update: Update, text: str, markup):
 
 async def _show_review(update, ctx):
     sc = _sc(ctx)
-    text, markup = _review_view(sc, update.effective_user.id == PISHVA_ID)
+    text, markup = _review_view(sc, not await _needs_approval(update.effective_user.id))
     await _show(update, text, markup)
 
 
@@ -186,7 +193,7 @@ async def scan_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     ctx.user_data.pop("scan", None)
     note = ("\n\n🔐 ثبتِ نهایی فقط بعد از <b>تأییدِ مدیر ارشد</b> انجام می‌شود."
-            if uid != PISHVA_ID else "")
+            if await _needs_approval(uid) else "")
     await safe_edit_message_text(
         query,
         "📷 <b>ثبت نتیجه با عکس</b>\n\n"
@@ -520,7 +527,7 @@ async def scan_go(update, ctx):
         await q.answer("مسابقه‌ای برای ثبت انتخاب نشده.", show_alert=True)
         return ST_SCAN_REVIEW
     await q.answer()
-    pishva = q.from_user.id == PISHVA_ID
+    pishva = not await _needs_approval(q.from_user.id)      # True = ثبتِ مستقیم
     skipped = len(sc["items"]) - n
     text = (f"{'✅ <b>ثبتِ نهایی</b>' if pishva else '📤 <b>ارسال برای تأییدِ مدیر ارشد</b>'}\n\n"
             f"♟️ {n} مسابقه • 📅 {_E(date_label_fa(sc['date']))} • 🏅 {_E(sc['tname'])}\n")
@@ -553,7 +560,7 @@ async def scan_commit(update, ctx):
     back = Markup([[Btn("♟️ بازگشت به مسابقات", callback_data="back_matches", style="primary")]])
     await q.answer()
 
-    if uid != PISHVA_ID:
+    if await _needs_approval(uid):
         try:
             req_id = await svc.submit_for_approval(uid, payload, sc["date"], sc["tid"])
         except ValueError as e:
@@ -576,7 +583,9 @@ async def scan_commit(update, ctx):
         return ConversationHandler.END
     created, failed = await svc.commit_items(payload, md, tid, uid)
     if created:
-        await db.log_action(uid, "scan_commit", f"ثبت با عکس: {created} مسابقه")
+        await db.log_action(uid, "scan_commit", f"ثبت با عکس: {created} مسابقه" + ("" if uid == PISHVA_ID else " (مستقیم)"))
+        if uid != PISHVA_ID:
+            await notify_pishva_direct_commit(ctx.bot, await _admin_name(uid), created)
     text = f"✅ <b>{created} مسابقه ثبت شد.</b>"
     if failed:
         text += f"\n\n⚠️ {len(failed)} ردیف ثبت نشد:\n" + "\n".join(
@@ -721,3 +730,54 @@ async def scanreq_reject(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         logger.warning("scanreq_reject: notify requester failed", exc_info=True)
     await safe_edit_message_text(q, (q.message.text or "") + "\n\n❌ رد شد؛ چیزی ثبت نشد.", parse_mode=None,
                                  reply_markup=Markup([[Btn("🔙 بازگشت", callback_data="menu_pishva", style="danger")]]))
+
+
+async def notify_pishva_direct_commit(bot, who: str, created: int):
+    """مدیرِ دارای دسترسیِ مستقیم ثبت کرد؛ فقط خبر به مدیر ارشد (تأیید لازم نیست)."""
+    if bot is None or not created:
+        return
+    try:
+        await bot.send_message(chat_id=PISHVA_ID,
+                               text=f"📷 {who} با «ثبت با عکس» {created} مسابقه را مستقیم ثبت کرد.")
+    except Exception:
+        logger.warning("notify_pishva_direct_commit failed", exc_info=True)
+
+
+# ═══════════════ تنظیمِ اختصاصیِ هر مدیر (از پنلِ دسترسی‌های مدیر) ═══════════════
+# دو دکمه: «ثبت با عکس» (پیش‌فرض ← روشن ← خاموش) و «حالتِ ثبت» (کلی ← مستقیم ← با تأیید).
+async def scanperm_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """scanperm_{tid}_access  |  scanperm_{tid}_mode"""
+    from helpers import box
+    import keyboards as kb
+    q = update.callback_query
+    if not await _pishva_only(q):
+        return
+    _p, tid_s, what = q.data.split("_")
+    tid = int(tid_s)
+    admin = await db.get_admin(tid)
+    if not admin:
+        await q.answer("مدیر یافت نشد.", show_alert=True)
+        return
+    perms = hub_caps.parse_perms(admin)
+    if what == "access":
+        over = dict(perms.get("hub_caps") or {}) if isinstance(perms.get("hub_caps"), dict) else {}
+        cur = over.get("match_scan")
+        if cur is None:
+            over["match_scan"] = True
+        elif cur:
+            over["match_scan"] = False
+        else:
+            over.pop("match_scan", None)
+        await db.set_admin_permission(tid, "hub_caps", over)
+        txt = {True: "روشن ✅", False: "خاموش ❌", None: "پیش‌فرضِ نقش"}[over.get("match_scan")]
+    else:
+        nxt = {None: "direct", "direct": "approval", "approval": None}[hub_caps.scan_mode_override(perms)]
+        await db.set_admin_permission(tid, "scan_mode", nxt)
+        txt = {"direct": "مستقیم ⚡", "approval": "با تأییدِ من 🔐", None: "تنظیمِ کلی"}[nxt]
+    await db.log_action(PISHVA_ID, "admin_permission", f"ثبت با عکس ({'دسترسی' if what == 'access' else 'حالت'}): {txt}", tid)
+    await q.answer(txt)
+    admin2 = await db.get_admin(tid)
+    name = admin2["display_name"] or admin2["full_name"]
+    await safe_edit_message_text(
+        q, f"{box('⬆️ دسترسی‌های ' + name)}\n\n📌 دسترسی‌ها را تغییر دهید:",
+        reply_markup=kb.kb_admin_permissions(tid, hub_caps.parse_perms(admin2)), parse_mode="Markdown")

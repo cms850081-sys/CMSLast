@@ -732,6 +732,10 @@ def kb_pishva_settings_simple(settings):
     rows.append(header("♟️ مسابقات و تیم‌ها"))
     rows += pairs(
         toggle("♟️ ثبت مسابقه", "match_registration_enabled", "setting_match_reg"),
+        toggle("📷 ثبت با عکس", "scan_enabled", "setting_scan_enabled"),
+        InlineKeyboardButton(
+            f"📷 حالتِ ثبت: {'⚡ مستقیم' if settings.get('scan_default_mode') == 'direct' else '🔐 با تأییدِ من'}",
+            callback_data="setting_scan_mode", style="primary"),
         toggle("♟️ شطرنج زنده", "live_chess_enabled", "setting_live_chess"),
         toggle("🖥️ پنل من (Hub)", "hub_enabled", "setting_hub"),
         toggle("🏆 حالت تیمی", "team_mode_enabled", "setting_team_mode"),
@@ -1036,8 +1040,23 @@ def kb_admin_permissions(tid, perms):
         [InlineKeyboardButton(f"♟️ شطرنج زنده {tog('chess_access')}", callback_data=f"perm_{tid}_chess_access", style=st('chess_access'))],
         [InlineKeyboardButton(f"🖥️ پنل من (Hub) {tog('hub_access')}", callback_data=f"perm_{tid}_hub_access", style=st('hub_access'))],
         [InlineKeyboardButton(f"📅 ویرایش تقویم {tog('calendar_edit')}", callback_data=f"perm_{tid}_calendar_edit", style=st('calendar_edit'))],
+        *_scan_perm_rows(tid, perms),
         [InlineKeyboardButton("✅ ذخیره و بازگشت", callback_data=f"admin_view_{tid}", style="danger")],
     ])
+
+
+def _scan_perm_rows(tid, perms):
+    """«ثبت با عکس» برای یک مدیر: دسترسی (پیش‌فرض/روشن/خاموش) + حالت (کلی/مستقیم/با تأیید)."""
+    over = perms.get("hub_caps") if isinstance(perms.get("hub_caps"), dict) else {}
+    acc = over.get("match_scan")
+    acc_txt, acc_style = {None: ("پیش‌فرضِ نقش", "primary"), True: ("✅ روشن", "success"),
+                          False: ("❌ خاموش", "danger")}[acc if acc in (True, False) else None]
+    mode = perms.get("scan_mode")
+    mode_txt = {"direct": "⚡ مستقیم", "approval": "🔐 با تأییدِ من"}.get(mode, "تنظیمِ کلی")
+    return [
+        [InlineKeyboardButton(f"📷 ثبت با عکس: {acc_txt}", callback_data=f"scanperm_{tid}_access", style=acc_style)],
+        [InlineKeyboardButton(f"📷 حالتِ ثبت: {mode_txt}", callback_data=f"scanperm_{tid}_mode", style="primary")],
+    ]
 
 
 # ─── لغو اقدامات یک مدیرِ خاص (از پنل مدیریتِ همون مدیر) ────────

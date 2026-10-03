@@ -1223,6 +1223,7 @@ def build_application():
     app.add_handler(CallbackQueryHandler(kick_request_view, pattern="^kickreq_view_"))
     app.add_handler(CallbackQueryHandler(kick_request_approve, pattern="^kickreq_approve_"))
     app.add_handler(CallbackQueryHandler(kick_request_reject, pattern="^kickreq_reject_"))
+    app.add_handler(CallbackQueryHandler(msb.scanperm_toggle, pattern=r"^scanperm_\d+_(access|mode)$"))
     app.add_handler(CallbackQueryHandler(msb.pishva_scan_requests, pattern="^pishva_scan_requests$"))
     app.add_handler(CallbackQueryHandler(msb.scanreq_view, pattern=r"^scanreq_view_\d+$"))
     app.add_handler(CallbackQueryHandler(msb.scanreq_approve, pattern=r"^scanreq_approve_\d+$"))
