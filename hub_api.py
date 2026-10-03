@@ -325,8 +325,10 @@ async def api_player_panel(request):
         "notes": p["notes"] or "",
     }
     # ─ انضباطی (همه‌ی نقش‌های دارای «مشاهده‌ی بازیکنان») ─
-    out["warn_log"] = [{"reason": r["reason"], "by": r["issuer_name"] or ("مدیر ارشد" if r["issued_by"] == PISHVA_ID else "؟"),
-                        "at": _dt(r["issued_at"])} for r in log]
+    out["warn_log"] = [{"id": r["id"], "reason": r["reason"], "by": r["issuer_name"] or ("مدیر ارشد" if r["issued_by"] == PISHVA_ID else "؟"),
+                        "at": _dt(r["issued_at"]),
+                        # مدیر ارشد هر اخطاری را می‌تواند حذف کند؛ بقیه فقط اخطارهای خودشان را
+                        "removable": bool(("player_warn" in c.caps) and (c.is_pishva or r["issued_by"] == c.uid))} for r in log]
     out["kick_pending"] = bool(pend)
     # ─ Elo ─
     if want_elo:
@@ -358,6 +360,7 @@ async def api_player_panel(request):
         "delete": "player_delete" in c.caps,
         "elite": "player_register" in c.caps or c.is_pishva, "special": c.is_pishva,
         "predict": "predictions" in c.caps,
+        "warn_clear": c.is_pishva,
     }
     return hub._json(out)
 
@@ -414,6 +417,38 @@ async def api_player_flags(request):
         await db.update_player(pid, **upd)
         await db.log_action(c.uid, "player_flags", f"تغییر برچسبِ {p['full_name']}: {upd}", pid)
     return _ok()
+
+
+@routes.post("/hub/api/player/{id}/warn/{log}/remove")
+async def api_player_warn_remove(request):
+    c = await _ctx(request, "player_warn", write=True)
+    pid = _pid(request)
+    log_id = _int(request.match_info["log"], "اخطار")
+    p = await db.get_player(pid)
+    if not p:
+        raise _fail("not_found", "بازیکن پیدا نشد.", 404)
+    if not c.is_pishva:
+        mine = [r for r in await db.get_warnings_log("player", pid, 100) if r["id"] == log_id]
+        if not mine or mine[0]["issued_by"] != c.uid:
+            raise _fail("forbidden", "فقط اخطارهایی که خودتان ثبت کرده‌اید قابلِ حذف است.", 403)
+    row = await db.remove_player_warning(pid, log_id)
+    if not row:
+        raise _fail("not_found", "این اخطار قبلاً حذف شده.", 404)
+    await db.log_action(c.uid, "player_warning_removed",
+                        f"حذفِ اخطارِ {p['full_name']}: {str(row['reason'] or '')[:80]}", pid)
+    return _ok(warnings=(await db.get_player(pid))["warnings"] or 0)
+
+
+@routes.post("/hub/api/player/{id}/warn/clear")
+async def api_player_warn_clear(request):
+    c = await _pishva_ctx(request)
+    pid = _pid(request)
+    p = await db.get_player(pid)
+    if not p:
+        raise _fail("not_found", "بازیکن پیدا نشد.", 404)
+    await db.clear_player_warnings(pid)
+    await db.log_action(c.uid, "player_warnings_cleared", f"پاک‌شدنِ همه‌ی اخطارهای {p['full_name']}", pid)
+    return _ok(warnings=0)
 
 
 @routes.post("/hub/api/player/{id}/warn")

@@ -409,7 +409,7 @@ async def player_view(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"{warn_bar}\n"
         f"{'📂 یادداشت: _' + p['notes'] + '_' if p['notes'] else ''}"
     )
-    await safe_edit_message_text(query, text, reply_markup=kb.kb_player_actions(pid, role, p["status"], p["is_elite"], p["is_special"]), parse_mode="Markdown")
+    await safe_edit_message_text(query, text, reply_markup=kb.kb_player_actions(pid, role, p["status"], p["is_elite"], p["is_special"], p["warnings"] or 0), parse_mode="Markdown")
 
 # ─── Player Actions ───────────────────────────────────────────
 async def player_warn_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -444,6 +444,113 @@ async def player_warn_reason(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await notify_pishva(update.get_bot(),
             f"🔴 بازیکن *{p['full_name']}* به ۳ اخطار رسید!\n📋 دلیل: {reason}\n⏱️ `{now_shamsi()}`")
     return ConversationHandler.END
+
+# ─── حذفِ اخطارِ بازیکن ───────────────────────────────────────
+# مدیر ارشد: هر اخطاری + «پاک‌کردنِ همه». مدیرِ دیگر (با دسترسیِ اخطار): فقط اخطارهایی که «خودش» ثبت کرده.
+async def _warn_gate(query) -> bool:
+    """True = بلاک شد."""
+    if await check_status_gate(query, "warning"):
+        return True
+    return bool(await check_perm(query, "issue_warning"))
+
+
+async def _render_warnlist(query, pid: int):
+    from html import escape as _e
+    from telegram import InlineKeyboardButton as _B, InlineKeyboardMarkup as _M
+    from helpers import date_label_fa
+    p = await db.get_player(pid)
+    if not p:
+        await query.answer("بازیکن یافت نشد.", show_alert=True)
+        return
+    uid = query.from_user.id
+    is_pishva = uid == PISHVA_ID
+    logs = list(await db.get_warnings_log("player", pid, 15))
+    lines, rows = [], []
+    for i, r in enumerate(logs, 1):
+        by = r["issuer_name"] or ("مدیر ارشد" if r["issued_by"] == PISHVA_ID else "؟")
+        lines.append(f"{i}. {_e(str(r['reason'] or '')[:80])}\n    👤 {_e(by)} • {_e(date_label_fa(str(r['issued_at'] or '')[:10]))}")
+        if is_pishva or r["issued_by"] == uid:
+            rows.append([_B(f"🗑 حذفِ اخطار {i}: {str(r['reason'] or '')[:22]}", callback_data=f"pwd_{pid}_{r['id']}", style="danger")])
+    count = p["warnings"] or 0
+    text = f"🧹 <b>اخطارهای {_e(p['full_name'])}</b>\nتعداد: {count}\n\n"
+    text += "\n".join(lines) if lines else "سابقه‌ی ثبت‌شده‌ای نیست."
+    if logs and not rows:
+        text += "\n\nℹ️ فقط اخطارهایی که خودتان ثبت کرده‌اید قابلِ حذف است."
+    if is_pishva and (count or logs):
+        rows.append([_B("🧹 پاک‌کردنِ همه‌ی اخطارها", callback_data=f"pwc_{pid}", style="danger")])
+    rows.append([_B("🔙 بازگشت به پنلِ بازیکن", callback_data=f"player_view_{pid}", style="primary")])
+    await safe_edit_message_text(query, text, reply_markup=_M(rows), parse_mode="HTML")
+
+
+async def player_warnlist(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if await _warn_gate(query):
+        return
+    await query.answer()
+    await _render_warnlist(query, int(query.data.split("_")[-1]))
+
+
+async def player_warn_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """pwd_{pid}_{logid}"""
+    query = update.callback_query
+    if await _warn_gate(query):
+        return
+    uid = query.from_user.id
+    _p, pid_s, log_s = query.data.split("_")
+    pid, log_id = int(pid_s), int(log_s)
+    p = await db.get_player(pid)
+    if not p:
+        await query.answer("بازیکن یافت نشد.", show_alert=True)
+        return
+    if uid != PISHVA_ID:
+        mine = [r for r in await db.get_warnings_log("player", pid, 100) if r["id"] == log_id]
+        if not mine or mine[0]["issued_by"] != uid:
+            await query.answer("⛔ فقط اخطارهایی که خودتان ثبت کرده‌اید قابلِ حذف است.", show_alert=True)
+            return
+    row = await db.remove_player_warning(pid, log_id)
+    if not row:
+        await query.answer("این اخطار قبلاً حذف شده.", show_alert=True)
+    else:
+        await query.answer("✅ اخطار حذف شد")
+        await db.log_action(uid, "player_warning_removed",
+                            f"حذفِ اخطارِ {p['full_name']}: {str(row['reason'] or '')[:80]}", pid)
+    await _render_warnlist(query, pid)
+
+
+async def player_warn_clear_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query.from_user.id != PISHVA_ID:
+        await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
+        return
+    await query.answer()
+    from telegram import InlineKeyboardButton as _B, InlineKeyboardMarkup as _M
+    pid = int(query.data.split("_")[-1])
+    p = await db.get_player(pid)
+    if not p:
+        await query.answer("بازیکن یافت نشد.", show_alert=True)
+        return
+    await safe_edit_message_text(
+        query, f"🧹 همه‌ی اخطارهای *{p['full_name']}* پاک شود؟\nاین کار برگشت ندارد.",
+        reply_markup=_M([[_B("✅ بله، همه پاک شود", callback_data=f"pwcy_{pid}", style="danger")],
+                         [_B("🔙 انصراف", callback_data=f"pwl_{pid}", style="primary")]]),
+        parse_mode="Markdown")
+
+
+async def player_warn_clear_go(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if query.from_user.id != PISHVA_ID:
+        await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
+        return
+    pid = int(query.data.split("_")[-1])
+    p = await db.get_player(pid)
+    if not p:
+        await query.answer("بازیکن یافت نشد.", show_alert=True)
+        return
+    await db.clear_player_warnings(pid)
+    await db.log_action(PISHVA_ID, "player_warnings_cleared", f"پاک‌شدنِ همه‌ی اخطارهای {p['full_name']}", pid)
+    await query.answer("✅ همه‌ی اخطارها پاک شد")
+    await _render_warnlist(query, pid)
+
 
 async def player_kick(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """FIX: قبلاً این تابع فقط permission «request_ban» رو چک می‌کرد و

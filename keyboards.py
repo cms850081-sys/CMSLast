@@ -278,7 +278,7 @@ def kb_player_select(players, prefix, back="matches", page=0, page_size=8, nav_p
     rows.append(kb_back_row(back))
     return InlineKeyboardMarkup(rows)
 
-def kb_player_actions(player_id, role="pishva", status="active", is_elite=False, is_special=False):
+def kb_player_actions(player_id, role="pishva", status="active", is_elite=False, is_special=False, warnings=0):
     """FIX: قبلاً دکمه‌های اخراج/تعلیق/احیا بدون توجه به وضعیت فعلیِ بازیکن
     همیشه با هم نشون داده می‌شدن — یعنی حتی بعد از اخراج یه بازیکن، دوباره
     که پنلش رو باز می‌کردی دکمه‌ی «🚫 اخراج» جلوت بود (روی بازیکنی که از قبل
@@ -296,6 +296,8 @@ def kb_player_actions(player_id, role="pishva", status="active", is_elite=False,
         InlineKeyboardButton("🏫 ویرایش کلاس", callback_data=f"player_editclass_{player_id}", style="primary"),
         InlineKeyboardButton("⚠️ ثبت اخطار", callback_data=f"player_warn_{player_id}", style="danger"),
     ]
+    if warnings:
+        action_buttons.append(InlineKeyboardButton(f"🧹 حذف اخطار ({warnings})", callback_data=f"pwl_{player_id}", style="success"))
     if is_active:
         action_buttons.append(InlineKeyboardButton("🚫 اخراج", callback_data=f"player_kick_{player_id}", style="danger"))
         action_buttons.append(InlineKeyboardButton("⏸️ تعلیق", callback_data=f"player_suspend_{player_id}", style="danger"))

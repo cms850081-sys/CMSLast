@@ -1367,6 +1367,41 @@ async def add_player_warning(player_id: int, reason: str, issued_by: int):
     _invalidate_players_cache()
 
 
+async def remove_player_warning(player_id: int, log_id: int):
+    """حذفِ «یک» اخطار از سابقه‌ی بازیکن + یکی کم‌شدن از شمارنده. ردیفِ حذف‌شده را برمی‌گرداند (None اگر نبود).
+    کاهشِ شمارنده شرطی روی «وجودِ همان ردیف» است و «قبل از» DELETE در همان batch می‌آید؛
+    پس دوبار-زدن/هم‌زمانی (ربات + هاب) شمارنده را دوبار کم نمی‌کند."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, issued_by, reason, issued_at FROM warnings_log "
+            "WHERE id=? AND target_type='player' AND target_id=?", (log_id, player_id)
+        ) as cur:
+            row = await cur.fetchone()
+        if not row:
+            return None
+        async with db.batch():
+            await db.execute(
+                "UPDATE players SET warnings = CASE WHEN warnings>0 THEN warnings-1 ELSE 0 END "
+                "WHERE id=? AND EXISTS (SELECT 1 FROM warnings_log WHERE id=? AND target_type='player' AND target_id=?)",
+                (player_id, log_id, player_id))
+            await db.execute("DELETE FROM warnings_log WHERE id=? AND target_type='player' AND target_id=?",
+                             (log_id, player_id))
+        await db.commit()
+    _invalidate_players_cache()
+    return row
+
+
+async def clear_player_warnings(player_id: int):
+    """پاک‌کردنِ همه‌ی اخطارهای بازیکن (سابقه + شمارنده = ۰)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.batch():
+            await db.execute("DELETE FROM warnings_log WHERE target_type='player' AND target_id=?", (player_id,))
+            await db.execute("UPDATE players SET warnings=0 WHERE id=?", (player_id,))
+        await db.commit()
+    _invalidate_players_cache()
+
+
 async def get_players_by_class(class_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row

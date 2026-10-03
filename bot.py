@@ -71,6 +71,7 @@ from players import (
     player_add_start, player_class_selected, player_add_name,
     player_join_team, player_no_team, player_list, player_list_page, player_view,
     player_warn_start, player_warn_reason, player_kick, player_suspend, player_revive,
+    player_warnlist, player_warn_delete, player_warn_clear_ask, player_warn_clear_go,
     player_harddelete_ask, player_harddelete_go,
     player_note_start, player_note_save, player_elite_set, player_special_set,
     player_editname_start, player_editname_save, player_editclass_start, player_setclass,
@@ -1077,6 +1078,10 @@ def build_application():
     app.add_handler(CallbackQueryHandler(player_list, pattern="^player_list$"))
     app.add_handler(CallbackQueryHandler(player_list_page, pattern="^player_list_page_"))
     app.add_handler(CallbackQueryHandler(player_view, pattern="^player_view_"))
+    app.add_handler(CallbackQueryHandler(player_warnlist, pattern=r"^pwl_\d+$"))
+    app.add_handler(CallbackQueryHandler(player_warn_delete, pattern=r"^pwd_\d+_\d+$"))
+    app.add_handler(CallbackQueryHandler(player_warn_clear_ask, pattern=r"^pwc_\d+$"))
+    app.add_handler(CallbackQueryHandler(player_warn_clear_go, pattern=r"^pwcy_\d+$"))
     app.add_handler(CallbackQueryHandler(player_kick, pattern="^player_kick_"))
     app.add_handler(CallbackQueryHandler(player_suspend, pattern="^player_suspend_"))
     app.add_handler(CallbackQueryHandler(player_revive, pattern="^player_revive_"))
