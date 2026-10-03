@@ -32,7 +32,7 @@ import knowledge_base
 
 logger = logging.getLogger(__name__)
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY", "") or "").strip().strip('"\'').strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 # نکته (۲۰۲۶-۰۹-۲۴، اصلاح‌شده): طبق گزارش‌های متعددِ کاربرا در فوروم رسمیِ گوگل
 # (بهار/تابستانِ ۲۰۲۶)، gemini-2.5-flash-lite به‌شدت ناپایدار شده (خطای ۵۰۳

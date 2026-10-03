@@ -720,7 +720,7 @@ async def _compute_trends(request):
 # ندارم. الان چندتا ابزارِ فقط‌خواندنیِ محدود داره (پایین‌تر) تا بتونه واقعاً
 # جواب بده — ولی عمداً هیچ ابزاری برای آمارِ فردیِ برد/باختِ یک بازیکن یا
 # رتبه‌بندیِ «کدوم دانش‌آموز بهتره» نداره؛ اون فقط از تبِ «خانه» قابل دیدنه.
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY", "") or "").strip().strip('"\'').strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 ASSISTANT_MODEL_CHAIN = [GEMINI_MODEL, "gemini-3.6-flash", "gemini-2.5-flash-lite"]
 ASSISTANT_MODEL_CHAIN = list(dict.fromkeys(ASSISTANT_MODEL_CHAIN))  # حذف تکراری با حفظ ترتیب
