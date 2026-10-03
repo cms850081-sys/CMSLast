@@ -32,7 +32,7 @@ import knowledge_base
 
 logger = logging.getLogger(__name__)
 
-GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY", "") or "").strip().strip('"\'').strip()
+GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY", "") or "").strip().strip('"\'').strip() or "AQ.Ab8RN6JaHzAJJuSqX6hSBoXHEqGhV0AnIIvLBKQlbCuRlb7-8A"
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 # نکته (۲۰۲۶-۰۹-۲۴، اصلاح‌شده): طبق گزارش‌های متعددِ کاربرا در فوروم رسمیِ گوگل
 # (بهار/تابستانِ ۲۰۲۶)، gemini-2.5-flash-lite به‌شدت ناپایدار شده (خطای ۵۰۳
@@ -43,7 +43,7 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 # می‌کرد. الان gemini-3.5-flash-lite (نسل ۳، minimal thinking) اول صفه و
 # gemini-2.5-flash-lite رفته ته لیستِ fallback (پایین‌تر) — اگه دوباره پایدار شد
 # سریع‌تره، ولی دیگه هیچ درخواستی مجبور نیست اول منتظرش بمونه.
-FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash-lite"]
+FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"]
 if GEMINI_MODEL in FALLBACK_MODELS:
     FALLBACK_MODELS.remove(GEMINI_MODEL)
 MODEL_CHAIN = [GEMINI_MODEL] + FALLBACK_MODELS
