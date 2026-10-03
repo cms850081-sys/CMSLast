@@ -326,6 +326,24 @@ async def post_init(application: Application) -> None:
     except Exception as e:
         logger.warning(f"Could not schedule weather warm-up: {e}")
 
+    # ⚡ نگه‌داشتنِ اتصال و کشِ دیتابیس «گرم»: اتصالِ Turso بعد از ~۳۰ ثانیه بیکاری بسته می‌شد و
+    # کشِ تنظیمات/ادمین هم بعد از ۱۵–۴۵ ثانیه منقضی می‌شود؛ پس اولین کلیکِ بعد از یک مکث
+    # باید هندشیکِ تازه + چند کوئریِ سرد بزند (همان «گاهی ناگهان چند ثانیه لگ»). هر ۱۵ ثانیه
+    # یک پینگِ سبک + پر‌کردنِ دوباره‌ی کلیدهای پرکاربرد، تا کلیکِ بعدی همیشه سریع باشد.
+    try:
+        async def _db_keepalive_job(_ctx):
+            try:
+                import hub_caps
+                await db.keepalive_ping()
+                await hub_caps.prewarm_auth_settings()
+            except Exception:
+                logger.debug("db keepalive failed", exc_info=True)
+        application.job_queue.run_repeating(
+            _db_keepalive_job, interval=timedelta(seconds=15), first=timedelta(seconds=5),
+            name="db_keepalive")
+    except Exception as e:
+        logger.warning(f"Could not schedule DB keep-alive: {e}")
+
     # Schedule hourly reminder checks
     try:
         application.job_queue.run_repeating(
@@ -519,7 +537,16 @@ async def universal_back_router(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 def build_application():
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    # ⚡ FIX لگِ ناگهانی: آپدیت‌ها دیگر یکی‌یکی (برای کلِ ربات) پردازش نمی‌شوند؛
+    # کاربرهای مختلف هم‌زمان، و آپدیت‌های هر کاربر به‌ترتیب. (توضیح در update_processor.py)
+    from update_processor import PerUserUpdateProcessor
+    app = (Application.builder()
+           .token(BOT_TOKEN)
+           .concurrent_updates(PerUserUpdateProcessor(64))
+           .connection_pool_size(64)      # با هم‌زمانی، تعدادِ درخواست‌های هم‌زمان به تلگرام بیشتر می‌شود
+           .pool_timeout(10.0)
+           .post_init(post_init)
+           .build())
 
     # 🚨 هندلر سراسری خطا — باید همیشه ثبت بشه تا خطاها گم نشن
     app.add_error_handler(global_error_handler)

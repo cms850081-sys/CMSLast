@@ -664,6 +664,14 @@ async def init_db():
     logger.info("Database initialized.")
 
 
+# ─── نگه‌داشتنِ اتصال گرم (job هر ~۱۵ ثانیه از bot.py) ──────────────
+async def keepalive_ping():
+    """یک SELECT 1 سبک؛ اتصالِ HTTP/2 به Turso باز می‌ماند و هندشیکِ تازه لازم نمی‌شود."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT 1") as cur:
+            await cur.fetchone()
+
+
 # ─── Settings ────────────────────────────────────────────────
 async def get_setting(key: str, default="") -> str:
     cached = _cache_get(_setting_cache, key)

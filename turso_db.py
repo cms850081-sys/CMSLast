@@ -46,7 +46,7 @@ class _TursoHttpClient:
             # جداگانه به Turso (هر کدوم با هندشیکِ خودش). با HTTP/2، همه‌ی
             # این درخواست‌های هم‌زمان روی یک اتصال مالتی‌پلکس می‌شن — یک
             # هندشیک، به‌جای چندتا.
-            limits=httpx.Limits(max_keepalive_connections=20, keepalive_expiry=30.0),
+            limits=httpx.Limits(max_keepalive_connections=20, keepalive_expiry=120.0),
         )
 
     async def _pipeline(self, requests):
