@@ -482,7 +482,7 @@
     });
   }
 
-  /* ═══════════ ثبت نتیجه با عکسِ برگه (فقط مدیر ارشد) ═══════════ */
+  /* ═══════════ ثبت نتیجه با عکسِ برگه (مدیر ارشد: مستقیم • مدیر مسابقات: با تأییدِ مدیر ارشد) ═══════════ */
   var SCAN_RES = [['white', 'برد سفید'], ['black', 'برد سیاه'], ['draw', 'تساوی'], ['none', 'بدون نتیجه']];
 
   /* کوچک‌کردنِ عکس در خودِ گوشی (حجمِ آپلود کم و خواندن سریع‌تر): ضلعِ بلند حداکثر ۱۸۰۰، JPEG */
@@ -529,7 +529,7 @@
           scanReview(rv);
         }, function (e) { busy = false; go.disabled = false; go.textContent = 'خواندنِ برگه'; fail(e); });
       });
-      var tips = h('div', { class: 'empty', style: 'text-align:right;padding:6px 18px', text: 'عکسِ صاف و روشن از کلِ برگه بگیرید (بدون سایه). هوش مصنوعی نتیجه‌ها را می‌خواند، ولی هیچ‌چیز بدونِ بازبینیِ شما ثبت نمی‌شود.' });
+      var tips = h('div', { class: 'empty', style: 'text-align:right;padding:6px 18px', text: 'عکسِ صاف و روشن از کلِ برگه بگیرید (بدون سایه). هوش مصنوعی نتیجه‌ها را می‌خواند، ولی هیچ‌چیز بدونِ بازبینیِ شما ثبت نمی‌شود.' + (can('pishva_panel') ? '' : ' بعد از بازبینی، درخواست برای تأییدِ مدیر ارشد ارسال می‌شود و فقط با تأییدِ او ثبت می‌شود.') });
       return { body: h('div', null, tips,
         h('div', { class: 'foot-btns', style: 'margin:8px 16px 0' }, btn('📷 گرفتن عکس', 'soft', function () { pick(true); }), btn('🖼️ از گالری', 'soft', function () { pick(false); })),
         preview), foot: go };
@@ -548,12 +548,12 @@
       var tsel = select([['', 'تورنمنتِ پیش‌فرض']].concat(ts.map(function (t) { return [t.id, t.name]; })), '');
       var list = h('div', null), cnt = h('div', { class: 'empty', style: 'padding:4px 18px' });
       var sub = btn('', '', function () {});
-      var working = false;
+      var working = false, direct = rv.direct !== false;
 
       function ready(r) { return !r.done && r.on && r.w && r.b && r.w.id !== r.b.id; }
       function refreshFoot() {
         var n = rows.filter(ready).length, left = rows.filter(function (r) { return !r.done; }).length;
-        sub.textContent = n ? 'ثبتِ ' + fa(n) + ' مسابقه' : 'مسابقه‌ای برای ثبت انتخاب نشده';
+        sub.textContent = n ? (direct ? 'ثبتِ ' + fa(n) + ' مسابقه' : 'ارسال ' + fa(n) + ' مسابقه برای تأییدِ مدیر ارشد') : 'مسابقه‌ای برای ثبت انتخاب نشده';
         sub.disabled = working || !n;
         cnt.textContent = fa(rows.length) + ' ردیف خوانده شد • ' + fa(left) + ' باقی‌مانده' + (rv.date_text ? ' • تاریخِ روی برگه: ' + rv.date_text : '') + (rv.sheet_note ? ' • ' + rv.sheet_note : '');
       }
@@ -599,6 +599,18 @@
       sub.addEventListener('click', function () {
         var todo = rows.filter(ready);
         if (working || !todo.length) return;
+        if (!direct) {
+          /* مدیر مسابقات: یک درخواستِ کامل برای مدیر ارشد؛ تا تأیید نشود هیچ مسابقه‌ای ثبت نمی‌شود */
+          working = true; sub.disabled = true; sub.textContent = 'در حال ارسال…';
+          post('/hub/api/match/scan/commit', {
+            date: date.value, tournament_id: tsel.value ? +tsel.value : null,
+            items: todo.map(function (r) { return { i: r.i, white_id: r.w.id, black_id: r.b.id, result: r.res === 'none' ? null : r.res }; })
+          }).then(function (res) {
+            working = false; hx.ok(); dirty();
+            toast(fa(res.count || todo.length) + ' مسابقه برای تأییدِ مدیر ارشد ارسال شد'); back();
+          }, function (e) { working = false; refreshFoot(); fail(e); });
+          return;
+        }
         working = true; sub.disabled = true; sub.textContent = 'در حال ثبت…';
         var created = 0, failedN = 0, i = 0;
         rows.forEach(function (r) { r.err = ''; });

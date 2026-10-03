@@ -248,6 +248,11 @@
         });
         w.append(h('div', { class: 'sec-sub', text: g }), gr);
       });
+      var SM = { 'default': ['تنظیمِ کلی', 'default'], direct: ['مستقیم و خودکار', 'direct'], approval: ['با تأییدِ مدیر ارشد', 'approval'] };
+      var SM_NEXT = { 'default': 'direct', direct: 'approval', approval: 'default' };
+      w.append(M.secTitle('ثبت با عکس'), h('div', { class: 'group' }, row({ title: 'حالتِ ثبت برای این مدیر', sub: SM[a.scan_mode || 'default'][0] + ' — برای تغییر بزنید',
+        tap: function () { post('/hub/api/admin/' + a.id + '/scan-mode', { mode: SM_NEXT[a.scan_mode || 'default'] }).then(function (r) { hx.ok(); upd(r); }, fail); } })),
+        h('div', { class: 'sec-sub', text: 'روشن/خاموش‌بودنِ خودِ قابلیت را در «مسابقات ← ثبت با عکس» بالا تنظیم کنید.' }));
       w.append(h('div', { style: 'margin:10px 16px' }, actBtn('بازگشت همه به پیش‌فرضِ نقش', 'soft', function () { return post('/hub/api/admin/' + a.id + '/caps', { reset: true }); }, function (r) { toast('پیش‌فرض برگشت'); upd(r); })));
 
       w.append(M.secTitle('دسترسی‌های ربات'));
@@ -290,6 +295,15 @@
           return h('div', { class: 'group', style: 'margin-bottom:10px' }, kv('درخواست‌دهنده', r.admin), kv('بازیکن', r.player), kv('زمان', r.at),
             h('div', { class: 'foot-btns', style: 'padding:10px 16px' }, btn('تأیید اخراج', 'danger', decide('/hub/api/kick-request/' + r.id + '/approve', 1, 'اخراج شد')), btn('رد', 'soft', decide('/hub/api/kick-request/' + r.id + '/reject', 0, 'رد شد'))));
         }) : h('div', { class: 'group' }, empty('درخواستِ اخراجی نیست.'))));
+        var scans = d.scans || [];
+        w.append(M.secTitle('ثبت نتیجه با عکس (در انتظارِ تأیید)', h('small', { class: 'num', text: scans.length })));
+        w.append(h('div', null, scans.length ? scans.map(function (r) {
+          var RESL = { white: 'برد سفید', black: 'برد سیاه', draw: 'تساوی' };
+          var lines = r.rows.map(function (x, k) { return fa(k + 1) + '. ' + x.w + ' ⚔️ ' + x.b + ' — ' + (RESL[x.res] || 'بدون نتیجه'); });
+          return h('div', { class: 'group', style: 'margin-bottom:10px' }, kv('درخواست‌دهنده', r.admin), kv('تعداد', fa(r.count) + ' مسابقه'), kv('تاریخ', r.date), kv('زمان', r.at),
+            h('div', { class: 'empty', style: 'text-align:right;padding:6px 18px;white-space:pre-line;line-height:1.9', text: lines.join('\n') }),
+            h('div', { class: 'foot-btns', style: 'padding:10px 16px' }, btn('تأیید و ثبت', '', decide('/hub/api/scan-request/' + r.id + '/approve', 1, 'تأیید شد و مسابقه‌ها ثبت شدند')), btn('رد', 'danger', decide('/hub/api/scan-request/' + r.id + '/reject', 0, 'رد شد؛ چیزی ثبت نشد'))));
+        }) : h('div', { class: 'group' }, empty('درخواستِ ثبت با عکسی نیست.'))));
         return w;
       }) };
     });
@@ -310,6 +324,9 @@
           });
           w.append(M.secTitle(g), gr);
         });
+        w.append(M.secTitle('ثبت با عکس'), h('div', { class: 'group' }, row({ title: 'حالتِ پیش‌فرضِ ثبت (برای مدیران)', sub: s.scan_default_mode === 'direct' ? 'مستقیم و خودکار' : 'با تأییدِ مدیر ارشد',
+          tap: function () { post('/hub/api/settings/toggle', { key: 'scan_default_mode' }).then(function () { hx.ok(); refresh(); }, fail); } })),
+          h('div', { class: 'sec-sub', text: 'هر مدیر را می‌توانید از صفحه‌ی خودش جدا تنظیم کنید. مدیر ارشد همیشه مستقیم ثبت می‌کند.' }));
         w.append(M.secTitle('نفراتِ برتر'), h('div', { class: 'group' }, row({ title: 'حالتِ انتخاب', sub: s.top_players_mode === 'manual' ? 'دستیِ مدیر ارشد' : 'خودکار (براساسِ امتیاز)',
           tap: function () { post('/hub/api/settings/toggle', { key: 'top_players_mode' }).then(function () { hx.ok(); refresh(); }, fail); } })));
         function txt(key, label, ph, hint) {
@@ -407,7 +424,7 @@
     if (can('pishva_panel') && !C.S.pendingLoading) {
       C.S.pendingLoading = true;
       swr('/hub/api/requests', function (d) {
-        C.S.pending = { total: d.access.length + d.kicks.length }; C.S.pendingLoading = false;
+        C.S.pending = { total: d.access.length + d.kicks.length + (d.scans || []).length }; C.S.pendingLoading = false;
         if (C.cur() === 'manage') renderTab();
       }, function () { C.S.pendingLoading = false; });
     }
