@@ -171,13 +171,52 @@ def _parse_json(text: str) -> dict:
 
 
 class VisionError(Exception):
-    """code: no_key | failed — message فارسی و قابل‌نمایش به مدیر."""
-    def __init__(self, code, message):
+    """code: no_key | auth | quota | model | overloaded | timeout | blocked | bad_output | failed
+    message: فارسی و قابل‌نمایش به مدیر. detail: جزئیاتِ فنیِ کوتاه (فقط برای مدیر ارشد/لاگ؛ بدونِ کلید)."""
+    def __init__(self, code, message, detail=""):
         super().__init__(message)
-        self.code, self.message = code, message
+        self.code, self.message, self.detail = code, message, detail
+
+
+# پیامِ هر نوعِ خطا. «failed» قبلاً برای همه‌چیز (کلیدِ باطل، سهمیه، شلوغیِ سرور، تایم‌اوت، JSON خراب)
+# یک جمله‌ی گمراه‌کننده می‌داد («عکس واضح‌تر بفرستید») و علتِ واقعی گم می‌شد.
+_MESSAGES = {
+    "auth": "کلیدِ Gemini رد شد (نامعتبر، مسدود یا بدونِ دسترسی). مدیر ارشد باید GEMINI_API_KEY را بررسی/عوض کند.",
+    "quota": "سهمیه‌ی Gemini تمام شده یا درخواست‌ها زیاد است (۴۲۹). چند دقیقه بعد دوباره امتحان کنید.",
+    "model": "مدلِ Gemini پیدا نشد (۴۰۴). مدیر ارشد باید GEMINI_MODEL را بررسی کند.",
+    "overloaded": "سرورهای Gemini الان شلوغ‌اند. چند لحظه بعد همین عکس را دوباره بفرستید.",
+    "timeout": "جوابِ Gemini دیر رسید (تایم‌اوت). چند لحظه بعد دوباره امتحان کنید.",
+    "blocked": "Gemini این عکس را پردازش نکرد (فیلترِ ایمنی). عکسِ دیگری بفرستید.",
+    "bad_output": "Gemini عکس را دید ولی خروجیِ قابل‌فهمی نداد. دوباره امتحان کنید یا عکسِ واضح‌تر/به‌صورتِ فایل بفرستید.",
+    "failed": "خواندنِ عکس انجام نشد. دوباره امتحان کنید.",
+}
+# اولویتِ انتخابِ «علتِ اصلی» وقتی مدل‌های مختلف خطاهای مختلف دادند
+_PRIORITY = ("auth", "model", "quota", "overloaded", "timeout", "blocked", "bad_output", "failed")
+_DEADLINE_SECONDS = 110      # کلِ تلاش‌ها (همه‌ی مدل‌ها) بیشتر از این طول نکشد
+
+
+def _http_kind(status: int) -> str:
+    if status in (401, 403):
+        return "auth"
+    if status == 404:
+        return "model"
+    if status == 429:
+        return "quota"
+    if status >= 500:
+        return "overloaded"
+    return "failed"            # 400 و بقیه
+
+
+def _api_message(resp) -> str:
+    try:
+        return str((resp.json().get("error") or {}).get("message") or "")[:200]
+    except Exception:
+        return ""
 
 
 async def extract_matches(image_bytes: bytes, mime: str, roster_names: list) -> dict:
+    import asyncio
+    import time
     import ai_assistant
     import net_utils
     if not ai_assistant.GEMINI_API_KEY:
@@ -191,7 +230,13 @@ async def extract_matches(image_bytes: bytes, mime: str, roster_names: list) -> 
     ]}]
     headers = {"Content-Type": "application/json", "x-goog-api-key": ai_assistant.GEMINI_API_KEY}
     client = net_utils.get_gemini_client()
-    last = None
+    deadline = time.monotonic() + _DEADLINE_SECONDS
+    failures = []              # [(kind, "model: توضیح")]
+
+    def fail(kind, model, why):
+        failures.append((kind, f"{model}: {why}"))
+        logger.error("match_vision: %s -> %s (%s)", model, kind, why)
+
     for model in ai_assistant.MODEL_CHAIN:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         for with_schema in (True, False):
@@ -199,32 +244,66 @@ async def extract_matches(image_bytes: bytes, mime: str, roster_names: list) -> 
                    "thinkingConfig": _thinking_for(model)}
             if with_schema:
                 gen["responseSchema"] = _SCHEMA
-            try:
-                resp = await client.post(url, headers=headers, timeout=REQUEST_TIMEOUT,
-                                         json={"contents": contents, "generationConfig": gen})
-                resp.raise_for_status()
-                parts = (resp.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [])
-                text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
-                data = _parse_json(text)
-                if "matches" not in data:
-                    raise ValueError("no matches key")
-                return data
-            except httpx.HTTPStatusError as e:
-                last = e
-                code = e.response.status_code
-                logger.warning("match_vision: %s -> %s (schema=%s)", model, code, with_schema)
-                if code == 400 and with_schema:
-                    continue            # همین مدل را بدونِ schema امتحان کن
-                break                   # مدلِ بعدی
-            except (httpx.TimeoutException, httpx.TransportError) as e:
-                last = e
-                logger.warning("match_vision: %s transport/timeout: %r", model, e)
+            outcome = "next_model"
+            for attempt in (1, 2):          # فقط برای خطاهای گذرا (۴۲۹/۵xx) یک بار دوباره
+                remaining = deadline - time.monotonic()
+                if remaining < 8:
+                    break
+                try:
+                    resp = await client.post(url, headers=headers, timeout=min(REQUEST_TIMEOUT, remaining),
+                                             json={"contents": contents, "generationConfig": gen})
+                    resp.raise_for_status()
+                    body = resp.json()
+                    cand = (body.get("candidates") or [{}])[0]
+                    parts = (cand.get("content") or {}).get("parts", [])
+                    text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+                    if not text.strip():
+                        block = (body.get("promptFeedback") or {}).get("blockReason")
+                        fr = cand.get("finishReason")
+                        if block or fr in ("SAFETY", "PROHIBITED_CONTENT", "IMAGE_SAFETY", "BLOCKLIST", "RECITATION"):
+                            fail("blocked", model, f"blocked={block or fr}")
+                        else:
+                            fail("bad_output", model, f"empty response finishReason={fr}")
+                        outcome = "next_model"
+                        break
+                    data = _parse_json(text)
+                    if "matches" not in data:
+                        raise ValueError("no matches key")
+                    return data
+                except httpx.HTTPStatusError as e:
+                    code = e.response.status_code
+                    kind = _http_kind(code)
+                    why = f"HTTP {code} {_api_message(e.response)}".strip()
+                    if code == 400 and with_schema:
+                        logger.warning("match_vision: %s 400 با schema (%s) → بدونِ schema", model, why)
+                        outcome = "retry_no_schema"
+                        failures.append((kind, f"{model}: {why} (schema)"))
+                        break
+                    if kind in ("quota", "overloaded") and attempt == 1:
+                        logger.warning("match_vision: %s %s → یک بار دیگر", model, why)
+                        await asyncio.sleep(2.0)
+                        continue
+                    fail(kind, model, why)
+                    outcome = "next_model"
+                    break
+                except (httpx.TimeoutException, httpx.TransportError) as e:
+                    kind = "timeout" if isinstance(e, httpx.TimeoutException) else "overloaded"
+                    fail(kind, model, type(e).__name__)
+                    outcome = "next_model"
+                    break
+                except Exception as e:      # JSON خراب، ساختارِ غیرمنتظره
+                    fail("bad_output", model, f"{type(e).__name__}: {str(e)[:80]}")
+                    outcome = "next_model"
+                    break
+            if outcome != "retry_no_schema":
                 break
-            except Exception as e:      # JSON خراب، ساختارِ غیرمنتظره
-                last = e
-                logger.warning("match_vision: %s bad output: %r", model, e)
-                break
-    raise VisionError("failed", "خواندنِ عکس انجام نشد؛ چند لحظه بعد دوباره امتحان کنید یا عکسِ واضح‌تری بفرستید.")
+        if deadline - time.monotonic() < 8:
+            failures.append(("timeout", "deadline: زمانِ کل تمام شد"))
+            break
+
+    kinds = [k for k, _ in failures]
+    main = next((k for k in _PRIORITY if k in kinds), "failed")
+    raise VisionError(main, _MESSAGES[main], " | ".join(d for _k, d in failures)[:400])
 
 
 # ───────────────────────── ساختنِ خروجیِ بازبینی ─────────────────────────

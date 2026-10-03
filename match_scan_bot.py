@@ -225,7 +225,14 @@ async def scan_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         raw = bytes(await tg_file.download_as_bytearray())
         review = await svc.scan_sheet(raw, mime, uid)
     except svc.ScanError as e:
-        await wait.edit_text(f"❌ {e.message}\n\nعکسِ دیگری بفرستید یا لغو کنید.", reply_markup=_cancel_kb())
+        # خطای زیرساخت (کلید/سهمیه/شلوغی/تایم‌اوت) ربطی به وضوحِ عکس ندارد؛ پیشنهادِ «عکسِ واضح‌تر» گمراه‌کننده است
+        infra = e.code in ("ai_no_key", "ai_auth", "ai_model", "ai_quota", "ai_overloaded", "ai_timeout", "busy")
+        tail = ("\n\nچند لحظه بعد همین عکس را دوباره بفرستید یا لغو کنید." if infra
+                else "\n\nعکسِ دیگری بفرستید یا لغو کنید.")
+        text = f"❌ {e.message}{tail}"
+        if uid == PISHVA_ID and getattr(e, "detail", ""):
+            text += f"\n\n🔧 جزئیاتِ فنی (فقط برای شما):\n{e.detail[:600]}"
+        await wait.edit_text(text, reply_markup=_cancel_kb())
         return ST_SCAN_PHOTO
     except Exception:
         logger.exception("scan_photo failed")

@@ -23,9 +23,9 @@ _busy = set()          # هر اسکن هزینه دارد؛ جلوگیری از
 
 
 class ScanError(Exception):
-    def __init__(self, code, message, status=400):
+    def __init__(self, code, message, status=400, detail=""):
         super().__init__(message)
-        self.code, self.message, self.status = code, message, status
+        self.code, self.message, self.status, self.detail = code, message, status, detail
 
 
 def valid_date(s) -> str:
@@ -69,7 +69,8 @@ async def scan_sheet(raw: bytes, mime: str, uid: int) -> dict:
         try:
             data = await mv.extract_matches(raw, mime, [r["name"] for r in roster])
         except mv.VisionError as e:
-            raise ScanError("ai_" + e.code, e.message, 503 if e.code == "no_key" else 502)
+            raise ScanError("ai_" + e.code, e.message, 503 if e.code in ("no_key", "auth", "model") else 502,
+                            detail=getattr(e, "detail", ""))
     finally:
         _busy.discard(uid)
     review = mv.build_review(data, roster)
