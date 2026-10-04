@@ -32,7 +32,12 @@ import knowledge_base
 
 logger = logging.getLogger(__name__)
 
-GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY", "") or "").strip().strip('"\'').strip() or "AQ.Ab8RN6JaHzAJJuSqX6hSBoXHEqGhV0AnIIvLBKQlbCuRlb7-8A"
+GEMINI_API_KEY = (os.environ.get("GEMINI_API_KEY", "") or "").strip().strip('"\'').strip()
+# لاگِ تشخیصی (بدونِ چاپِ خودِ کلید): نشون می‌ده کلید از متغیرِ محیطیِ Railway خونده شده یا نه.
+if GEMINI_API_KEY:
+    logger.info(f"GEMINI_API_KEY loaded from env: prefix={GEMINI_API_KEY[:3]}..., length={len(GEMINI_API_KEY)}")
+else:
+    logger.error("GEMINI_API_KEY در متغیرهای محیطی (Railway > Variables) تنظیم نشده!")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 # نکته (۲۰۲۶-۰۹-۲۴، اصلاح‌شده): طبق گزارش‌های متعددِ کاربرا در فوروم رسمیِ گوگل
 # (بهار/تابستانِ ۲۰۲۶)، gemini-2.5-flash-lite به‌شدت ناپایدار شده (خطای ۵۰۳
