@@ -275,6 +275,7 @@
     if (can('calendar')) quick.push(q('تقویم', 'calendar', '', function () { withManage(function (mm) { mm.calendarView(); }); }));
     if (can('comms')) quick.push(q('مخابرات', 'chat', '', function () { withManage(function (mm) { mm.commsView(); }); }));
     frag.append(h('nav', { class: 'quick', 'aria-label': 'میانبرها' }, quick.slice(0, 4)));
+    frag.append(weatherCard());
 
     /* خلاصه */
     var pending = m.pending > 0
@@ -701,6 +702,61 @@
     doc.head.append(s);
   }
 
+  /* ─── آب‌وهوا (تنبل) ───────────────────────────────────────── */
+  var wxState = 0; // 0 نه، 1 در حال بارگذاری، 2 آماده
+  function loadWeather() {
+    if (wxState === 2) return;
+    if (wxState === 1) return;
+    wxState = 1;
+    if (!doc.getElementById('wx-css')) {
+      var l = doc.createElement('link'); l.id = 'wx-css'; l.rel = 'stylesheet'; l.href = 'weather.css?v=' + V; doc.head.append(l);
+    }
+    var s = doc.createElement('script');
+    s.src = 'weather.js?v=' + V;
+    s.onload = function () {
+      wxState = 2;
+      window.HubWeather.mount($('#tab-weather'), { h: h, ic: ic, hx: hx, tg: tg, toast: toast, LS: LS, api: api, goHome: function () { go('home'); } });
+      if (cur === 'weather' && window.HubWeather.onShow) window.HubWeather.onShow();
+    };
+    s.onerror = function () { wxState = 0; toast('بارگذاری آب‌وهوا ناموفق بود'); };
+    doc.head.append(s);
+  }
+  function loadWeatherLater() {
+    if (wxState) return;
+    var a = doc.createElement('link'); a.rel = 'prefetch'; a.as = 'script'; a.href = 'weather.js?v=' + V; doc.head.append(a);
+    var b = doc.createElement('link'); b.rel = 'prefetch'; b.as = 'style'; b.href = 'weather.css?v=' + V; doc.head.append(b);
+  }
+
+  /* کارتِ آب‌وهوا در خانه: فوراً از کشِ محلی رنگ می‌شود، بعد در پس‌زمینه تازه می‌شود */
+  var WX_E = { clear: ['☀️', '🌙'], partly: ['⛅', '☁️'], cloud: ['☁️', '☁️'], drizzle: ['🌦️', '🌧️'], rain: ['🌧️', '🌧️'], storm: ['⛈️', '⛈️'], snow: ['❄️', '❄️'], fog: ['🌫️', '🌫️'] };
+  var WX_G = {
+    clear: [['#1c7ed6', '#74c0fc'], ['#0b1230', '#27355f']], partly: [['#2f7fc9', '#8fc1ea'], ['#0b1230', '#2c3a66']],
+    cloud: [['#4b6580', '#8ea3b6'], ['#0e1422', '#2c3548']], drizzle: [['#3f566d', '#7e93a7'], ['#0c121d', '#273141']],
+    rain: [['#2f4156', '#657b92'], ['#080d16', '#1f2937']], storm: [['#1f2633', '#4a556a'], ['#05070d', '#171e2b']],
+    snow: [['#5f7a96', '#b4c7d8'], ['#16213a', '#46587a']], fog: [['#6b7783', '#aab3bb'], ['#1a1f27', '#414a56']]
+  };
+  function weatherCard() {
+    var el = h('button', { type: 'button', class: 'wxm', 'aria-label': 'آب‌وهوای سرپل‌ذهاب', onclick: function () { hx.tap(); go('weather'); } });
+    function paintMini(d) {
+      var n = d.now, day = n.is_day ? 0 : 1, g = (WX_G[n.kind] || WX_G.clear)[day];
+      el.style.setProperty('--w1', g[0]); el.style.setProperty('--w2', g[1]);
+      el.replaceChildren(
+        h('span', { class: 'wx-e', text: (n.kind === 'clear' && day) ? (d.moon || '🌙') : (WX_E[n.kind] || WX_E.clear)[day] }),
+        h('div', { class: 'wx-t' },
+          h('small', { text: 'آب‌وهوای سرپل‌ذهاب' }),
+          h('div', { class: 'wx-row' }, h('b', { dir: 'ltr', text: (n.temp == null ? '—' : n.temp) + '°' }), h('span', { text: n.label })),
+          h('em', { text: d.headline })),
+        h('span', { class: 'wx-go' }, ic('chev')));
+    }
+    var c = LS.get('hub:wx');
+    if (c && c.d && c.d.now) paintMini(c.d);
+    else el.append(h('span', { class: 'wx-e', text: '🌤️' }), h('div', { class: 'wx-t' }, h('small', { text: 'آب‌وهوای سرپل‌ذهاب' }), h('em', { text: 'در حال دریافت…' })));
+    if (!c || !c.at || Date.now() - c.at > 300000) {
+      api('/hub/api/weather').then(function (d) { LS.set('hub:wx', { d: d, at: Date.now() }); paintMini(d); }).catch(function () {});
+    }
+    return el;
+  }
+
   /* ─── بخشِ مدیریت (تنبل) ───────────────────────────────────── */
   var M = null, mLoading = false, mQueue = [];
   function loadScript(src) {
@@ -728,7 +784,7 @@
   };
 
   /* ─── ناوبری ─────────────────────────────────────────────── */
-  var panels = { home: $('#tab-home'), players: $('#tab-players'), tours: $('#tab-tours'), manage: $('#tab-manage'), clock: $('#tab-clock'), me: $('#tab-me') };
+  var panels = { home: $('#tab-home'), players: $('#tab-players'), tours: $('#tab-tours'), manage: $('#tab-manage'), clock: $('#tab-clock'), weather: $('#tab-weather'), me: $('#tab-me') };
   var bar = $('#tabbar'), pill = $('#pill');
   /* حباب قرمزِ زیرِ تبِ فعال.
      قبلاً با getBoundingClientRect اندازه‌گیری می‌شد؛ آن مقدار «transform» را هم شامل می‌شود:
@@ -754,7 +810,7 @@
     cur = name;
     doc.body.dataset.tab = name;
     panels[name].hidden = false;
-    bar.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === name); });
+    bar.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === (name === 'weather' ? 'home' : name)); });
     movePill();
     bar.querySelectorAll('button.pop').forEach(function (x) { x.classList.remove('pop'); });
     if (!built[name]) {
@@ -763,6 +819,7 @@
       else if (name === 'me') buildMe();
       else if (name === 'manage') buildManage();
       else if (name === 'clock') loadClock();
+      else if (name === 'weather') loadWeather();
     } else if (name === 'players') { applyPlayers(); ensurePlayers(); }
     else if (name === 'manage' && M) M.renderTab();
     window.scrollTo(0, scrollPos[name] || 0);
@@ -772,6 +829,8 @@
     if (S.boot && Date.now() - lastFetch > 20000) refresh(false);
     if (prev === 'clock' && window.HubClock && window.HubClock.onHide) window.HubClock.onHide();
     if (name === 'clock' && window.HubClock && window.HubClock.onShow) window.HubClock.onShow();
+    if (prev === 'weather') { popBack(); if (window.HubWeather && window.HubWeather.onHide) window.HubWeather.onHide(); }
+    if (name === 'weather') { pushBack(function () { go('home'); }); if (window.HubWeather && window.HubWeather.onShow) window.HubWeather.onShow(); }
   }
   bar.addEventListener('click', function (e) {
     var b = e.target.closest('button[data-go]'); if (b) go(b.dataset.go);
@@ -812,7 +871,7 @@
       tours: hasMatchCaps(),
       manage: canAny('player_register', 'match_create', 'match_edit', 'match_delete', 'predictions', 'elo', 'comms', 'classes', 'teams',
                      'calendar', 'admins_manage', 'settings', 'pishva_panel'),
-      clock: true, me: true
+      clock: true, weather: true, me: true
     };
     var n = 0;
     bar.querySelectorAll('button[data-go]').forEach(function (b) {
@@ -861,7 +920,7 @@
     refresh(true).then(function () {
       var idle = window.requestIdleCallback || function (f) { setTimeout(f, 800); };
       idle(function () { if (!P.rows && canAny('players_view', 'player_register', 'match_create', 'match_edit')) { var c = LS.get(K_PL); if (c) setPlayers(c); ensurePlayers(true); } });
-      idle(function () { loadClockLater(); });
+      idle(function () { loadClockLater(); loadWeatherLater(); });
     });
     doc.addEventListener('visibilitychange', function () {
       if (doc.hidden) return;

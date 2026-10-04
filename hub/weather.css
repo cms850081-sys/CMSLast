@@ -1,0 +1,191 @@
+/* بخشِ آب‌وهوا — فقط وقتی تب اولین بار باز شود بار می‌شود. همه‌ی کلاس‌ها با wx- شروع می‌شوند. */
+.wx{ --s1:#1c7ed6; --s2:#4dabf7; --s3:#a5d8ff; --wet:#4dabf7; position:relative; }
+.wx button{ -webkit-user-select:none; user-select:none; }
+
+/* ═══ هیرو ═══ */
+.wx-hero{ position:relative; isolation:isolate; overflow:hidden; color:#fff; text-align:center;
+  min-height:468px; padding:calc(var(--top) + 10px) 18px 26px; display:flex; flex-direction:column;
+  border-radius:0 0 38px 38px; background:linear-gradient(180deg,var(--s1) 0%,var(--s2) 55%,var(--s3) 100%);
+  transition:background 1s; box-shadow:0 14px 40px rgba(0,0,0,.28); }
+.wx-fxl{ position:absolute; inset:0; z-index:-1; overflow:hidden; direction:ltr; }
+.wx-cv{ position:absolute; inset:0; width:100%; height:100%; z-index:-1; pointer-events:none; }
+
+/* خورشید */
+.wx-sun{ position:absolute; width:170px; height:170px; margin:-85px 0 0 -85px; display:none; transition:left 1.2s, top 1.2s; }
+.wx[data-day="1"] .wx-sun{ display:block; }
+.wx[data-day="1"][data-kind="clear"] .wx-sun, .wx[data-day="1"][data-kind="partly"] .wx-sun{ opacity:1; }
+.wx[data-day="1"][data-kind="cloud"] .wx-sun, .wx[data-day="1"][data-kind="fog"] .wx-sun, .wx[data-day="1"][data-kind="drizzle"] .wx-sun{ opacity:.22; }
+.wx[data-day="1"][data-kind="rain"] .wx-sun, .wx[data-day="1"][data-kind="storm"] .wx-sun, .wx[data-day="1"][data-kind="snow"] .wx-sun{ display:none; }
+.wx-disc{ position:absolute; inset:38px; border-radius:50%; background:radial-gradient(circle at 40% 38%,#fffbe0,#ffe066 45%,#ffb627 100%);
+  box-shadow:0 0 50px 20px rgba(255,210,80,.55),0 0 120px 60px rgba(255,190,60,.28); animation:wx-pulse 5s ease-in-out infinite; }
+.wx-rays{ position:absolute; inset:0; border-radius:50%; opacity:.5; animation:wx-spin 50s linear infinite;
+  background:repeating-conic-gradient(from 0deg,rgba(255,236,150,.55) 0 4deg,transparent 4deg 18deg);
+  -webkit-mask:radial-gradient(circle,transparent 30%,#000 34%,transparent 70%); mask:radial-gradient(circle,transparent 30%,#000 34%,transparent 70%); }
+@keyframes wx-spin{ to{ transform:rotate(360deg); } }
+@keyframes wx-pulse{ 50%{ transform:scale(1.05); filter:brightness(1.08); } }
+
+/* ماه */
+.wx-moon{ position:absolute; right:14%; top:17%; font-size:86px; line-height:1; display:none; filter:drop-shadow(0 0 22px rgba(210,225,255,.75)); animation:wx-float 7s ease-in-out infinite; }
+.wx[data-day="0"] .wx-moon{ display:block; }
+.wx[data-day="0"][data-kind="rain"] .wx-moon, .wx[data-day="0"][data-kind="storm"] .wx-moon, .wx[data-day="0"][data-kind="snow"] .wx-moon{ opacity:.25; }
+@keyframes wx-float{ 50%{ transform:translateY(-9px); } }
+
+/* ابرها */
+.wx-cloud{ position:absolute; display:none; height:54px; width:190px; border-radius:54px; background:rgba(255,255,255,var(--o,.85)); filter:blur(1px);
+  animation:wx-drift var(--d,60s) linear infinite; animation-delay:var(--dl,0s); top:var(--y,20%); transform:scale(var(--sc,1)); }
+.wx-cloud::before, .wx-cloud::after{ content:""; position:absolute; background:inherit; border-radius:50%; }
+.wx-cloud::before{ width:84px; height:84px; left:28px; top:-38px; }
+.wx-cloud::after{ width:64px; height:64px; right:30px; top:-26px; }
+.wx-cloud.c1{ --y:14%; --d:70s; --dl:-20s; --sc:1.1; --o:.9; }
+.wx-cloud.c2{ --y:30%; --d:52s; --dl:-38s; --sc:.8; --o:.7; }
+.wx-cloud.c3{ --y:5%; --d:90s; --dl:-60s; --sc:1.4; --o:.6; }
+.wx-cloud.c4{ --y:44%; --d:64s; --dl:-5s; --sc:1; --o:.75; }
+@keyframes wx-drift{ from{ left:-260px; } to{ left:110%; } }
+.wx[data-kind="partly"] .c1, .wx[data-kind="partly"] .c2{ display:block; }
+.wx[data-kind="cloud"] .wx-cloud, .wx[data-kind="drizzle"] .wx-cloud, .wx[data-kind="snow"] .wx-cloud{ display:block; }
+.wx[data-kind="rain"] .wx-cloud, .wx[data-kind="storm"] .wx-cloud{ display:block; background:rgba(60,72,92,var(--o)); }
+.wx[data-kind="storm"] .wx-cloud{ background:rgba(30,36,50,.92); }
+.wx[data-day="0"] .wx-cloud{ background:rgba(120,135,165,var(--o)); }
+.wx[data-kind="fog"] .c1, .wx[data-kind="fog"] .c3{ display:block; opacity:.5; }
+
+/* مه و گردوغبار */
+.wx-fog{ position:absolute; left:-30%; width:160%; height:90px; display:none; border-radius:50%; background:radial-gradient(ellipse at center,rgba(255,255,255,.55),transparent 70%); animation:wx-fogmove 18s ease-in-out infinite alternate; }
+.wx-fog.f1{ top:34%; } .wx-fog.f2{ top:52%; animation-duration:24s; animation-direction:alternate-reverse; } .wx-fog.f3{ top:70%; animation-duration:30s; }
+.wx[data-kind="fog"] .wx-fog{ display:block; }
+@keyframes wx-fogmove{ from{ transform:translateX(-9%); } to{ transform:translateX(9%); } }
+.wx.dusty .wx-sun{ opacity:.35 !important; filter:blur(3px); }
+
+/* نوارِ بالا */
+.wx-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative; z-index:2; }
+.wx-btn{ width:40px; height:40px; border-radius:50%; display:grid; place-items:center; background:rgba(255,255,255,.18);
+  -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); color:#fff; transition:transform .15s, background .2s; }
+.wx-btn:active{ transform:scale(.88); background:rgba(255,255,255,.3); }
+.wx-btn .ic{ width:20px; height:20px; }
+.wx-btn.spin .ic{ animation:wx-spin .8s linear infinite; }
+.wx-city{ display:flex; flex-direction:column; align-items:center; line-height:1.25; }
+.wx-city b{ font-size:16px; font-weight:700; text-shadow:0 1px 10px rgba(0,0,0,.45); }
+.wx-city small{ font-size:11px; opacity:.9; text-shadow:0 1px 8px rgba(0,0,0,.4); }
+
+/* متنِ اصلی */
+.wx-main{ margin:auto 0; padding-top:18px; position:relative; z-index:1; text-shadow:0 2px 18px rgba(0,0,0,.28); animation:wx-rise .9s cubic-bezier(.2,.8,.2,1) both; }
+.wx-temp{ display:flex; align-items:flex-start; justify-content:center; direction:ltr; line-height:1; }
+.wx-temp .n{ font-size:112px; font-weight:200; letter-spacing:-4px; font-variant-numeric:tabular-nums; }
+.wx-temp .deg{ font-size:48px; font-weight:300; margin-top:12px; opacity:.85; }
+.wx-label{ font-size:23px; font-weight:600; margin-top:2px; }
+.wx-sub{ font-size:13.5px; margin-top:6px; opacity:.92; }
+.wx-headline{ position:relative; z-index:1; align-self:center; margin-top:18px; padding:10px 16px; border-radius:18px; font-size:13.5px; font-weight:500; max-width:100%;
+  background:rgba(255,255,255,.16); -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,.22); animation:wx-rise .9s .15s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes wx-rise{ from{ opacity:0; transform:translateY(22px); } to{ opacity:1; transform:none; } }
+
+/* ═══ بدنه ═══ */
+.wx-bw{ position:relative; }
+.wx-in{ animation:wx-rise .6s cubic-bezier(.2,.8,.2,1) both; animation-delay:calc(var(--i,0) * 70ms); }
+.wx .sec-title{ margin-top:24px; }
+.wx-card{ margin:0 16px; background:var(--surface); border-radius:24px; overflow:hidden; box-shadow:0 6px 22px rgba(0,0,0,.1); }
+
+/* ساعتی */
+.wx-strip{ overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none; direction:ltr; padding:12px 6px 6px; }
+.wx-strip::-webkit-scrollbar{ display:none; }
+.wx-strip-in{ position:relative; }
+.wx-hrow{ display:flex; }
+.wx-hc{ display:flex; flex-direction:column; align-items:center; gap:3px; flex:none; font-size:12.5px; }
+.wx-hh{ color:var(--hint); font-weight:500; font-variant-numeric:tabular-nums; }
+.wx-hc.now .wx-hh{ color:var(--sub); font-weight:700; }
+.wx-hp{ height:14px; font-size:11px; color:var(--hint); order:3; margin-top:76px; }
+.wx-hp.wet{ color:var(--wet); font-weight:700; }
+.wx-curve{ position:absolute; left:0; top:62px; color:var(--accent); pointer-events:none; }
+.wx-line{ stroke:currentColor; stroke-dasharray:2600; stroke-dashoffset:2600; animation:wx-draw 1.8s .3s ease-out forwards; }
+.wx-dot{ fill:var(--surface); stroke:currentColor; stroke-width:2.2; }
+.wx-pt{ fill:var(--text); font-size:12.5px; font-weight:700; }
+@keyframes wx-draw{ to{ stroke-dashoffset:0; } }
+
+/* هفتگی */
+.wx-week{ padding:6px 0; }
+.wx-day{ display:grid; grid-template-columns:78px 62px 1fr; align-items:center; gap:8px; padding:9px 16px; position:relative; }
+.wx-day + .wx-day::before{ content:""; position:absolute; top:0; inset-inline:16px; height:1px; background:var(--sep); }
+.wx-day.today .wx-dn b{ color:var(--sub); }
+.wx-dn{ display:flex; flex-direction:column; line-height:1.3; }
+.wx-dn b{ font-size:14.5px; } .wx-dn small{ font-size:11px; color:var(--hint); }
+.wx-di{ display:flex; flex-direction:column; align-items:center; }
+.wx-dp{ font-size:10.5px; color:var(--hint); height:13px; } .wx-dp.wet{ color:var(--wet); font-weight:700; }
+.wx-range{ display:flex; align-items:center; gap:8px; font-variant-numeric:tabular-nums; font-size:13.5px; }
+.wx-range .lo{ width:30px; text-align:right; color:var(--hint); } .wx-range .hi{ width:30px; font-weight:700; }
+.wx-range .bar{ flex:1; position:relative; height:6px; border-radius:6px; background:rgba(128,128,128,.22); overflow:hidden; }
+.wx-range .bar u{ position:absolute; top:0; bottom:0; border-radius:6px; transform-origin:left; animation:wx-grow .9s .4s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes wx-grow{ from{ transform:scaleX(0); } to{ transform:none; } }
+
+/* کاشی‌ها */
+.wx-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 16px; }
+.wx-tile{ position:relative; overflow:hidden; background:var(--surface); border-radius:24px; padding:14px; min-height:168px; display:flex; flex-direction:column; box-shadow:0 6px 22px rgba(0,0,0,.1); }
+.wx-tile.wide{ grid-column:1/-1; min-height:0; }
+.wx-tt{ display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--hint); position:relative; z-index:1; }
+.wx-big{ margin-top:auto; position:relative; z-index:1; display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+.wx-big b{ font-size:34px; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums; }
+.wx-big span{ font-size:12.5px; font-weight:600; } .wx-big.sm b{ font-size:28px; }
+.wx-note{ position:relative; z-index:1; font-size:12px; color:var(--hint); margin-top:4px; }
+
+.wx-ringbox{ position:relative; width:96px; height:96px; margin:8px auto 2px; }
+.wx-ring{ width:100%; height:100%; } .wx-ring .trk{ stroke:rgba(128,128,128,.2); } .wx-ring .arc{ stroke:var(--wet); transition:stroke-dashoffset 1.4s cubic-bezier(.2,.8,.2,1); }
+.wx-rn{ position:absolute; inset:0; display:grid; place-items:center; font-size:21px; font-variant-numeric:tabular-nums; }
+
+.wx-gauge{ width:100%; max-width:150px; margin:8px auto 0; display:block; overflow:visible; }
+.wx-gauge .needle{ transform-origin:50px 56px; transition:transform 1.5s cubic-bezier(.3,1.35,.5,1); }
+
+.wx-hum .wx-water{ position:absolute; left:0; right:0; bottom:0; height:0; background:linear-gradient(180deg,rgba(77,171,247,.35),rgba(34,139,230,.55)); transition:height 1.6s cubic-bezier(.2,.8,.2,1); z-index:0; }
+.wx-hum .wx-water::before, .wx-hum .wx-water::after{ content:""; position:absolute; left:0; right:0; top:-10px; height:12px; background:
+  url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='60' height='12' viewBox='0 0 60 12'><path d='M0 6 Q15 -2 30 6 T60 6 V12 H0Z' fill='%234dabf7' fill-opacity='.45'/></svg>") repeat-x; background-size:60px 12px; animation:wx-wave 4s linear infinite; }
+.wx-hum .wx-water::after{ top:-7px; opacity:.7; animation-duration:6s; animation-direction:reverse; }
+@keyframes wx-wave{ to{ background-position-x:60px; } }
+
+.wx-comp{ width:98px; height:98px; margin:6px auto 0; color:var(--accent); }
+.wx-comp .ring{ stroke:rgba(128,128,128,.28); } .wx-comp .cl{ fill:var(--hint); font-size:11px; font-weight:700; }
+.wx-comp .warrow{ transition:transform 1.6s cubic-bezier(.3,1.3,.5,1); }
+
+.wx-uv{ position:relative; height:8px; border-radius:8px; margin:10px 0 2px; background:linear-gradient(90deg,#2fb344,#d9b800 35%,#f08c00 55%,#e03131 78%,#9c36b5); }
+.wx-uv .mk{ position:absolute; top:50%; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; background:#fff; border:3px solid var(--text); box-shadow:0 2px 8px rgba(0,0,0,.35); transition:left 1.4s cubic-bezier(.3,1.3,.5,1); }
+
+.wx-arc{ width:100%; margin-top:6px; } .wx-arc .tr{ stroke:var(--hint); opacity:.6; fill:none; } .wx-arc .hz{ stroke:var(--sep); }
+.wx-arc .sdot{ transition:opacity 1s; }
+.wx-sun-t{ display:flex; justify-content:space-between; align-items:flex-end; margin-top:-2px; }
+.wx-sun-t span{ display:flex; flex-direction:column; align-items:center; } .wx-sun-t small{ font-size:11px; color:var(--hint); } .wx-sun-t b{ font-size:17px; font-variant-numeric:tabular-nums; }
+.wx-sun-t .mid{ font-size:12px; color:var(--hint); margin-bottom:3px; }
+
+.wx-mbig{ font-size:58px; line-height:1; text-align:center; margin:10px 0 4px; filter:drop-shadow(0 0 16px rgba(190,205,255,.45)); animation:wx-float 7s ease-in-out infinite; }
+
+/* توصیه‌ها */
+.wx-advs{ display:grid; gap:10px; margin:0 16px; }
+.wx-adv{ display:flex; gap:12px; align-items:center; padding:13px 14px; border-radius:20px; background:var(--surface); box-shadow:0 6px 22px rgba(0,0,0,.08); }
+.wx-adv .ai{ flex:none; width:46px; height:46px; display:grid; place-items:center; font-size:25px; border-radius:15px; background:rgba(128,128,128,.14); }
+.wx-adv b{ font-size:14px; } .wx-adv p{ margin:2px 0 0; font-size:13px; line-height:1.7; color:var(--hint); }
+
+/* کارتِ هوش مصنوعی */
+.wx-ai{ margin:22px 16px 0; padding:2px; border-radius:26px; background:linear-gradient(120deg,#e02a37,#ff9f43,#4dabf7,#9775fa,#e02a37); background-size:300% 300%; animation:wx-rise .6s both, wx-flow 7s linear infinite; animation-delay:calc(var(--i,0)*70ms),0s; }
+@keyframes wx-flow{ to{ background-position:300% 0; } }
+.wx-ai-in{ background:var(--surface); border-radius:24px; padding:16px; }
+.wx-ai-h{ display:flex; flex-direction:column; margin-bottom:10px; } .wx-ai-h b{ font-size:15.5px; } .wx-ai-h small{ font-size:12px; color:var(--hint); }
+.wx-ai-text{ display:none; font-size:14px; line-height:2; white-space:pre-wrap; margin-bottom:12px; padding:12px 14px; border-radius:16px; background:rgba(128,128,128,.1); min-height:44px; }
+.wx-ai-text.on{ display:block; }
+.wx-ai-btn{ width:100%; height:50px; border-radius:16px; font-weight:700; font-size:15px; color:#fff; display:flex; align-items:center; justify-content:center; gap:8px;
+  background:linear-gradient(120deg,var(--red-deep),var(--red) 45%,#ff7a45); box-shadow:0 8px 22px rgba(224,42,55,.35); position:relative; overflow:hidden; transition:transform .12s; }
+.wx-ai-btn:active{ transform:scale(.97); }
+.wx-ai-btn::after{ content:""; position:absolute; top:0; bottom:0; width:60px; left:-80px; background:linear-gradient(100deg,transparent,rgba(255,255,255,.4),transparent); animation:wx-sheen 3s ease-in-out infinite; }
+@keyframes wx-sheen{ to{ left:120%; } }
+.wx-ai-btn .spk{ animation:wx-twinkle 1.8s ease-in-out infinite; } @keyframes wx-twinkle{ 50%{ transform:scale(1.35) rotate(18deg); } }
+.wx-ai-btn.busy{ opacity:.75; pointer-events:none; }
+.wx-dots{ display:inline-flex; gap:6px; align-items:center; height:20px; }
+.wx-dots i{ width:8px; height:8px; border-radius:50%; background:var(--hint); animation:wx-bounce 1s infinite ease-in-out; }
+.wx-dots i:nth-child(2){ animation-delay:.15s; } .wx-dots i:nth-child(3){ animation-delay:.3s; }
+@keyframes wx-bounce{ 0%,80%,100%{ transform:scale(.55); opacity:.4; } 40%{ transform:scale(1); opacity:1; } }
+.wx-foot{ text-align:center; font-size:11.5px; color:var(--hint); margin:20px 0 4px; }
+
+/* بارگذاری و خطا */
+.wx-skel{ padding:16px; display:grid; gap:12px; } .wx-skel .g{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.wx-skel i{ display:block; min-height:150px; border-radius:24px; background:linear-gradient(100deg,rgba(128,128,128,.12) 30%,rgba(128,128,128,.24) 50%,rgba(128,128,128,.12) 70%); background-size:300% 100%; animation:wx-shim 1.4s linear infinite; }
+@keyframes wx-shim{ to{ background-position:-300% 0; } }
+.wx-err{ margin:40px 24px; text-align:center; display:grid; gap:8px; justify-items:center; } .wx-err .em{ font-size:54px; } .wx-err p{ color:var(--hint); margin:0 0 6px; }
+
+@media (prefers-reduced-motion:reduce){
+  .wx *, .wx *::before, .wx *::after{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+  .wx-line{ stroke-dashoffset:0; }
+}
+@media (min-width:560px){ .wx{ max-width:520px; margin:0 auto; } .wx-hero{ border-radius:0 0 38px 38px; } }
