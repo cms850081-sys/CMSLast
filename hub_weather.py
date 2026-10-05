@@ -163,54 +163,131 @@ def _build(fj, air):
     out = {"ok": True, "city": "سرپل‌ذهاب", "now": now, "hours": hours, "days": days, "air": air_out, "moon": moon,
            "updated": datetime.now(TEHRAN).strftime("%Y-%m-%d %H:%M")}
     out["advice"] = _advice(out)
+    out["hint"] = _hint(out, out["advice"])
     out["headline"] = _headline(out)
     return out
 
 
-# ─── توصیه‌های قاعده‌محور (بدونِ هوش مصنوعی، فوری و قابل‌اعتماد) ─────────
-def _advice(w):
-    n, today = w["now"], (w["days"] or [{}])[0]
+# ─── توصیه‌های قاعده‌محور (بدونِ هوش مصنوعی، فوری و منطقی) ────────────
+# تنها منبعِ حقیقت: هم کادرِ اصلیِ پنل، هم نوارِ خانه، هم پرامپتِ تحلیلِ هوش مصنوعی از همین‌جا می‌آیند
+# تا هیچ‌وقت عنوان و متن با هم تناقض نداشته باشند. هر مورد: k, ic (نامِ آیکون), level (ok/warn/bad), title, text, short
+def _lvl_rank(x):
+    return {"bad": 0, "warn": 1, "ok": 2}.get(x.get("level"), 2)
+
+
+def _wear(w):
+    n, days = w["now"], w["days"]
+    hr = datetime.now(TEHRAN).hour
+    day = bool(n["is_day"])
+    nxt = (not day) and hr >= 12                      # عصر/شب → برنامه برای فردا
+    ref = (days[1] if nxt and len(days) > 1 else (days[0] if days else {})) or {}
+    tmin, tmax = ref.get("tmin"), ref.get("tmax")
     feels = n["feels"] if n["feels"] is not None else n["temp"]
-    out = []
-    if feels is not None:
-        if feels <= 0:
-            t = "کاپشنِ ضخیم، کلاه و دستکش لازمه؛ سرما جدیه."
-        elif feels <= 8:
-            t = "کاپشنِ گرم بپوش؛ هوا سرده."
-        elif feels <= 15:
-            t = "یه کاپشنِ سبک یا ژاکت کافیه."
-        elif feels <= 22:
-            t = "لباسِ ملایم و لایه‌ای؛ هوا مطبوعه."
-        elif feels <= 30:
-            t = "لباسِ سبک مناسبه."
-        elif feels <= 36:
-            t = "لباسِ نخیِ روشن بپوش و آب همراهت باشه."
-        else:
-            t = "هوا داغه؛ ظهر تا جای ممکن بیرون نرو و آب زیاد بخور."
-        out.append({"k": "wear", "icon": "👕", "title": "پوشش", "text": t})
-    pops = [h["pop"] for h in w["hours"][:12]] or [today.get("pop", 0)]
-    mp = max(pops + [0])
-    if mp >= 60:
-        out.append({"k": "rain", "icon": "☔", "title": "چتر", "text": f"احتمالِ بارش تا {mp}٪؛ حتماً چتر یا بارانی بردار."})
-    elif mp >= 30:
-        out.append({"k": "rain", "icon": "🌂", "title": "چتر", "text": f"احتمالِ بارش {mp}٪ هست؛ یه چترِ کوچک توی کیف بد نیست."})
+    when = "فردا" if nxt else "امروز"
+    if feels is None and tmin is None:
+        return {"k": "wear", "ic": "jacket", "outfit": "jacket", "level": "ok", "title": "پوشش",
+                "text": "اطلاعاتِ دما در دسترس نیست.", "short": "پوشش"}
+    morning_window = (not day) or hr < 11            # لایه‌ای فقط وقتی معنی دارد که هنوز صبحِ خنک پیش رو/در جریان است
+    # صبحِ خنک و ظهرِ گرم → لایه‌ای (رایج‌ترین موقعیتِ واقعی در سرپل‌ذهاب)
+    if (tmin is not None and tmax is not None and tmax - tmin >= 10 and tmin <= 19 and tmax >= 24 and morning_window):
+        return {"k": "wear", "ic": "jacket", "outfit": "jacket", "level": "ok", "title": "لایه‌ای بپوش",
+                "text": f"{when} صبح {tmin}° و ظهر {tmax}° می‌شه؛ یه ژاکتِ سبک بپوش که ظهر بشه درش آورد.",
+                "short": f"صبح {tmin}° · ظهر {tmax}°"}
+    t = feels if (day or tmin is None) else tmin     # روز: حسِ همین لحظه؛ شب: کمینه‌ی روزِ مرجع (صبحِ رفت‌وآمد)
+    if t <= 0:
+        lv = ("heavy", "پوششِ خیلی گرم", "کاپشنِ ضخیم، کلاه و دستکش بپوش.", "کاپشنِ ضخیم")
+    elif t <= 9:
+        lv = ("coat", "کاپشنِ گرم", "کاپشنِ گرم و لباسِ زیرِ گرم بپوش.", "کاپشنِ گرم")
+    elif t <= 17:
+        lv = ("jacket", "ژاکت یا کاپشنِ سبک", "یه ژاکت یا کاپشنِ سبک کافیه.", "ژاکت بردار")
+    elif t <= 25:
+        lv = ("tee", "لباسِ سبک و راحت", "لباسِ سبک بپوش و یه لایه‌ی نازک همراهت باشه.", "لباسِ سبک")
+    elif t <= 33:
+        lv = ("tee", "لباسِ سبک", "لباسِ نخیِ روشن بپوش.", "لباسِ نخی")
     else:
-        out.append({"k": "rain", "icon": "🌤️", "title": "چتر", "text": "چتر لازم نیست؛ بارشی در راه نیست."})
+        lv = ("tee", "لباسِ خیلی سبک", "لباسِ نخیِ روشن بپوش و آب همراهت باشه.", "لباسِ خیلی سبک")
+    lead = f"{when} صبح حدودِ {t}° می‌شه؛ " if (not day) and tmin is not None else ""
+    return {"k": "wear", "ic": lv[0], "outfit": lv[0], "level": "ok", "title": lv[1], "text": lead + lv[2], "short": lv[3]}
+
+
+def _advice(w):
+    n = w["now"]
+    days = w["days"] or [{}]
+    t0 = days[0]
+    day = bool(n["is_day"])
+    kind = n["kind"]
     air = w.get("air")
-    if air and ((air["aqi"] or 0) > 100 or (air["dust"] or 0) > 100):
-        out.append({"k": "air", "icon": "😷", "title": "کیفیتِ هوا",
-                    "text": "هوا آلوده یا گرد‌وغباریه؛ ماسک بزن و فعالیتِ سنگینِ بیرون رو کم کن."})
-    elif air:
-        out.append({"k": "air", "icon": "🍃", "title": "کیفیتِ هوا", "text": "هوا برای نفس‌کشیدن و بازیِ بیرون مشکلی نداره."})
-    if (today.get("uv") or 0) >= 6:
-        out.append({"k": "uv", "icon": "🧴", "title": "آفتاب", "text": f"شاخصِ UV امروز {today['uv']:g} هست؛ کلاه و ضدآفتاب فراموش نشه."})
-    if (n["gust"] or 0) >= 45:
-        out.append({"k": "wind", "icon": "💨", "title": "باد", "text": f"وزشِ باد تا {n['gust']} کیلومتر بر ساعت؛ مراقبِ وسایلِ سبک باش."})
-    ok_out = (feels is not None and 10 <= feels <= 31 and mp < 30 and (n["gust"] or 0) < 40
-              and not (air and (air["aqi"] or 0) > 100))
-    out.append({"k": "yard", "icon": "🏃" if ok_out else "🏠", "title": "حیاطِ مدرسه / بیرون",
-                "text": "شرایط برای فعالیتِ بیرون عالیه." if ok_out else "امروز فعالیتِ داخلی (مثلاً شطرنج!) انتخابِ بهتریه."})
-    return out
+    feels = n["feels"] if n["feels"] is not None else n["temp"]
+    mp = max([h["pop"] for h in w["hours"][:12]] or [0])
+    gust = n["gust"] or 0
+    items = []
+
+    # بارش
+    if kind == "storm":
+        items.append({"k": "rain", "ic": "umbrella", "level": "bad", "title": "رعدوبرق", "short": "رعدوبرق",
+                      "text": "رعدوبرق در راهه؛ زیرِ آسمونِ باز و کنارِ درخت‌ها نمون."})
+    elif kind == "snow":
+        items.append({"k": "rain", "ic": "umbrella", "level": "warn", "title": "برف", "short": "برف می‌بارد",
+                      "text": "برف می‌بارد؛ کفِ زمین لغزنده‌ست، آهسته راه برو."})
+    elif mp >= 60:
+        items.append({"k": "rain", "ic": "umbrella", "level": "bad", "title": "چتر", "short": "چتر ببر",
+                      "text": f"احتمالِ بارش تا {mp}٪؛ چتر یا بارانی ببر."})
+    elif mp >= 30:
+        items.append({"k": "rain", "ic": "umbrella", "level": "warn", "title": "چتر", "short": "چترِ کوچک",
+                      "text": f"احتمالِ بارش {mp}٪ هست؛ یه چترِ کوچک بد نیست."})
+    else:
+        items.append({"k": "rain", "ic": "umbrella", "level": "ok", "title": "چتر", "short": "بدونِ چتر",
+                      "text": "بارشی در راه نیست؛ چتر لازم نیست."})
+
+    # کیفیتِ هوا / گردوغبار
+    if air:
+        aqi, dust = air["aqi"] or 0, air["dust"] or 0
+        if aqi > 100 or dust > 100:
+            items.append({"k": "air", "ic": "mask", "level": "bad" if (aqi > 150 or dust > 200) else "warn", "title": "کیفیتِ هوا",
+                          "short": "ماسک بزن", "text": "هوا آلوده یا پر از گردوغباره؛ ماسک بزن و کمتر بیرون بمون."})
+        elif aqi > 50 or dust >= 50:
+            items.append({"k": "air", "ic": "leaf", "level": "warn", "title": "کیفیتِ هوا", "short": "هوای متوسط",
+                          "text": "کیفیتِ هوا متوسطه؛ اگه حساسیت داری ماسک بزن."})
+        else:
+            items.append({"k": "air", "ic": "leaf", "level": "ok", "title": "کیفیتِ هوا", "short": "هوای پاک",
+                          "text": "هوا پاکه و برای نفس‌کشیدن مشکلی نداره."})
+
+    # مه
+    if kind == "fog":
+        items.append({"k": "fog", "ic": "wind", "level": "warn", "title": "مه", "short": "دیدِ کم",
+                      "text": "مه هست و دید کمه؛ موقعِ رد‌شدن از خیابون احتیاط کن."})
+
+    # گرما و آفتاب (فقط روز)
+    if day and feels is not None and feels >= 36:
+        items.append({"k": "heat", "ic": "thermo", "level": "bad" if feels >= 42 else "warn", "title": "گرما", "short": "آب بخور",
+                      "text": "هوا خیلی گرمه؛ آب زیاد بخور و ظهر تا جای ممکن بیرون نمون."})
+    uv = t0.get("uv") or 0
+    if day and uv >= 6:
+        items.append({"k": "uv", "ic": "sun", "level": "warn", "title": "آفتاب", "short": "ضدآفتاب",
+                      "text": f"شاخصِ UV امروز {uv:g} هست؛ کلاه و ضدآفتاب فراموش نشه و ظهر زیرِ آفتاب نمون."})
+
+    # باد
+    if gust >= 45:
+        items.append({"k": "wind", "ic": "wind", "level": "warn", "title": "باد", "short": "باد تند",
+                      "text": f"وزشِ باد تا {gust} کیلومتر بر ساعت؛ مراقبِ وسایلِ سبک باش."})
+
+    # «بیرون مناسبه» فقط به‌عنوانِ خبرِ خوب (وقتی هیچ هشداری نیست)؛ موارد ناخوشایند قبلاً با چتر/ماسک/گرما/باد پوشش داده شده‌اند
+    if day and feels is not None:
+        bad_air = bool(air and ((air["aqi"] or 0) > 100 or (air["dust"] or 0) > 100))
+        if 5 <= feels <= 33 and mp < 30 and gust < 40 and not bad_air and kind not in ("storm", "fog", "snow"):
+            items.append({"k": "out", "ic": "tree", "level": "ok", "title": "بیرون", "short": "بیرون مناسبه",
+                          "text": "برای رفت‌وآمد و بیرون‌بودن مناسبه."})
+
+    items.sort(key=_lvl_rank)                       # اولویت: خطرها اول (sort پایدار است)
+    return [_wear(w)] + items
+
+
+def _hint(w, adv):
+    """یک جمله‌ی کوتاه برای نوارِ خانه: مهم‌ترین هشدار (اگر هست) + پوشش."""
+    wear, rest = adv[0], adv[1:]
+    flagged = [x for x in rest if x["level"] in ("bad", "warn")]
+    parts = ([flagged[0]["short"]] if flagged else []) + [wear["short"]]
+    return " · ".join(parts)
 
 
 def _headline(w):
@@ -267,16 +344,25 @@ async def api_weather(request):
 def _ai_prompt(w):
     n, t = w["now"], (w["days"] or [{}])[0]
     air = w.get("air") or {}
+    hr = datetime.now(TEHRAN).hour
+    part = "بامداد" if hr < 5 else "صبح" if hr < 11 else "ظهر" if hr < 15 else "عصر" if hr < 19 else "شب"
     days = "؛ ".join(f"{d['date'][5:]}: {d['tmin']} تا {d['tmax']}°، {d['label']}، بارش {d['pop']}٪" for d in w["days"][1:6])
+    adv = " | ".join(a["text"] for a in w.get("advice", [])[:4])
     return (
-        "تو دستیارِ هواشناسِ مهربان و خودمونیِ یه مدرسه‌ی شطرنج در سرپل‌ذهاب هستی. "
-        "بر اساسِ داده‌ی زیر، یه تحلیلِ کوتاه و کاربردی به فارسیِ محاوره‌ای بنویس (حداکثر ۶ خط، بدون تیتر و بدون ستاره‌ی مارک‌داون). "
-        "اولین خط خلاصه‌ی امروز باشه، بعد توصیه‌ی عملی (پوشش، رفت‌وآمد، حیاط یا فعالیتِ داخلی)، و آخرش یه جمله درباره‌ی روندِ چند روزِ آینده. "
-        "عدد از خودت نساز؛ فقط از داده‌ی زیر استفاده کن.\n\n"
+        "نقش: تو یک گزارشگرِ هواشناسیِ کوتاه‌نویس هستی. مخاطبت یکی از مدیرانِ یک ربات است که در سرپل‌ذهاب زندگی می‌کند و روزها به مدرسه می‌رود.\n"
+        "کارِ تو فقط توضیحِ وضعیتِ آب‌وهوا و کارهای روزمره‌ی مربوط به آن است (پوشش، چتر، ماسک، آب خوردن، رفت‌وآمد).\n"
+        "قوانین سخت:\n"
+        "• هرگز از «باشگاه»، «بازیکن»، «شطرنج»، «مسابقه»، «کلاس»، «مربی» یا هر چیزِ نامرتبط با آب‌وهوا حرف نزن؛ هیچ زمینه‌ای از این‌ها وجود ندارد.\n"
+        "• عدد یا واقعیتِ جدید نساز؛ فقط از داده‌ی زیر استفاده کن و با «توصیه‌های محاسبه‌شده» تناقض نداشته باش.\n"
+        "• اگر شب/بامداد است، درباره‌ی «فردا صبح / امروز صبح» حرف بزن، نه درباره‌ی آفتابِ همین لحظه.\n"
+        "• فارسیِ محاوره‌ایِ ساده، حداکثر ۴ خط، بدون تیتر، بدون ستاره و بدون ایموجی.\n"
+        "• خطِ اول: خلاصه‌ی وضعیت. خطِ دوم: مهم‌ترین توصیه‌ی عملی. خطِ آخر (اختیاری): روندِ چند روزِ آینده.\n\n"
+        f"زمان: {part} (ساعتِ {hr}) به وقتِ سرپل‌ذهاب.\n"
         f"الان: {n['temp']}° (حسِ واقعی {n['feels']}°)، {n['label']}، رطوبت {n['hum']}٪، باد {n['wind']} و وزش تا {n['gust']} km/h.\n"
         f"امروز: {t.get('tmin')} تا {t.get('tmax')}°، احتمالِ بارش {t.get('pop')}٪، UV {t.get('uv')}، غروب {t.get('sunset')}.\n"
-        f"کیفیتِ هوا: AQI {air.get('aqi')} ({air.get('label')})، گرد‌وغبار {air.get('dust')}.\n"
-        f"پنج روزِ بعد: {days}."
+        f"کیفیتِ هوا: AQI {air.get('aqi')} ({air.get('label')})، گردوغبار {air.get('dust')}.\n"
+        f"پنج روزِ بعد: {days}.\n"
+        f"توصیه‌های محاسبه‌شده: {adv}"
     )
 
 
@@ -293,7 +379,7 @@ async def api_weather_ai(request):
         w = await _get_weather()
     except Exception:
         return _json({"ok": False, "error": "weather_unavailable", "message": "الان دریافتِ آب‌وهوا ممکن نشد."}, 503)
-    key = (w["updated"][:15], w["now"]["temp"], w["now"]["code"])  # تقریباً هر ۱۰ دقیقه
+    key = ("v2", w["updated"][:15], w["now"]["temp"], w["now"]["code"])  # تقریباً هر ۱۰ دقیقه
     if _ai_cache["key"] == key and _ai_cache["text"] and now - _ai_cache["at"] < AI_TTL:
         return _json({"ok": True, "text": _ai_cache["text"], "cached": True})
     try:
