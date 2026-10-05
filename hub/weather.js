@@ -608,7 +608,7 @@
         sec('پیش‌بینیِ ۵ روزِ آینده', null, 4), weekCard(d),
         sec('جزئیاتِ امروز', null, 5),
         h('div', { class: 'wx-grid' }, ringTile(d, 6), airTile(d, 7), feelsTile(d, 8), humTile(d, 9), windTile(d, 10), uvTile(d, 11), presTile(d, 12), moonTile(d, 13), sunTile(d, 14)),
-        h('div', { class: 'wx-foot', text: 'منبع: PSE-Weather' }));
+        h('div', { class: 'wx-foot', text: 'منبع: PST-WEATHER' }));
       R.bodyWrap.replaceChildren(body);
       reveal(body, painted);
       painted = true;
