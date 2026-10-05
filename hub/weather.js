@@ -11,7 +11,7 @@
   var h, ic, hx, tg, toast, LS, api, goHome;
   var K = 'hub:wx';
   var D = null, loading = false, lastAt = 0, shown = false, heroVis = true, aiBusy = false, typeT = 0;
-  var tickT = 0, tickI = 0, tickItems = [], painted = false, io = null, heroIO = null, R = {};
+  var tickT = 0, tickI = 0, tickItems = [], paintTok = 0, painted = false, io = null, heroIO = null, R = {};
   var NS = 'http://www.w3.org/2000/svg';
 
   /* ─── ثابت‌ها ─────────────────────────────────────────────── */
@@ -83,185 +83,215 @@
     return '<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="#252d52" opacity=".85"/>' + lit + cr + '</svg>';
   }
 
-  /* ─── آیکون‌های آب‌وهوا (SVG درون‌خطی) ─────────────────────── */
-  function cloudP(c) { return '<path d="M14 37a8.5 8.5 0 0 1-.8-16.9A11.5 11.5 0 0 1 35 18a8.6 8.6 0 0 1 1 19z" fill="' + c + '"/>'; }
-  var SUN = '<circle cx="24" cy="24" r="8" fill="#ffd43b"/><g stroke="#ffd43b" stroke-width="3" stroke-linecap="round"><path d="M24 7v5M24 36v5M7 24h5M36 24h5M12 12l3.5 3.5M32.5 32.5 36 36M12 36l3.5-3.5M32.5 15.5 36 12"/></g>';
-  var MOON = '<path d="M30 8a16 16 0 1 0 10 28A13 13 0 0 1 30 8z" fill="#e9ecef"/>';
+  /* ─── آیکون‌ها ──────────────────────────────────────────────
+     • آیکون‌های وضعیتِ هوا: sprite گرادیانی در index.html (<use>) — سبک و یکدست
+     • آیکون‌های خطی (۲۴px): برای عنوانِ کاشی‌ها، توصیه‌ها و دکمه‌ها؛ هیچ اموجی‌ای در رابط نیست */
+  var WI = { clear: ['clear-day', 'clear-night'], partly: ['partly-day', 'partly-night'], cloud: ['cloud', 'cloud'], drizzle: ['drizzle', 'drizzle'],
+    rain: ['rain', 'rain'], storm: ['storm', 'storm'], snow: ['snow', 'snow'], fog: ['fog', 'fog'] };
   function wicon(kind, day, px) {
-    var body, W = '#eef2f7', G = '#9aa7b6';
-    switch (kind) {
-      case 'clear': body = day ? SUN : MOON; break;
-      case 'partly': body = (day ? '<g transform="translate(-6 -7) scale(.75)">' + SUN + '</g>' : '<g transform="translate(-5 -8) scale(.7)">' + MOON + '</g>') + '<g transform="translate(3 3)">' + cloudP(W) + '</g>'; break;
-      case 'drizzle': body = cloudP(W) + '<g stroke="#74c0fc" stroke-width="2.4" stroke-linecap="round"><path d="M16 41v2M24 41v3M32 41v2"/></g>'; break;
-      case 'rain': body = cloudP(G) + '<g stroke="#4dabf7" stroke-width="3" stroke-linecap="round"><path d="M16 40l-2 5M24 40l-2 5M32 40l-2 5"/></g>'; break;
-      case 'storm': body = cloudP('#7b8794') + '<path d="M25 33l-6 9h5l-2 6 8-10h-5z" fill="#ffd43b"/>'; break;
-      case 'snow': body = cloudP(W) + '<g fill="#fff"><circle cx="16" cy="42" r="2"/><circle cx="24" cy="45" r="2"/><circle cx="32" cy="42" r="2"/></g>'; break;
-      case 'fog': body = cloudP('#cfd6de') + '<g stroke="#adb5bd" stroke-width="3" stroke-linecap="round"><path d="M10 41h28M14 46h22"/></g>'; break;
-      default: body = cloudP(W);
-    }
-    return raw('<svg class="wx-wi" viewBox="0 0 48 48" width="' + (px || 36) + '" height="' + (px || 36) + '" aria-hidden="true">' + body + '</svg>');
+    var id = (WI[kind] || WI.cloud)[day ? 0 : 1];
+    return raw('<svg class="wx-wi" viewBox="0 0 48 48" width="' + (px || 36) + '" height="' + (px || 36) + '" aria-hidden="true"><use href="#wi-' + id + '"/></svg>');
   }
-
-  /* ─── لباس‌ها (SVG ساده) برای توصیه ───────────────────────── */
-  var GARM = {
-    tee: '<path d="M17 9 6 15l4.5 7 4.5-2.5V40h18V19.5l4.5 2.5L42 15 31 9c-1.2 3-3.6 4.6-7 4.6S18.2 12 17 9z"/>',
-    jacket: '<path d="M17 8 6 14l-2.5 20 5 1.5L12 24l2 .5V41h20V24.5l2-.5 3.5 11.5 5-1.5L42 14 31 8c-1.2 3-3.6 4.6-7 4.6S18.2 11 17 8z"/><path d="M24 13v28" stroke="rgba(0,0,0,.28)" stroke-width="1.6" fill="none"/>',
-    coat: '<path d="M16 7 5 13l-2 24 5 1 2.5-13 .5.2V44h26V25.2l.5-.2L40 38l5-1-2-24L32 7l-8 4.5z"/><path d="M24 11.5V44M20 22h3M20 29h3" stroke="rgba(0,0,0,.3)" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
-    heavy: '<path d="M16 9 5 15l-2 23 5 1 2.5-12 .5.2V44h26V26.2l.5-.2L40 39l5-1-2-23L32 9l-8 4z"/><rect x="15" y="8" width="18" height="6" rx="3" fill="rgba(255,255,255,.55)"/><path d="M24 14v30" stroke="rgba(0,0,0,.3)" stroke-width="1.6" fill="none"/>'
+  var LI = {
+    drop: '<path d="M12 3.5S6 9.8 6 14a6 6 0 0 0 12 0c0-4.2-6-10.5-6-10.5z"/>',
+    humidity: '<path d="M12 3.5S6 9.8 6 14a6 6 0 0 0 12 0c0-4.2-6-10.5-6-10.5z"/><path d="M9.2 14.6a2.9 2.9 0 0 0 2.5 2.4"/>',
+    thermo: '<path d="M10 14.2V5.5a2 2 0 0 1 4 0v8.7a4 4 0 1 1-4 0z"/><path d="M12 9.5v6.5"/>',
+    wind: '<path d="M3 9h10.5a2.5 2.5 0 1 0-2.5-2.5"/><path d="M3 13h15a2.5 2.5 0 1 1-2.5 2.5"/><path d="M3 17h6"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>',
+    gauge: '<path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 14l3.5-4.2"/><circle cx="12" cy="14" r="1"/>',
+    moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+    sunrise: '<path d="M3 19h18"/><path d="M7 19a5 5 0 0 1 10 0"/><path d="M12 6v4M5.2 11.2l1.5 1.5M18.8 11.2l-1.5 1.5"/>',
+    leaf: '<path d="M5 19C5 10.5 10.5 5 19 5c0 8.5-5.5 14-14 14z"/><path d="M5 19l7-7"/>',
+    umbrella: '<path d="M12 3.5a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9z"/><path d="M12 12.5V18a2 2 0 0 0 4 0"/>',
+    mask: '<path d="M4 8.5c5-2 11-2 16 0V13c0 3.5-3.5 6-8 6s-8-2.5-8-6z"/><path d="M4 11H2M20 11h2M8.5 14h7"/>',
+    tree: '<path d="M12 3.5a5 5 0 0 0-4.5 7.2A3.8 3.8 0 0 0 9 18h6a3.8 3.8 0 0 0 1.5-7.3A5 5 0 0 0 12 3.5z"/><path d="M12 18v3"/>',
+    home: '<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/>',
+    pin: '<path d="M12 21s7-6 7-11.5a7 7 0 0 0-14 0C5 15 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    spark: '<path d="M11 3l1.9 5.3L18 10l-5.1 1.7L11 17l-1.9-5.3L4 10l5.1-1.7z"/><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+    tee: '<path d="M8.5 4L3 7l2 4 3-1.5V20h8V9.5l3 1.5 2-4-5.5-3c-.8 1.7-2 2.5-3.5 2.5S9.3 5.7 8.5 4z"/>',
+    jacket: '<path d="M8.5 5c0-2 1.6-3.2 3.5-3.2S15.5 3 15.5 5"/><path d="M8.5 5 3.5 8.5 3 18l3.2.8.5-7V20h10.6v-8.2l.5 7 3.2-.8-.5-9.5-5-3.5c-.8 2-2 3-3.5 3S9.3 7 8.5 5z"/><path d="M12 8v12"/>',
+    coat: '<path d="M8.5 5c0-2 1.6-3.2 3.5-3.2S15.5 3 15.5 5"/><path d="M8.5 5 3.5 8.5 3 20l3.3.5.7-8.5V21.5h10V12l.7 8.5 3.3-.5-.5-11.5-5-3.5c-.8 2-2 3-3.5 3S9.3 7 8.5 5z"/><path d="M12 8v13.5"/>',
+    heavy: '<path d="M8.5 5c0-2 1.6-3.2 3.5-3.2S15.5 3 15.5 5"/><path d="M8.5 5 3.5 8.5 3 20l3.3.5.7-8.5V21.5h10V12l.7 8.5 3.3-.5-.5-11.5-5-3.5c-.8 2-2 3-3.5 3S9.3 7 8.5 5z"/><path d="M7.7 8.5c2.6 1.8 5.9 1.8 8.6 0"/><path d="M10.2 10.5l-.2 4.5"/>'
   };
-  function garment(k, px, cls) {
-    return raw('<svg class="g-' + k + (cls ? ' ' + cls : '') + '" viewBox="0 0 48 48" width="' + px + '" height="' + px + '" fill="currentColor" aria-hidden="true">' + GARM[k] + '</svg>');
+  function li(name, px, cls) {
+    return raw('<svg class="wx-li' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" width="' + (px || 18) + '" height="' + (px || 18) + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (LI[name] || '') + '</svg>');
   }
+  var TT_MAP = { '🌧️': 'drop', '🍃': 'leaf', '🌡️': 'thermo', '💧': 'humidity', '🌬️': 'wind', '☀️': 'sun', '🧭': 'gauge', '🌙': 'moon', '🌅': 'sunrise' };
+  var ADV_IC = { wear: 'tee', rain: 'umbrella', air: 'leaf', uv: 'sun', wind: 'wind', yard: 'tree' };
+
+  /* ─── پوشش ───────────────────────────────────────────────── */
   function outfit(t) {
     if (t == null) return 'jacket';
     return t <= 2 ? 'heavy' : t <= 11 ? 'coat' : t <= 19 ? 'jacket' : 'tee';
   }
-  var OUT_T = { heavy: 'پوشش خیلی گرم', coat: 'کاپشن گرم', jacket: 'ژاکت یا کاپشن سبک', tee: 'لباس سبک و راحت' };
+  var OUT_T = { heavy: 'پوششِ خیلی گرم', coat: 'کاپشنِ گرم', jacket: 'ژاکت یا کاپشنِ سبک', tee: 'لباسِ سبک و راحت' };
 
   /* ─── موتورِ جلوه‌ها (کانواس) ──────────────────────────────── */
-  var fx = { cv: null, c: null, w: 0, h: 0, dpr: 1, kind: '', day: 1, wind: 0, dustOn: false, parts: [], stars: [], tw: [], dust: [],
-    raf: 0, last: 0, flash: 0, bolt: null, nextBolt: 0, shoot: null, nextShoot: 0, acc: 0, cnt: 0, lowq: false };
+  /* فقط برای بارش/برف/ستاره/گردوغبار/صاعقه؛ در هوای صاف و ابری روزانه هیچ فریمی کشیده نمی‌شود.
+     رزولوشنِ کانواس ۱× است (خطوطِ نازکِ باران نیازی به بیشتر ندارند) و ذره‌ها در چند pathِ دسته‌ای کشیده می‌شوند. */
+  var fx = { cv: null, c: null, w: 0, h: 0, kind: '', day: 1, wind: 0, dustOn: false, rain: [], snow: [], stars: [], tw: [], dust: [],
+    raf: 0, last: 0, flash: 0, bolt: null, nextBolt: 0, shoot: null, nextShoot: 0, acc: 0, cnt: 0, half: false, lowq: false, skip: 0 };
 
   function fxOn() { return shown && heroVis && !document.hidden; }
   function fxSize() {
     if (!fx.cv || !fx.cv.parentNode) return;
     var r = fx.cv.parentNode.getBoundingClientRect();
-    fx.dpr = fx.lowq ? 1 : Math.min(1.5, window.devicePixelRatio || 1);
     fx.w = Math.max(1, r.width); fx.h = Math.max(1, r.height);
-    fx.cv.width = Math.round(fx.w * fx.dpr); fx.cv.height = Math.round(fx.h * fx.dpr);
-    fx.c.setTransform(fx.dpr, 0, 0, fx.dpr, 0, 0);
+    fx.cv.width = Math.round(fx.w); fx.cv.height = Math.round(fx.h);
   }
   function fxSetup(kind, day, wind, dust) {
     fx.kind = kind; fx.day = day; fx.wind = wind || 0; fx.dustOn = !!dust;
     fxSize();
-    var f = (reduce() ? 0.3 : 1) * (fx.lowq ? 0.6 : 1), W = fx.w, H = fx.h, i, n;
-    fx.parts = []; fx.stars = []; fx.tw = []; fx.dust = [];
+    var f = (reduce() ? 0.35 : 1) * (fx.lowq ? 0.6 : 1), W = fx.w, H = fx.h, i, n;
+    fx.rain = []; fx.snow = []; fx.stars = []; fx.tw = []; fx.dust = [];
     if (kind === 'rain' || kind === 'storm' || kind === 'drizzle') {
-      var sc = kind === 'drizzle' ? 0.65 : 1;
-      n = Math.round((kind === 'storm' ? 90 : kind === 'rain' ? 70 : 40) * f);
-      for (i = 0; i < n; i++) fx.parts.push({ x: rnd(-60, W + 60), y: rnd(0, H), l: rnd(10, 22) * sc, v: rnd(10, 17) * sc });
+      n = Math.round((kind === 'storm' ? 80 : kind === 'rain' ? 62 : 34) * f);
+      for (i = 0; i < n; i++) {
+        var near = i % 5 < 2;                      // ۴۰٪ نزدیک (بلندتر/سریع‌تر/روشن‌تر)، ۶۰٪ دور
+        fx.rain.push({ x: rnd(-60, W + 60), y: rnd(0, H), near: near, l: near ? rnd(16, 26) : rnd(8, 14), v: near ? rnd(13, 18) : rnd(7, 10) });
+      }
     } else if (kind === 'snow') {
-      n = Math.round(55 * f);
-      for (i = 0; i < n; i++) fx.parts.push({ x: rnd(0, W), y: rnd(0, H), r: rnd(1.3, 3.4), v: rnd(0.5, 1.5), ph: rnd(0, 6.28) });
+      n = Math.round(52 * f);
+      for (i = 0; i < n; i++) {
+        var z = i % 3;                             // ۳ عمق: کوچک/آهسته … بزرگ/سریع
+        fx.snow.push({ x: rnd(0, W), y: rnd(0, H), z: z, r: [1.2, 2, 3.2][z], v: [0.45, 0.85, 1.4][z], ph: rnd(0, 6.28) });
+      }
     }
     if (!day && (kind === 'clear' || kind === 'partly')) {
-      n = Math.round(60 * f);
+      n = Math.round(56 * f);
       for (i = 0; i < n; i++) {
-        var s = { x: rnd(0, W), y: rnd(0, H * 0.7), r: rnd(0.5, 1.5), ph: rnd(0, 6.28), sp: rnd(0.0009, 0.003) };
-        (i < 10 ? fx.tw : fx.stars).push(s);
+        var s = { x: rnd(0, W), y: rnd(0, H * 0.72), r: rnd(0.5, 1.4), ph: rnd(0, 6.28), sp: rnd(0.0009, 0.0028) };
+        (i < 9 ? fx.tw : fx.stars).push(s);
       }
     }
     if (dust) {
-      n = Math.round(30 * f);
-      for (i = 0; i < n; i++) fx.dust.push({ x: rnd(0, W), y: rnd(0, H), l: rnd(24, 60), v: rnd(2, 4.5) });
+      n = Math.round(26 * f);
+      for (i = 0; i < n; i++) fx.dust.push({ x: rnd(0, W), y: rnd(0, H), l: rnd(26, 64), v: rnd(2, 4.2) });
     }
-    fx.last = 0;
+    fx.last = 0; fx.acc = 0; fx.cnt = 0; fx.skip = 0;
     fx.nextBolt = performance.now() + rnd(2500, 6000);
     fx.nextShoot = performance.now() + rnd(3000, 8000);
-    if (reduce() || !fx.parts.length && !fx.stars.length && !fx.dust.length) { fx.c.clearRect(0, 0, W, H); }
+    if (fx.c) fx.c.clearRect(0, 0, W, H);
   }
+  function fxAnimated() { return fx.rain.length || fx.snow.length || fx.stars.length || fx.tw.length || fx.dust.length; }
   function makeBolt() {
     var x = rnd(fx.w * 0.15, fx.w * 0.85), y = 0, pts = [[x, y]], endY = fx.h * rnd(0.45, 0.7);
-    while (y < endY) { x += rnd(-22, 22); y += rnd(14, 30); pts.push([x, y]); }
+    while (y < endY) { x += rnd(-20, 20); y += rnd(14, 28); pts.push([x, y]); }
     return pts;
   }
   function boltPath(c) { c.beginPath(); fx.bolt.forEach(function (q, j) { if (j) c.lineTo(q[0], q[1]); else c.moveTo(q[0], q[1]); }); }
 
   function fxFrame(t) {
     fx.raf = 0;
-    if (!fxOn()) return;
-    var animated = fx.parts.length || fx.stars.length || fx.dust.length;
-    if (!animated) return;                      // صحنه‌ی ایستا: هیچ فریمی هدر نمی‌رود
+    if (!fxOn() || !fxAnimated()) return;       // صحنه‌ی ایستا: هیچ فریمی هدر نمی‌رود
     fx.raf = requestAnimationFrame(fxFrame);
-    var dt = fx.last ? Math.min(50, t - fx.last) : 16.7; fx.last = t;
-    var k = dt / 16.67, c = fx.c, W = fx.w, H = fx.h, i, p;
+    var dt = fx.last ? Math.min(60, t - fx.last) : 16.7; fx.last = t;
 
-    // کیفیتِ تطبیقی: اگر میانگینِ فریم‌ها کند بود، یک بار کیفیت را پایین بیاور
+    // کیفیتِ تطبیقی: اگر کند بود اول ۳۰fps، بعد کمترکردنِ ذره‌ها
     if (!fx.lowq) {
       fx.acc += dt; fx.cnt++;
-      if (fx.cnt >= 50) { var avg = fx.acc / fx.cnt; fx.acc = 0; fx.cnt = 0; if (avg > 26) { fx.lowq = true; fxSetup(fx.kind, fx.day, fx.wind, fx.dustOn); return fxStart(); } }
+      if (fx.cnt >= 40) {
+        var avg = fx.acc / fx.cnt; fx.acc = 0; fx.cnt = 0;
+        if (avg > 27) { if (!fx.half) fx.half = true; else { fx.lowq = true; fxSetup(fx.kind, fx.day, fx.wind, fx.dustOn); fxStart(); return; } }
+      }
     }
-
+    if (fx.half && (fx.skip ^= 1)) return;      // یک فریم در میان
+    var k = dt / 16.67, c = fx.c, W = fx.w, H = fx.h, i, p;
     c.clearRect(0, 0, W, H);
-    var slant = clamp(fx.wind / 30, 0, 1.6) * 0.35 + 0.12;
+    var slant = clamp(fx.wind / 30, 0, 1.6) * 0.3 + 0.1;
 
     if (fx.stars.length || fx.tw.length) {
-      c.fillStyle = 'rgba(255,255,255,.75)'; c.beginPath();
+      c.fillStyle = 'rgba(255,255,255,.7)'; c.beginPath();
       for (i = 0; i < fx.stars.length; i++) { p = fx.stars[i]; c.moveTo(p.x + p.r, p.y); c.arc(p.x, p.y, p.r, 0, 6.283); }
       c.fill();
       c.fillStyle = '#fff';
       for (i = 0; i < fx.tw.length; i++) {
-        p = fx.tw[i]; c.globalAlpha = 0.25 + 0.75 * Math.abs(Math.sin(t * p.sp + p.ph));
-        c.beginPath(); c.arc(p.x, p.y, p.r + 0.4, 0, 6.283); c.fill();
+        p = fx.tw[i]; c.globalAlpha = 0.2 + 0.8 * Math.abs(Math.sin(t * p.sp + p.ph));
+        c.beginPath(); c.arc(p.x, p.y, p.r + 0.5, 0, 6.283); c.fill();
       }
       c.globalAlpha = 1;
       if (!reduce() && fx.kind === 'clear') {
-        if (!fx.shoot && t > fx.nextShoot) fx.shoot = { x: rnd(W * 0.3, W), y: rnd(0, H * 0.25), life: 0 };
+        if (!fx.shoot && t > fx.nextShoot) fx.shoot = { x: rnd(W * 0.35, W), y: rnd(0, H * 0.22), life: 0 };
         if (fx.shoot) {
-          var s = fx.shoot; s.life += k; s.x -= 11 * k; s.y += 6 * k;
-          var a = 1 - s.life / 26;
-          if (a <= 0) { fx.shoot = null; fx.nextShoot = t + rnd(6000, 13000); }
-          else { c.strokeStyle = 'rgba(255,255,255,' + a.toFixed(2) + ')'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(s.x + 60, s.y - 33); c.stroke(); }
+          var s = fx.shoot; s.life += k; s.x -= 10 * k; s.y += 5.5 * k;
+          var a = 1 - s.life / 30;
+          if (a <= 0) { fx.shoot = null; fx.nextShoot = t + rnd(7000, 15000); }
+          else {
+            var g = c.createLinearGradient(s.x, s.y, s.x + 64, s.y - 35);
+            g.addColorStop(0, 'rgba(255,255,255,' + a.toFixed(2) + ')'); g.addColorStop(1, 'rgba(255,255,255,0)');
+            c.strokeStyle = g; c.lineWidth = 1.4; c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(s.x + 64, s.y - 35); c.stroke();
+          }
         }
       }
     }
 
-    if (fx.kind === 'rain' || fx.kind === 'storm' || fx.kind === 'drizzle') {
-      c.strokeStyle = 'rgba(205,225,255,.5)'; c.lineWidth = fx.kind === 'drizzle' ? 0.9 : 1.2; c.beginPath();
-      for (i = 0; i < fx.parts.length; i++) {
-        p = fx.parts[i];
-        c.moveTo(p.x, p.y); c.lineTo(p.x - p.l * slant, p.y + p.l);
-        p.y += p.v * k; p.x -= p.v * slant * k;
-        if (p.y > H) { p.y = -p.l; p.x = rnd(-20, W + 80); }
+    if (fx.rain.length) {
+      var far = [], near = [];
+      for (i = 0; i < fx.rain.length; i++) {
+        p = fx.rain[i]; (p.near ? near : far).push(p);
       }
-      c.stroke();
+      function streak(arr, style, lw) {
+        c.strokeStyle = style; c.lineWidth = lw; c.beginPath();
+        for (var j = 0; j < arr.length; j++) {
+          var q = arr[j];
+          c.moveTo(q.x, q.y); c.lineTo(q.x - q.l * slant, q.y + q.l);
+          q.y += q.v * k; q.x -= q.v * slant * k;
+          if (q.y > H) { q.y = -q.l; q.x = rnd(-20, W + 80); }
+        }
+        c.stroke();
+      }
+      streak(far, 'rgba(200,220,255,.2)', 0.8);
+      streak(near, 'rgba(225,238,255,.5)', 1.2);
       if (fx.kind === 'storm' && !reduce()) {
-        if (t > fx.nextBolt) { fx.flash = 1; fx.bolt = makeBolt(); fx.nextBolt = t + rnd(4000, 9500); }
+        if (t > fx.nextBolt) { fx.flash = 1; fx.bolt = makeBolt(); fx.nextBolt = t + rnd(4500, 10000); }
         if (fx.flash > 0.03) {
-          c.fillStyle = 'rgba(235,240,255,' + (fx.flash * 0.4).toFixed(3) + ')'; c.fillRect(0, 0, W, H);
+          c.fillStyle = 'rgba(225,235,255,' + (fx.flash * 0.34).toFixed(3) + ')'; c.fillRect(0, 0, W, H);
           if (fx.bolt && fx.flash > 0.3) {
             c.lineJoin = 'round';
-            c.strokeStyle = 'rgba(190,210,255,' + (fx.flash * 0.35).toFixed(2) + ')'; c.lineWidth = 7; boltPath(c); c.stroke();   // هاله (به‌جای shadowBlur)
-            c.strokeStyle = 'rgba(255,255,255,' + fx.flash.toFixed(2) + ')'; c.lineWidth = 2.2; boltPath(c); c.stroke();
+            c.strokeStyle = 'rgba(180,205,255,' + (fx.flash * 0.3).toFixed(2) + ')'; c.lineWidth = 6; boltPath(c); c.stroke();
+            c.strokeStyle = 'rgba(255,255,255,' + fx.flash.toFixed(2) + ')'; c.lineWidth = 1.8; boltPath(c); c.stroke();
           }
-          fx.flash *= Math.pow(0.86, k);
+          fx.flash *= Math.pow(0.87, k);
         }
       }
-    } else if (fx.kind === 'snow') {
-      c.fillStyle = 'rgba(255,255,255,.85)'; c.beginPath();
-      for (i = 0; i < fx.parts.length; i++) {
-        p = fx.parts[i];
-        p.y += p.v * k; p.x += (Math.sin(t * 0.001 + p.ph) * 0.45 - fx.wind * 0.012) * k;
-        if (p.y > H + 6) { p.y = -6; p.x = rnd(0, W); }
-        c.moveTo(p.x + p.r, p.y); c.arc(p.x, p.y, p.r, 0, 6.283);
+    } else if (fx.snow.length) {
+      for (var z = 0; z < 3; z++) {
+        c.fillStyle = 'rgba(255,255,255,' + [0.5, 0.75, 0.95][z] + ')'; c.beginPath();
+        for (i = 0; i < fx.snow.length; i++) {
+          p = fx.snow[i]; if (p.z !== z) continue;
+          p.y += p.v * k; p.x += (Math.sin(t * 0.0009 + p.ph) * 0.4 - fx.wind * 0.01) * k;
+          if (p.y > H + 6) { p.y = -6; p.x = rnd(0, W); }
+          c.moveTo(p.x + p.r, p.y); c.arc(p.x, p.y, p.r, 0, 6.283);
+        }
+        c.fill();
       }
-      c.fill();
     }
     if (fx.dust.length) {
-      c.strokeStyle = 'rgba(222,178,112,.16)'; c.lineWidth = 1.6; c.lineCap = 'round'; c.beginPath();
+      c.strokeStyle = 'rgba(224,182,118,.17)'; c.lineWidth = 1.5; c.lineCap = 'round'; c.beginPath();
       for (i = 0; i < fx.dust.length; i++) {
         p = fx.dust[i];
-        c.moveTo(p.x, p.y); c.lineTo(p.x + p.l, p.y + p.l * 0.06);
+        c.moveTo(p.x, p.y); c.lineTo(p.x + p.l, p.y + p.l * 0.05);
         p.x += (p.v + fx.wind * 0.05) * k;
         if (p.x > W + 70) { p.x = -p.l - 10; p.y = rnd(0, H); }
       }
       c.stroke();
     }
   }
-  function fxStart() { if (!fx.raf && fxOn()) fx.raf = requestAnimationFrame(fxFrame); }
+  function fxStart() { if (!fx.raf && fxOn() && fxAnimated()) fx.raf = requestAnimationFrame(fxFrame); }
   function fxStop() { if (fx.raf) cancelAnimationFrame(fx.raf); fx.raf = 0; fx.last = 0; }
 
   /* ─── کادرِ اصلی: توصیه‌ی چرخان ────────────────────────────── */
   function tickShow(i, instant) {
     var it = tickItems[i]; if (!it) return;
     function set() {
-      R.tkIc.textContent = it.ic; R.tkTx.textContent = it.tx;
+      R.tkIc.replaceChildren(li(it.ic, 17));
+      R.tkTx.textContent = it.tx;
       var ds = R.tkDots.children;
       for (var j = 0; j < ds.length; j++) ds[j].classList.toggle('on', j === i);
       R.tick.classList.remove('out');
     }
     if (instant || reduce()) { set(); return; }
-    R.tick.classList.add('out'); setTimeout(set, 220);
+    R.tick.classList.add('out'); setTimeout(set, 200);
   }
   function tickGo(step, manual) {
     if (tickItems.length < 2) return;
@@ -272,11 +302,10 @@
   function tickRestart() {
     clearInterval(tickT); tickT = 0;
     if (reduce() || !shown || tickItems.length < 2) return;
-    tickT = setInterval(function () { if (!document.hidden && heroVis) tickGo(1); }, 5500);
+    tickT = setInterval(function () { if (!document.hidden && heroVis) tickGo(1); }, 6000);
   }
   function tickSet(d) {
-    tickItems = [{ ic: '📍', tx: d.headline }].concat(d.advice.map(function (a) { return { ic: a.icon, tx: a.text }; }));
-    // «لباس» همیشه دومین مورد باشد تا خیلی زود در کادرِ اصلی دیده شود
+    tickItems = [{ ic: 'pin', tx: d.headline }].concat(d.advice.map(function (a) { return { ic: ADV_IC[a.k] || 'spark', tx: a.text }; }));
     tickI = 0;
     R.tkDots.replaceChildren.apply(R.tkDots, tickItems.map(function () { return h('i'); }));
     tickShow(0, true);
@@ -284,10 +313,12 @@
   }
 
   /* ─── ساخت صحنه‌ی هیرو ─────────────────────────────────────── */
+  /* لایه‌های متحرک عمداً کم‌اند (خورشید: ۱ لایه‌ی opacity، ابرها: transform، کانواس فقط برای بارش/ستاره):
+     همه‌چیز دیگر گرادیانِ ثابت است و فقط یک‌بار رسم می‌شود. */
   function buildHero() {
     var cv = h('canvas', { class: 'wx-cv', 'aria-hidden': 'true' });
     fx.cv = cv; fx.c = cv.getContext('2d');
-    R.sun = h('div', { class: 'wx-sun' }, h('i', { class: 'wx-rays' }), h('i', { class: 'wx-disc' }));
+    R.sun = h('div', { class: 'wx-sun' }, h('i', { class: 'wx-glow' }), h('i', { class: 'wx-core' }));
     R.moon = h('div', { class: 'wx-moon' });
     R.temp = h('span', { class: 'n', dir: 'ltr', text: '–' });
     R.label = h('div', { class: 'wx-label' });
@@ -303,7 +334,7 @@
       h('div', { class: 'wx-fxl', 'aria-hidden': 'true' },
         R.sun, R.moon,
         h('i', { class: 'wx-cloud c1' }), h('i', { class: 'wx-cloud c2' }), h('i', { class: 'wx-cloud c3' }),
-        h('i', { class: 'wx-fog f1' }), h('i', { class: 'wx-fog f2' }), h('i', { class: 'wx-fog f3' })),
+        h('i', { class: 'wx-fog f1' }), h('i', { class: 'wx-fog f2' })),
       cv,
       h('div', { class: 'wx-bar' }, back, R.city, R.refresh),
       h('div', { class: 'wx-main' },
@@ -317,9 +348,9 @@
     var today = d.days[0] || {}, sr = mins(today.sunrise), ss = mins(today.sunset), nm = nowMin(), day = d.now.is_day;
     if (day && sr != null && ss != null) {
       var p = clamp((nm - sr) / Math.max(1, ss - sr), 0, 1);
-      R.sun.style.left = (26 + 48 * p) + '%';
-      R.sun.style.top = (58 - 40 * Math.sin(Math.PI * p)) + '%';
-    } else { R.sun.style.left = '50%'; R.sun.style.top = '30%'; }
+      R.sun.style.left = (24 + 52 * p) + '%';
+      R.sun.style.top = (50 - 34 * Math.sin(Math.PI * p)) + '%';
+    } else { R.sun.style.left = '50%'; R.sun.style.top = '26%'; }
     if (R.moon.dataset.m !== d.moon) { R.moon.dataset.m = d.moon || ''; R.moon.innerHTML = moonSVG(d.moon); }
   }
 
@@ -331,7 +362,7 @@
   function tile(cls, i, kids) {
     return h('div', { class: 'wx-tile wx-in ' + cls, style: '--i:' + si(i) }, kids);
   }
-  function tt(icon, text) { return h('div', { class: 'wx-tt' }, h('span', { text: icon }), h('span', { text: text })); }
+  function tt(icon, text) { var n = TT_MAP[icon]; return h('div', { class: 'wx-tt' }, n ? li(n, 16) : h('span', { text: icon }), h('span', { text: text })); }
 
   function hourlyCard(d) {
     var hs = d.hours.slice(0, 24), CW = 62, n = hs.length;
@@ -370,7 +401,7 @@
       var l = (x.tmin - lo) / sp * 100, w = Math.max(8, (x.tmax - x.tmin) / sp * 100);
       return h('div', { class: 'wx-day' + (i === 0 ? ' today' : '') },
         h('div', { class: 'wx-dn' }, h('b', { text: dayName(x.date, i) }), h('small', { text: dayFa(x.date) })),
-        h('div', { class: 'wx-di' }, wicon(x.kind, 1, 30), h('span', { class: 'wx-dp' + (x.pop >= 30 ? ' wet' : ''), text: x.pop >= 10 ? '💧' + x.pop + '٪' : '' })),
+        h('div', { class: 'wx-di' }, wicon(x.kind, 1, 30), h('span', { class: 'wx-dp' + (x.pop >= 30 ? ' wet' : ''), text: x.pop >= 10 ? x.pop + '٪' : '' })),
         h('div', { class: 'wx-range', dir: 'ltr' },
           h('span', { class: 'lo', text: x.tmin + '°' }),
           h('i', { class: 'bar' }, h('u', { style: 'left:' + l + '%;width:' + w + '%;background:linear-gradient(90deg,' + tcol(x.tmin) + ',' + tcol(x.tmax) + ')' })),
@@ -470,49 +501,38 @@
     return el;
   }
 
-  /* ─── توصیه‌ی امروز: یک کارتِ یکپارچه ─────────────────────── */
-  function dayParts(d) {
-    // ترتیبِ طبیعیِ روز (صبح، ظهر، عصر، شب)؛ اگر ساعتش گذشته، مالِ فردا حساب می‌شود
-    var slots = [[8, 'صبح'], [13, 'ظهر'], [18, 'عصر'], [22, 'شب']], out = [], hs = d.hours;
-    var cur = hs.length ? parseInt(hs[0].h, 10) : 0;
-    slots.forEach(function (s) {
-      for (var i = 0; i < hs.length; i++) {
-        if (parseInt(hs[i].h, 10) === s[0]) { out.push({ idx: i, lab: (s[0] < cur ? 'فردا ' : '') + s[1], temp: hs[i].temp }); break; }
-      }
-    });
-    return out;
-  }
-  function chipsFor(d) {
-    var n = d.now, t0 = d.days[0] || {}, a = d.air, mp = maxPop(d), c = [], G = '#2fb344', Y = '#f0a500', Rr = '#e03131';
-    c.push(mp >= 60 ? { t: 'چتر ببر (بارش ' + mp + '٪)', c: Rr } : mp >= 30 ? { t: 'یه چترِ کوچک بردار', c: Y } : { t: 'چتر لازم نیست', c: G });
-    if (a) c.push((a.aqi > 100 || a.dust > 100) ? { t: 'ماسک بزن', c: Rr } : { t: 'هوا پاکه', c: G });
-    if ((t0.uv || 0) >= 6) c.push({ t: 'ضدآفتاب و کلاه', c: Y });
-    if ((n.gust || 0) >= 45) c.push({ t: 'باد شدید', c: Y });
-    var feels = n.feels == null ? n.temp : n.feels;
-    var okOut = feels != null && feels >= 10 && feels <= 31 && mp < 30 && (n.gust || 0) < 40 && !(a && a.aqi > 100);
-    c.push(okOut ? { t: 'حیاط مناسبه', c: G } : { t: 'فعالیتِ داخلی بهتره', c: Y });
-    return c;
+  /* ─── توصیه‌ی امروز: کارتِ ساده و خلوت ─────────────────────── */
+  function maxPopSafe(d) { return maxPop(d); }
+  function adviceItems(d) {
+    var n = d.now, t0 = d.days[0] || {}, a = d.air, mp = maxPop(d), it = [], G = '#2fb344', Y = '#f0a500', Rr = '#e03131';
+    it.push(mp >= 60 ? { ic: 'umbrella', t: 'چتر ببر', c: Rr } : mp >= 30 ? { ic: 'umbrella', t: 'چترِ کوچک', c: Y } : { ic: 'umbrella', t: 'بدونِ چتر', c: G });
+    if (a) it.push((a.aqi > 100 || a.dust > 100) ? { ic: 'mask', t: 'ماسک بزن', c: Rr } : { ic: 'leaf', t: 'هوای پاک', c: G });
+    if ((t0.uv || 0) >= 6) it.push({ ic: 'sun', t: 'ضدآفتاب', c: Y });
+    else if ((n.gust || 0) >= 45) it.push({ ic: 'wind', t: 'باد شدید', c: Y });
+    else {
+      var feels = n.feels == null ? n.temp : n.feels;
+      var ok = feels != null && feels >= 10 && feels <= 31 && mp < 30 && (n.gust || 0) < 40 && !(a && a.aqi > 100);
+      it.push(ok ? { ic: 'tree', t: 'حیاط مناسبه', c: G } : { ic: 'home', t: 'داخلِ ساختمان', c: Y });
+    }
+    return it.slice(0, 3);
   }
   function adviceCard(d) {
     var n = d.now, feels = n.feels == null ? n.temp : n.feels, k = outfit(feels);
     var wear = (d.advice.filter(function (a) { return a.k === 'wear'; })[0] || {}).text || '';
-    var parts = dayParts(d), nextIdx = Math.min.apply(null, parts.map(function (p) { return p.idx; }));
-    var top = h('div', { class: 'wx-adv-top' },
-      h('div', { class: 'wx-garm' }, garment(k, 58)),
-      h('div', {}, h('h3', { text: OUT_T[k] }), h('p', { text: wear })));
-    var strip = parts.length ? h('div', { class: 'wx-parts' }, parts.map(function (p, i) {
-      return h('div', { class: 'wx-part' + (p.idx === nextIdx ? ' next' : '') }, h('small', { text: p.lab }), garment(outfit(p.temp), 30), h('b', { text: p.temp + '°' }));
-    })) : null;
-    var chips = h('div', { class: 'wx-chips' }, chipsFor(d).map(function (c) { return h('span', { class: 'wx-chip' }, h('i', { style: '--c:' + c.c }), c.t); }));
-    return h('div', { class: 'wx-adv wx-in', style: '--i:6' }, top, strip, chips);
+    return h('div', { class: 'wx-adv wx-in', style: '--i:1' },
+      h('div', { class: 'wx-adv-top' },
+        h('span', { class: 'wx-advic g-' + k }, li(k, 26)),
+        h('div', {}, h('h3', { text: OUT_T[k] }), h('p', { text: wear }))),
+      h('div', { class: 'wx-adv-row' }, adviceItems(d).map(function (x) {
+        return h('span', { class: 'wx-it', style: '--c:' + x.c }, li(x.ic, 16), h('em', { text: x.t }));
+      })));
   }
 
-  /* ─── تحلیلِ هوش مصنوعی ───────────────────────────────────── */
+  /* ─── تحلیلِ هوش مصنوعی (جمع‌وجور) ─────────────────────────── */
   function aiCard() {
     R.aiText = h('div', { class: 'wx-ai-text', 'aria-live': 'polite' });
-    R.aiBtn = h('button', { type: 'button', class: 'wx-ai-btn', onclick: runAI }, h('span', { class: 'spk', text: '✨' }), h('span', { class: 'lbl', text: 'تحلیل هوش مصنوعی' }));
-    return h('div', { class: 'wx-ai wx-in', style: '--i:2' },
-      h('div', { class: 'wx-ai-in' }, h('div', { class: 'wx-ai-h' }, h('b', { text: 'تحلیلِ هوشمندِ امروز' }), h('small', { text: 'بر اساسِ داده‌ی زنده‌ی همین صفحه' })), R.aiText, R.aiBtn));
+    R.aiBtn = h('button', { type: 'button', class: 'wx-ai-btn', onclick: runAI }, li('spark', 16), h('span', { class: 'lbl', text: 'تحلیل هوش مصنوعی' }));
+    return h('div', { class: 'wx-ai wx-in', style: '--i:2' }, R.aiBtn, R.aiText);
   }
   function typeOut(text) {
     clearInterval(typeT);
@@ -578,22 +598,27 @@
     fxSetup(kind, day, n.wind, dusty);
     try { if (shown && tg) tg.setHeaderColor(pal[0]); } catch (e) {}
 
-    var body = h('div', { class: 'wx-body' },
-      sec('توصیه‌ی امروز', null, 0), adviceCard(d),
-      sec('ساعت‌به‌ساعت', h('small', { text: '۲۴ ساعتِ آینده' }), 1), hourlyCard(d),
-      sec('پیش‌بینیِ ۵ روزِ آینده', null, 2), weekCard(d),
-      sec('جزئیاتِ امروز', null, 3),
-      h('div', { class: 'wx-grid' }, ringTile(d, 4), airTile(d, 5), feelsTile(d, 6), humTile(d, 7), windTile(d, 8), uvTile(d, 9), presTile(d, 10), moonTile(d, 11), sunTile(d, 12)),
-      aiCard(),
-      h('div', { class: 'wx-foot', text: 'داده: Open-Meteo · سرپل‌ذهاب' }));
-    R.bodyWrap.replaceChildren(body);
-    reveal(body, painted);
-    painted = true;
-    fxStart();
+    // بدنه بعد از هیرو ساخته می‌شود تا بازشدنِ تب یک «تک‌تسکِ سنگین» نسازد
+    var tok = ++paintTok;
+    function build() {
+      if (tok !== paintTok) return;
+      var body = h('div', { class: 'wx-body' },
+        sec('توصیه‌ی امروز', null, 0), adviceCard(d), aiCard(),
+        sec('ساعت‌به‌ساعت', h('small', { text: '۲۴ ساعتِ آینده' }), 3), hourlyCard(d),
+        sec('پیش‌بینیِ ۵ روزِ آینده', null, 4), weekCard(d),
+        sec('جزئیاتِ امروز', null, 5),
+        h('div', { class: 'wx-grid' }, ringTile(d, 6), airTile(d, 7), feelsTile(d, 8), humTile(d, 9), windTile(d, 10), uvTile(d, 11), presTile(d, 12), moonTile(d, 13), sunTile(d, 14)),
+        h('div', { class: 'wx-foot', text: 'منبع: PSE-Weather' }));
+      R.bodyWrap.replaceChildren(body);
+      reveal(body, painted);
+      painted = true;
+      fxStart();
+    }
+    if (painted) build(); else { fxStart(); requestAnimationFrame(function () { setTimeout(build, 0); }); }
   }
 
   function showError() {
-    R.bodyWrap.replaceChildren(h('div', { class: 'wx-err' }, h('div', { class: 'em', text: '🛰️' }), h('b', { text: 'اتصال به سرویس آب‌وهوا برقرار نشد' }), h('p', { text: 'اینترنت را بررسی کن و دوباره امتحان کن.' }),
+    R.bodyWrap.replaceChildren(h('div', { class: 'wx-err' }, h('div', { class: 'em' }, li('wind', 44)), h('b', { text: 'اتصال به سرویس آب‌وهوا برقرار نشد' }), h('p', { text: 'اینترنت را بررسی کن و دوباره امتحان کن.' }),
       h('button', { type: 'button', class: 'btn', text: 'تلاش دوباره', onclick: function () { load(true); } })));
   }
 

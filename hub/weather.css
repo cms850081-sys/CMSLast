@@ -6,7 +6,7 @@
    • کاشی‌ها و کارت‌ها contain دارند تا بازنقاشی‌شان به بقیه‌ی صفحه سرایت نکند */
 .wx{ --s1:#1c7ed6; --s2:#4dabf7; --s3:#a5d8ff; --wet:#4dabf7; position:relative; }
 .wx button{ -webkit-user-select:none; user-select:none; }
-.wx.paused .wx-cloud, .wx.paused .wx-rays{ animation-play-state:paused; }
+.wx.paused .wx-cloud, .wx.paused .wx-glow, .wx.paused .wx-fog{ animation-play-state:paused; }
 
 /* ═══ هیرو ═══ */
 .wx-hero{ position:relative; isolation:isolate; overflow:hidden; contain:layout paint; color:#fff; text-align:center;
@@ -15,45 +15,55 @@
 .wx-fxl{ position:absolute; inset:0; z-index:-1; overflow:hidden; direction:ltr; }
 .wx-cv{ position:absolute; inset:0; width:100%; height:100%; z-index:-1; pointer-events:none; }
 
-/* خورشید: دیسکِ ثابت + پرتوهای تصویریِ آرام (فقط transform) */
-.wx-sun{ position:absolute; width:170px; height:170px; margin:-85px 0 0 -85px; display:none; }
+/* آسمان: همه‌چیز گرادیانِ ثابت است؛ فقط چند لایه‌ی کم‌هزینه (opacity/transform) حرکتِ بسیار آرام دارند */
+.wx{ --cr:255,255,255; }
+.wx[data-day="0"]{ --cr:132,148,186; }
+.wx[data-kind="cloud"]{ --cr:214,222,233; } .wx[data-kind="drizzle"]{ --cr:190,201,216; }
+.wx[data-kind="rain"]{ --cr:104,118,142; } .wx[data-kind="storm"]{ --cr:52,62,82; } .wx[data-kind="snow"]{ --cr:228,236,246; }
+.wx[data-day="0"][data-kind="cloud"]{ --cr:98,112,142; } .wx[data-day="0"][data-kind="rain"]{ --cr:70,82,104; } .wx[data-day="0"][data-kind="snow"]{ --cr:150,166,196; }
+
+/* خورشید: هاله‌ی نرم + هسته‌ی کوچک (بدونِ پرتوِ کارتونی و بدونِ box-shadow سنگین) */
+.wx-sun{ position:absolute; width:0; height:0; display:none; }
 .wx[data-day="1"] .wx-sun{ display:block; }
-.wx[data-day="1"][data-kind="cloud"] .wx-sun, .wx[data-day="1"][data-kind="fog"] .wx-sun, .wx[data-day="1"][data-kind="drizzle"] .wx-sun{ opacity:.25; }
+.wx[data-day="1"][data-kind="cloud"] .wx-sun, .wx[data-day="1"][data-kind="fog"] .wx-sun, .wx[data-day="1"][data-kind="drizzle"] .wx-sun{ opacity:.3; }
 .wx[data-day="1"][data-kind="rain"] .wx-sun, .wx[data-day="1"][data-kind="storm"] .wx-sun, .wx[data-day="1"][data-kind="snow"] .wx-sun{ display:none; }
 .wx.dusty .wx-sun{ opacity:.4 !important; }
-.wx-disc{ position:absolute; inset:40px; border-radius:50%; background:radial-gradient(circle at 40% 38%,#fffbe0,#ffe066 48%,#ffb627 100%);
-  box-shadow:0 0 44px 18px rgba(255,210,80,.5),0 0 100px 50px rgba(255,190,60,.22); }
-.wx-rays{ position:absolute; inset:0; opacity:.55; will-change:transform; animation:wx-spin 90s linear infinite;
-  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-50 -50 100 100'><g fill='%23fff3b0'><path d='M-1.8 -27 0 -49 1.8 -27Z'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(30)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(60)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(90)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(120)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(150)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(180)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(210)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(240)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(270)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(300)'/><path d='M-1.8 -27 0 -49 1.8 -27Z' transform='rotate(330)'/></g></svg>") center/100% 100% no-repeat; }
-@keyframes wx-spin{ to{ transform:rotate(360deg); } }
+.wx-glow{ position:absolute; left:-210px; top:-210px; width:420px; height:420px; border-radius:50%; will-change:opacity; animation:wx-breathe 9s ease-in-out infinite;
+  background:radial-gradient(circle,rgba(255,251,230,.95) 0,rgba(255,238,176,.7) 5%,rgba(255,216,128,.34) 16%,rgba(255,200,104,.12) 38%,rgba(255,200,104,0) 66%); }
+.wx-core{ position:absolute; left:-24px; top:-24px; width:48px; height:48px; border-radius:50%; background:radial-gradient(circle at 42% 38%,#fffef2 0,#fff4c4 55%,rgba(255,236,160,0) 100%); }
+@keyframes wx-breathe{ 0%,100%{ opacity:.86; } 50%{ opacity:1; } }
 
 /* ماهِ ترسیم‌شده (SVG با فازِ واقعی) — بدونِ انیمیشن */
-.wx-moon{ position:absolute; right:13%; top:15%; width:96px; height:96px; display:none; }
-.wx-moon::before{ content:""; position:absolute; inset:-38px; border-radius:50%; background:radial-gradient(circle,rgba(190,208,255,.3),transparent 66%); }
+.wx-moon{ position:absolute; right:13%; top:15%; width:92px; height:92px; display:none; }
+.wx-moon::before{ content:""; position:absolute; inset:-40px; border-radius:50%; background:radial-gradient(circle,rgba(190,208,255,.28),transparent 66%); }
 .wx-moon svg{ position:relative; width:100%; height:100%; display:block; }
 .wx[data-day="0"] .wx-moon{ display:block; }
-.wx[data-day="0"][data-kind="rain"] .wx-moon, .wx[data-day="0"][data-kind="storm"] .wx-moon, .wx[data-day="0"][data-kind="snow"] .wx-moon{ opacity:.25; }
+.wx[data-day="0"][data-kind="rain"] .wx-moon, .wx[data-day="0"][data-kind="storm"] .wx-moon, .wx[data-day="0"][data-kind="snow"] .wx-moon{ opacity:.22; }
 
-/* ابرها: فقط transform (قبلاً left انیمیت می‌شد که هر فریم layout می‌ساخت) */
-.wx-cloud{ position:absolute; left:0; top:var(--y,20%); width:190px; height:54px; border-radius:54px; display:none; will-change:transform;
-  background:rgba(255,255,255,var(--o,.85)); animation:wx-drift var(--d,60s) linear infinite; animation-delay:var(--dl,0s); }
-.wx-cloud::before, .wx-cloud::after{ content:""; position:absolute; background:inherit; border-radius:50%; }
-.wx-cloud::before{ width:84px; height:84px; left:28px; top:-38px; }
-.wx-cloud::after{ width:64px; height:64px; right:30px; top:-26px; }
-.wx-cloud.c1{ --y:14%; --d:80s; --dl:-26s; --sc:1.1; --o:.9; }
-.wx-cloud.c2{ --y:31%; --d:62s; --dl:-44s; --sc:.8; --o:.7; }
-.wx-cloud.c3{ --y:5%; --d:100s; --dl:-62s; --sc:1.4; --o:.6; }
-@keyframes wx-drift{ from{ transform:translate3d(-260px,0,0) scale(var(--sc,1)); } to{ transform:translate3d(640px,0,0) scale(var(--sc,1)); } }
+/* ابرها: چند گرادیانِ نرمِ هم‌پوشان (یک‌بار رسم می‌شوند) که فقط transform می‌کنند؛ سه عمقِ متفاوت با سرعتِ خیلی آرام */
+.wx-cloud{ position:absolute; left:0; top:var(--y,20%); width:var(--w,300px); height:calc(var(--w,300px) * .42); display:none; opacity:var(--o,1); will-change:transform;
+  background:
+    radial-gradient(ellipse 30% 44% at 26% 64%,rgba(var(--cr),.92),rgba(var(--cr),0) 72%),
+    radial-gradient(ellipse 34% 54% at 50% 46%,rgba(var(--cr),.96),rgba(var(--cr),0) 70%),
+    radial-gradient(ellipse 28% 42% at 75% 62%,rgba(var(--cr),.9),rgba(var(--cr),0) 72%),
+    radial-gradient(ellipse 50% 26% at 50% 80%,rgba(var(--cr),.78),rgba(var(--cr),0) 75%);
+  animation:wx-drift var(--d,120s) linear infinite; animation-delay:var(--dl,0s); }
+.wx-cloud.c1{ --y:9%; --w:340px; --o:.55; --d:150s; --dl:-45s; }
+.wx-cloud.c2{ --y:30%; --w:260px; --o:.8; --d:110s; --dl:-75s; }
+.wx-cloud.c3{ --y:53%; --w:210px; --o:.45; --d:180s; --dl:-120s; }
+@keyframes wx-drift{ from{ transform:translate3d(-420px,0,0); } to{ transform:translate3d(640px,0,0); } }
 .wx[data-kind="partly"] .c1, .wx[data-kind="partly"] .c2{ display:block; }
-.wx[data-kind="cloud"] .wx-cloud, .wx[data-kind="drizzle"] .wx-cloud, .wx[data-kind="snow"] .wx-cloud{ display:block; }
-.wx[data-kind="rain"] .wx-cloud, .wx[data-kind="storm"] .wx-cloud{ display:block; background:rgba(60,72,92,var(--o)); }
-.wx[data-kind="storm"] .wx-cloud{ background:rgba(30,36,50,.92); }
-.wx[data-day="0"] .wx-cloud{ background:rgba(120,135,165,var(--o)); }
-.wx[data-kind="fog"] .c1, .wx[data-kind="fog"] .c3{ display:block; opacity:.5; }
+.wx[data-kind="cloud"] .wx-cloud, .wx[data-kind="drizzle"] .wx-cloud, .wx[data-kind="rain"] .wx-cloud, .wx[data-kind="storm"] .wx-cloud, .wx[data-kind="snow"] .wx-cloud{ display:block; }
+.wx[data-kind="cloud"] .c1, .wx[data-kind="drizzle"] .c1, .wx[data-kind="rain"] .c1, .wx[data-kind="storm"] .c1, .wx[data-kind="snow"] .c1{ --o:.85; }
+.wx[data-kind="cloud"] .c2, .wx[data-kind="drizzle"] .c2, .wx[data-kind="rain"] .c2, .wx[data-kind="storm"] .c2, .wx[data-kind="snow"] .c2{ --o:.95; }
+.wx[data-kind="cloud"] .c3, .wx[data-kind="drizzle"] .c3, .wx[data-kind="rain"] .c3, .wx[data-kind="storm"] .c3, .wx[data-kind="snow"] .c3{ --o:.7; }
+.wx[data-kind="fog"] .c1{ display:block; --o:.35; }
 
-/* مه: لایه‌های ثابت */
-.wx-fog{ position:absolute; left:-30%; width:160%; height:90px; display:none; border-radius:50%; background:radial-gradient(ellipse at center,rgba(255,255,255,.5),transparent 70%); }
-.wx-fog.f1{ top:34%; } .wx-fog.f2{ top:52%; } .wx-fog.f3{ top:70%; }
+/* مه: دو لایه‌ی نرم که آهسته می‌لغزند */
+.wx-fog{ position:absolute; left:-20%; width:140%; height:130px; display:none; will-change:transform; animation:wx-fogmove 38s ease-in-out infinite alternate;
+  background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.36) 50%,rgba(255,255,255,0)); }
+.wx-fog.f1{ top:30%; } .wx-fog.f2{ top:56%; opacity:.8; animation-duration:50s; animation-direction:alternate-reverse; }
+@keyframes wx-fogmove{ from{ transform:translate3d(-7%,0,0); } to{ transform:translate3d(7%,0,0); } }
 .wx[data-kind="fog"] .wx-fog{ display:block; }
 
 /* نوارِ بالا */
@@ -78,7 +88,7 @@
 /* توصیه‌ی چرخان در کادرِ اصلی (لباس، چتر، هوا، حیاط…) */
 .wx-tick{ position:relative; z-index:1; align-self:stretch; margin:18px 4px 0; padding:11px 14px; border-radius:18px; display:flex; align-items:center; gap:10px;
   text-align:start; background:rgba(15,23,42,.3); border:1px solid rgba(255,255,255,.16); font-size:13.5px; font-weight:500; line-height:1.7; }
-.wx-tick .ti{ flex:none; font-size:20px; transition:opacity .22s, transform .22s; }
+.wx-tick .ti{ flex:none; width:30px; height:30px; border-radius:10px; display:grid; place-items:center; background:rgba(255,255,255,.14); transition:opacity .2s, transform .2s; }
 .wx-tick .tx{ flex:1; min-width:0; transition:opacity .22s, transform .22s; }
 .wx-tick.out .ti, .wx-tick.out .tx{ opacity:0; transform:translateY(6px); }
 .wx-tick .dots{ flex:none; display:flex; flex-direction:column; gap:4px; }
@@ -90,7 +100,7 @@
 .wx-in{ opacity:0; transform:translateY(14px); }
 .wx-in.vis{ opacity:1; transform:none; transition:opacity .45s ease, transform .55s cubic-bezier(.2,.8,.2,1); transition-delay:calc(var(--i,0) * 35ms); }
 .wx .sec-title{ margin-top:24px; }
-.wx-card{ margin:0 16px; background:var(--surface); border-radius:24px; overflow:hidden; contain:layout paint style; box-shadow:0 4px 16px rgba(0,0,0,.1); }
+.wx-card{ margin:0 16px; background:var(--surface); border-radius:24px; overflow:hidden; contain:layout paint style; border:1px solid var(--sep); }
 
 /* ساعتی */
 .wx-strip{ overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none; direction:ltr; padding:12px 6px 6px; }
@@ -123,8 +133,9 @@
 
 /* کاشی‌ها */
 .wx-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 16px; }
-.wx-tile{ position:relative; overflow:hidden; contain:layout paint style; background:var(--surface); border-radius:24px; padding:14px; min-height:168px; display:flex; flex-direction:column; box-shadow:0 4px 16px rgba(0,0,0,.1); }
+.wx-tile{ position:relative; overflow:hidden; contain:layout paint style; background:var(--surface); border-radius:24px; padding:14px; min-height:168px; display:flex; flex-direction:column; border:1px solid var(--sep); }
 .wx-tile.wide{ grid-column:1/-1; min-height:0; }
+.wx-tt .wx-li{ flex:none; }
 .wx-tt{ display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--hint); position:relative; z-index:1; }
 .wx-big{ margin-top:auto; position:relative; z-index:1; display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
 .wx-big b{ font-size:34px; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums; }
@@ -162,42 +173,31 @@
 .wx-sun-t span{ display:flex; flex-direction:column; align-items:center; } .wx-sun-t small{ font-size:11px; color:var(--hint); } .wx-sun-t b{ font-size:17px; font-variant-numeric:tabular-nums; }
 .wx-sun-t .mid{ font-size:12px; color:var(--hint); margin-bottom:3px; }
 
-/* ═══ توصیه‌ی امروز: یک کارتِ یکپارچه (به‌جای چند کارتِ پشتِ‌هم) ═══ */
-.wx-adv{ margin:0 16px; padding:16px; background:var(--surface); border-radius:26px; box-shadow:0 4px 16px rgba(0,0,0,.1); contain:layout paint style; }
-.wx-adv-top{ display:flex; align-items:center; gap:14px; }
-.wx-garm{ flex:none; width:84px; height:84px; border-radius:24px; display:grid; place-items:center; background:rgba(128,128,128,.13); }
-.wx-garm svg{ width:58px; height:58px; display:block; }
-.wx-adv-top h3{ margin:0; font-size:16px; font-weight:700; }
-.wx-adv-top p{ margin:4px 0 0; font-size:13.5px; line-height:1.8; color:var(--hint); }
-.wx-parts{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:16px; }
-.wx-part{ text-align:center; padding:10px 2px 9px; border-radius:18px; background:rgba(128,128,128,.1); display:flex; flex-direction:column; align-items:center; gap:3px; }
-.wx-part small{ font-size:10.5px; white-space:nowrap; color:var(--hint); font-weight:600; }
-.wx-part svg{ width:30px; height:30px; display:block; }
-.wx-part b{ font-size:15px; font-variant-numeric:tabular-nums; direction:ltr; }
-.wx-part.next{ box-shadow:inset 0 0 0 2px var(--accent); }
-.g-tee{ color:#ffa94d; } .g-jacket{ color:#74c0fc; } .g-coat{ color:#4c8dff; } .g-heavy{ color:#9775fa; }
-.wx-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
-.wx-chip{ display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:20px; background:rgba(128,128,128,.13); font-size:12.5px; font-weight:600; }
-.wx-chip i{ width:8px; height:8px; border-radius:50%; background:var(--c,#2fb344); }
+/* ═══ توصیه‌ی امروز: کارتِ ساده (یک سطر عنوان + یک سطرِ سه‌تایی) ═══ */
+.wx-adv{ margin:0 16px; padding:14px 16px; background:var(--surface); border-radius:22px; border:1px solid var(--sep); contain:layout paint style; }
+.wx-adv-top{ display:flex; align-items:center; gap:12px; }
+.wx-advic{ flex:none; width:46px; height:46px; border-radius:15px; display:grid; place-items:center; background:rgba(128,128,128,.12); }
+.wx-adv-top h3{ margin:0; font-size:15px; font-weight:700; }
+.wx-adv-top p{ margin:2px 0 0; font-size:13px; line-height:1.7; color:var(--hint); }
+.g-tee{ color:#ffa94d; } .g-jacket{ color:#6ab7f5; } .g-coat{ color:#4c8dff; } .g-heavy{ color:#9775fa; }
+.wx-adv-row{ display:flex; margin-top:12px; padding-top:12px; border-top:1px solid var(--sep); }
+.wx-it{ flex:1; position:relative; display:flex; align-items:center; justify-content:center; gap:6px; color:var(--c,#2fb344); font-size:12.5px; }
+.wx-it em{ font-style:normal; color:var(--text); font-weight:600; }
+.wx-it + .wx-it::before{ content:""; position:absolute; inset-inline-start:0; top:10%; bottom:10%; width:1px; background:var(--sep); }
 
-/* کارتِ هوش مصنوعی (حاشیه‌ی گرادیانِ ثابت؛ بدونِ انیمیشنِ دائمی) */
-.wx-ai{ margin:22px 16px 0; padding:2px; border-radius:26px; background:linear-gradient(120deg,#e02a37,#ff9f43,#4dabf7,#9775fa); }
-.wx-ai-in{ background:var(--surface); border-radius:24px; padding:16px; }
-.wx-ai-h{ display:flex; flex-direction:column; margin-bottom:10px; } .wx-ai-h b{ font-size:15.5px; } .wx-ai-h small{ font-size:12px; color:var(--hint); }
-.wx-ai-text{ display:none; font-size:14px; line-height:2; white-space:pre-wrap; margin-bottom:12px; padding:12px 14px; border-radius:16px; background:rgba(128,128,128,.1); min-height:44px; }
+/* تحلیلِ هوش مصنوعی: فقط یک دکمه‌ی کوچک؛ کادرِ نتیجه فقط بعد از زدن ظاهر می‌شود */
+.wx-ai{ margin:12px 16px 0; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.wx-ai-btn{ height:38px; padding:0 16px; border-radius:19px; display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:700; color:#fff;
+  background:linear-gradient(120deg,var(--red-deep),var(--red)); transition:transform .12s, opacity .2s; }
+.wx-ai-btn:active{ transform:scale(.96); }
+.wx-ai-btn.busy{ opacity:.7; pointer-events:none; }
+.wx-ai-text{ display:none; align-self:stretch; font-size:13.5px; line-height:1.95; white-space:pre-wrap; padding:11px 14px; border-radius:16px; background:var(--surface); border:1px solid var(--sep); }
 .wx-ai-text.on{ display:block; }
-.wx-ai-btn{ width:100%; height:50px; border-radius:16px; font-weight:700; font-size:15px; color:#fff; display:flex; align-items:center; justify-content:center; gap:8px;
-  background:linear-gradient(120deg,var(--red-deep),var(--red) 45%,#ff7a45); box-shadow:0 6px 18px rgba(224,42,55,.32); position:relative; overflow:hidden; transition:transform .12s; }
-.wx-ai-btn:active{ transform:scale(.97); }
-.wx-ai-btn::after{ content:""; position:absolute; top:0; bottom:0; left:0; width:60px; transform:translateX(-90px); background:linear-gradient(100deg,transparent,rgba(255,255,255,.4),transparent); }
-.wx-ai.vis .wx-ai-btn::after{ animation:wx-sheen 1.3s .5s 1 both; }
-@keyframes wx-sheen{ to{ transform:translateX(560px); } }
-.wx-ai-btn.busy{ opacity:.75; pointer-events:none; }
 .wx-dots{ display:inline-flex; gap:6px; align-items:center; height:20px; }
 .wx-dots i{ width:8px; height:8px; border-radius:50%; background:var(--hint); animation:wx-bounce 1s infinite ease-in-out; }
 .wx-dots i:nth-child(2){ animation-delay:.15s; } .wx-dots i:nth-child(3){ animation-delay:.3s; }
 @keyframes wx-bounce{ 0%,80%,100%{ transform:scale(.55); opacity:.4; } 40%{ transform:scale(1); opacity:1; } }
-.wx-foot{ text-align:center; font-size:11.5px; color:var(--hint); margin:20px 0 4px; }
+.wx-foot{ text-align:center; font-size:11.5px; color:var(--hint); margin:22px 0 4px; letter-spacing:.2px; }
 
 /* بارگذاری و خطا (فقط opacity) */
 .wx-skel{ padding:16px; display:grid; gap:12px; } .wx-skel .g{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }

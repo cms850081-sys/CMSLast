@@ -46,6 +46,32 @@
   <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.8"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.8"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8"/></symbol>
 </defs></svg>
 
+<!-- آیکون‌های وضعیتِ آب‌وهوا (گرادیانی، مشترکِ خانه و بخشِ آب‌وهوا) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <radialGradient id="wg-sun" cx=".38" cy=".34" r=".75"><stop offset="0" stop-color="#fff6bd"/><stop offset=".55" stop-color="#ffd23f"/><stop offset="1" stop-color="#ff9f1a"/></radialGradient>
+  <radialGradient id="wg-glow"><stop offset="0" stop-color="#ffc83c" stop-opacity=".5"/><stop offset="1" stop-color="#ffc83c" stop-opacity="0"/></radialGradient>
+  <linearGradient id="wg-moon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffdf2"/><stop offset="1" stop-color="#c3cce6"/></linearGradient>
+  <linearGradient id="wg-cloud" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cbd5e3"/></linearGradient>
+  <linearGradient id="wg-cloud2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b3bfcf"/><stop offset="1" stop-color="#7f8da3"/></linearGradient>
+  <linearGradient id="wg-storm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a94a6"/><stop offset="1" stop-color="#4f5a6e"/></linearGradient>
+  <linearGradient id="wg-drop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#2f8cf0"/></linearGradient>
+  <linearGradient id="wg-bolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff39a"/><stop offset="1" stop-color="#ffb400"/></linearGradient>
+  <path id="wp-cloud" d="M14 37a8.5 8.5 0 0 1-.8-16.9A11.5 11.5 0 0 1 35 18a8.6 8.6 0 0 1 1 19z"/>
+  <path id="wp-drop" d="M0 -3.6C1.8 -1.2 2.6 .2 2.6 1.2a2.6 2.6 0 0 1-5.2 0C-2.6 .2 -1.8 -1.2 0 -3.6z"/>
+</defs>
+  <symbol id="wi-clear-day" viewBox="0 0 48 48"><circle cx="24" cy="24" r="19" fill="url(#wg-glow)"/><circle cx="24" cy="24" r="9" fill="url(#wg-sun)"/><g stroke="#ffc233" stroke-width="2.4" stroke-linecap="round"><path d="M24 7v3.5M24 37.5V41M7 24h3.5M37.5 24H41M12 12l2.5 2.5M33.5 33.5 36 36M12 36l2.5-2.5M33.5 14.5 36 12"/></g></symbol>
+  <symbol id="wi-clear-night" viewBox="0 0 48 48"><path d="M30 8a16 16 0 1 0 10 28A13 13 0 0 1 30 8z" fill="url(#wg-moon)"/><circle cx="37" cy="13" r="1.4" fill="#fff" opacity=".9"/><circle cx="41.5" cy="22" r="1" fill="#fff" opacity=".7"/></symbol>
+  <symbol id="wi-partly-day" viewBox="0 0 48 48"><use href="#wi-clear-day" x="-9" y="-10" width="36" height="36"/><use href="#wp-cloud" transform="translate(5 6)" fill="url(#wg-cloud)"/></symbol>
+  <symbol id="wi-partly-night" viewBox="0 0 48 48"><use href="#wi-clear-night" x="-6" y="-8" width="36" height="36"/><use href="#wp-cloud" transform="translate(5 6)" fill="url(#wg-cloud)"/></symbol>
+  <symbol id="wi-cloud" viewBox="0 0 48 48"><use href="#wp-cloud" transform="translate(9 -6) scale(.8)" fill="url(#wg-cloud2)" opacity=".9"/><use href="#wp-cloud" transform="translate(-1 5)" fill="url(#wg-cloud)"/></symbol>
+  <symbol id="wi-drizzle" viewBox="0 0 48 48"><use href="#wp-cloud" transform="translate(0 -3)" fill="url(#wg-cloud)"/><g stroke="#7cc4ff" stroke-width="2.4" stroke-linecap="round"><path d="M16 38.5l-1.2 3.5M24 38.5l-1.2 3.5M32 38.5l-1.2 3.5"/></g></symbol>
+  <symbol id="wi-rain" viewBox="0 0 48 48"><use href="#wp-cloud" transform="translate(0 -4)" fill="url(#wg-cloud2)"/><use href="#wp-drop" transform="translate(16 41)" fill="url(#wg-drop)"/><use href="#wp-drop" transform="translate(24.5 44)" fill="url(#wg-drop)"/><use href="#wp-drop" transform="translate(33 41)" fill="url(#wg-drop)"/></symbol>
+  <symbol id="wi-storm" viewBox="0 0 48 48"><use href="#wp-cloud" transform="translate(0 -5)" fill="url(#wg-storm)"/><path d="M26.5 29.5 19 40.5h5.5L22 47l9.5-12h-5.5z" fill="url(#wg-bolt)"/></symbol>
+  <symbol id="wi-snow" viewBox="0 0 48 48"><use href="#wp-cloud" transform="translate(0 -4)" fill="url(#wg-cloud)"/><g fill="#fff" stroke="#b9dcff" stroke-width="1"><circle cx="16" cy="41" r="2.2"/><circle cx="24.5" cy="44.5" r="2.2"/><circle cx="33" cy="41" r="2.2"/></g></symbol>
+  <symbol id="wi-fog" viewBox="0 0 48 48"><use href="#wp-cloud" transform="translate(0 -6)" fill="url(#wg-cloud)" opacity=".92"/><g stroke="#b7c2d0" stroke-width="2.6" stroke-linecap="round"><path d="M9 36h30M14 41.5h22M11 46.5h18"/></g></symbol>
+</svg>
+
+
 <main id="app">
   <!-- خانه: هیرو از همان لحظه‌ی اول (پیش از اجرای JS) رنگ می‌شود -->
   <section id="tab-home" class="tab">
