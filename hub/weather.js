@@ -58,13 +58,13 @@
   function dayFa(iso) {
     try { return new Date(iso + 'T12:00:00').toLocaleDateString('fa-IR-u-ca-persian', { day: 'numeric', month: 'long' }); } catch (e) { return ''; }
   }
-  function countTo(el, to, ms, suffix) {
+  function countTo(el, to, ms, suffix, from) {
     suffix = suffix || '';
     if (reduce() || to == null) { el.textContent = to == null ? '—' : to + suffix; return; }
-    var t0 = performance.now();
+    var f0 = from == null ? 0 : from, t0 = performance.now();
     (function step(t) {
       var p = clamp((t - t0) / ms, 0, 1), e = 1 - Math.pow(1 - p, 3);
-      el.textContent = Math.round(to * e) + suffix;
+      el.textContent = Math.round(f0 + (to - f0) * e) + suffix;
       if (p < 1) requestAnimationFrame(step);
     })(t0);
   }
@@ -546,6 +546,7 @@
   function reveal(root, instant) {
     var els = root.querySelectorAll('.wx-in');
     function show(el) {
+      el.style.transitionDelay = '0ms';
       el.classList.add('vis');
       if (el._go) { var f = el._go; el._go = null; try { f(); } catch (e) {} }
     }
@@ -571,7 +572,9 @@
     R.root.style.setProperty('--s1', pal[0]); R.root.style.setProperty('--s2', pal[1]); R.root.style.setProperty('--s3', pal[2]);
     R.root.classList.toggle('dusty', dusty);
     lastSig = sigOf(d);
-    countTo(R.temp, n.temp, painted ? 600 : 900);
+    if (painted && R.tv != null && n.temp != null && R.tv !== n.temp) countTo(R.temp, n.temp, 700, '', R.tv);
+    else R.temp.textContent = n.temp == null ? '—' : n.temp;
+    R.tv = n.temp;
     R.label.textContent = n.label;
     var t0 = d.days[0] || {};
     R.sub.textContent = 'حسِ واقعی ' + (n.feels == null ? '—' : n.feels) + '° · بیشینه ' + (t0.tmax == null ? '—' : t0.tmax) + '° · کمینه ' + (t0.tmin == null ? '—' : t0.tmin) + '°';

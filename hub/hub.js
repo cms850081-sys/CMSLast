@@ -729,23 +729,23 @@
   var WXM_ID = { clear: ['clear-day', 'clear-night'], partly: ['partly-day', 'partly-night'], cloud: ['cloud', 'cloud'], drizzle: ['drizzle', 'drizzle'],
     rain: ['rain', 'rain'], storm: ['storm', 'storm'], snow: ['snow', 'snow'], fog: ['fog', 'fog'] };
   var WXM_TINT = { clear: '255,179,0', partly: '255,179,0', cloud: '142,163,182', drizzle: '77,171,247', rain: '77,171,247', storm: '151,117,250', snow: '116,192,252', fog: '173,181,189' };
-  /* آیکونِ کارتِ خانه: خطیِ تک‌رنگ (هم‌سبک با آیکون‌های دیگرِ اپ)، رنگش از همان حسِ آب‌وهوا گرفته می‌شود */
-  var WXM_CLOUD = 'M7.5 18.5h9.2a3.6 3.6 0 0 0 .3-7.2 5.2 5.2 0 0 0-9.8-1.3A4.1 4.1 0 0 0 7.5 18.5z';
+  /* آیکونِ کارتِ خانه: آیکونِ هواشناسیِ براق و سه‌بعدی‌نما (گرادیان + سایه‌ی نرم)، بدونِ کادرِ رنگی */
+  var WXM_DEFS = '<defs><linearGradient id="xc-w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d4deea"/></linearGradient><linearGradient id="xc-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c3ccd9"/><stop offset="1" stop-color="#7d8ca0"/></linearGradient><linearGradient id="xc-d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8e9db2"/><stop offset="1" stop-color="#4f5e74"/></linearGradient><radialGradient id="xc-sun" cx=".4" cy=".36" r=".7"><stop offset="0" stop-color="#fffbe6"/><stop offset=".45" stop-color="#ffd54a"/><stop offset="1" stop-color="#ff9f1c"/></radialGradient><radialGradient id="xc-glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffd76a" stop-opacity=".75"/><stop offset="1" stop-color="#ffd76a" stop-opacity="0"/></radialGradient><linearGradient id="xc-moon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffdf3"/><stop offset="1" stop-color="#cfd6ea"/></linearGradient><linearGradient id="xc-drop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9dcff"/><stop offset="1" stop-color="#3b8ef0"/></linearGradient><linearGradient id="xc-bolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff7a8"/><stop offset="1" stop-color="#ffb400"/></linearGradient><mask id="xc-mm" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><circle cx="42" cy="25" r="15" fill="#000"/></mask><filter id="xc-sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="2.5" stdDeviation="2.2" flood-color="#000" flood-opacity=".28"/></filter></defs>';
   var WXM_G = {
-    'clear-day': '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
-    'clear-night': '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
-    'partly-day': '<circle cx="8.5" cy="8.5" r="3"/><path d="M8.5 2.5v1M2.5 8.5h1M4.3 4.3l.7.7M12.7 4.3l-.7.7"/><path d="' + WXM_CLOUD + '" transform="translate(2 2.5)"/>',
-    'partly-night': '<path d="M9 3.5a6 6 0 1 0 6 8.2A5 5 0 0 1 9 3.5z"/><path d="' + WXM_CLOUD + '" transform="translate(2 2.5)"/>',
-    'cloud': '<path d="' + WXM_CLOUD + '"/>',
-    'drizzle': '<path d="' + WXM_CLOUD + '" transform="translate(0 -1.5)"/><path d="M9 19.5l-.6 1.6M13 20.5l-.6 1.6M17 19.5l-.6 1.6"/>',
-    'rain': '<path d="' + WXM_CLOUD + '" transform="translate(0 -1.5)"/><path d="M8.5 19l-1 3M12.5 19l-1 3M16.5 19l-1 3"/>',
-    'storm': '<path d="' + WXM_CLOUD + '" transform="translate(0 -1.5)"/><path d="M12.8 16.5l-2 3.2h2.4l-1.6 2.8"/>',
-    'snow': '<path d="' + WXM_CLOUD + '" transform="translate(0 -1.5)"/><path d="M9 21h.01M13 22h.01M17 21h.01" stroke-width="2.4"/>',
-    'fog': '<path d="' + WXM_CLOUD + '" transform="translate(0 -3)"/><path d="M4 18.5h16M7 21.5h10"/>'
+    'clear-day': '<circle cx="24" cy="24" r="20" fill="url(#xc-glow)"/><circle cx="24" cy="24" r="11.5" fill="url(#xc-sun)"/>',
+    'clear-night': '<g mask="url(#xc-mm)"><circle cx="28" cy="34" r="18" fill="url(#xc-moon)"/><circle cx="22" cy="39" r="2.6" fill="#b3bcd6" opacity=".5"/><circle cx="31" cy="45" r="1.6" fill="#b3bcd6" opacity=".45"/></g>',
+    'partly-day': '<g transform="translate(-4 -4)"><circle cx="24" cy="24" r="20" fill="url(#xc-glow)"/><circle cx="24" cy="24" r="11.5" fill="url(#xc-sun)"/></g><path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 4)" fill="url(#xc-w)" filter="url(#xc-sh)"/>',
+    'partly-night': '<g transform="translate(-2 -6) translate(28 34) scale(.72) translate(-28 -34)"><g mask="url(#xc-mm)"><circle cx="28" cy="34" r="18" fill="url(#xc-moon)"/><circle cx="22" cy="39" r="2.6" fill="#b3bcd6" opacity=".5"/><circle cx="31" cy="45" r="1.6" fill="#b3bcd6" opacity=".45"/></g></g><path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 4)" fill="url(#xc-w)" filter="url(#xc-sh)"/>',
+    'cloud': '<path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 -6)" fill="url(#xc-g)"/><path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 0)" fill="url(#xc-w)" filter="url(#xc-sh)"/>',
+    'drizzle': '<path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 -6)" fill="url(#xc-g)" filter="url(#xc-sh)"/><path d="M21 52c-1.6 2.2-2.4 3.4-2.4 4.5a2.4 2.4 0 0 0 4.8 0c0-1.1-.8-2.3-2.4-4.5z" fill="url(#xc-drop)"/><path d="M31 52c-1.6 2.2-2.4 3.4-2.4 4.5a2.4 2.4 0 0 0 4.8 0c0-1.1-.8-2.3-2.4-4.5z" fill="url(#xc-drop)"/>',
+    'rain': '<path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 -6)" fill="url(#xc-d)" filter="url(#xc-sh)"/><path d="M19 52c-1.6 2.2-2.4 3.4-2.4 4.5a2.4 2.4 0 0 0 4.8 0c0-1.1-.8-2.3-2.4-4.5z" fill="url(#xc-drop)"/><path d="M27 52c-1.6 2.2-2.4 3.4-2.4 4.5a2.4 2.4 0 0 0 4.8 0c0-1.1-.8-2.3-2.4-4.5z" fill="url(#xc-drop)"/><path d="M35 52c-1.6 2.2-2.4 3.4-2.4 4.5a2.4 2.4 0 0 0 4.8 0c0-1.1-.8-2.3-2.4-4.5z" fill="url(#xc-drop)"/>',
+    'storm': '<path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 -6)" fill="url(#xc-d)" filter="url(#xc-sh)"/><path d="M30 40 22 52h6.5l-3 7 9.5-13H28z" fill="url(#xc-bolt)"/>',
+    'snow': '<path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 -6)" fill="url(#xc-w)" filter="url(#xc-sh)"/><circle cx="20" cy="52" r="2.6" fill="#fff"/><circle cx="29" cy="56" r="2.6" fill="#fff"/><circle cx="38" cy="52" r="2.6" fill="#fff"/>',
+    'fog': '<path d="M17 49h29a9 9 0 0 0 .6-17.98A12.6 12.6 0 0 0 22.4 28.6 9.4 9.4 0 0 0 17 49z" transform="translate(0 -8)" fill="url(#xc-w)" filter="url(#xc-sh)"/><g stroke="#c5d0de" stroke-width="3" stroke-linecap="round" opacity=".9"><path d="M14 52h36M20 58h24"/></g>'
   };
   function raw(html) { var d = document.createElement('div'); d.innerHTML = html; return d.firstChild; }
   function wxmIcon(id) {
-    return raw('<svg class="wxm-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + (WXM_G[id] || WXM_G.cloud) + '</svg>');
+    return raw('<svg class="wxm-svg" viewBox="0 0 64 64" aria-hidden="true">' + WXM_DEFS + (WXM_G[id] || WXM_G.cloud) + '</svg>');
   }
   function wxmTint(d) {
     var n = d.now, t = n.temp == null ? 20 : n.temp;
