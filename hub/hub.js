@@ -727,30 +727,126 @@
     var b = doc.createElement('link'); b.rel = 'prefetch'; b.as = 'style'; b.href = 'weather.css?v=' + V; doc.head.append(b);
   }
 
-  /* کارتِ آب‌وهوا در خانه: فوراً از کشِ محلی رنگ می‌شود، بعد در پس‌زمینه تازه می‌شود */
-  var WX_E = { clear: ['☀️', '🌙'], partly: ['⛅', '☁️'], cloud: ['☁️', '☁️'], drizzle: ['🌦️', '🌧️'], rain: ['🌧️', '🌧️'], storm: ['⛈️', '⛈️'], snow: ['❄️', '❄️'], fog: ['🌫️', '🌫️'] };
+  /* کارتِ آب‌وهوا در خانه: صحنه‌ی مخصوصِ هر وضعیت (SVG) + چیپ‌های مرتبط با همان وضعیت.
+     فوراً از کشِ محلی رنگ می‌شود، بعد در پس‌زمینه تازه می‌شود. حرکت‌ها بسیار ملایم و فقط transform/opacity‌اند. */
   var WX_G = {
     clear: [['#1c7ed6', '#74c0fc'], ['#0b1230', '#27355f']], partly: [['#2f7fc9', '#8fc1ea'], ['#0b1230', '#2c3a66']],
     cloud: [['#4b6580', '#8ea3b6'], ['#0e1422', '#2c3548']], drizzle: [['#3f566d', '#7e93a7'], ['#0c121d', '#273141']],
     rain: [['#2f4156', '#657b92'], ['#080d16', '#1f2937']], storm: [['#1f2633', '#4a556a'], ['#05070d', '#171e2b']],
     snow: [['#5f7a96', '#b4c7d8'], ['#16213a', '#46587a']], fog: [['#6b7783', '#aab3bb'], ['#1a1f27', '#414a56']]
   };
+  var WXM_CLOUD = 'M14 37a8.5 8.5 0 0 1-.8-16.9A11.5 11.5 0 0 1 35 18a8.6 8.6 0 0 1 1 19z';
+  var WXM_MOON_K = { '🌑': [0, 0], '🌒': [.25, 0], '🌓': [.5, 0], '🌔': [.75, 0], '🌕': [1, 0], '🌖': [.75, 1], '🌗': [.5, 1], '🌘': [.25, 1] };
+  function wxmGrad(d) {
+    var n = d.now, night = !n.is_day, t = n.temp == null ? 20 : n.temp, dust = !!(d.air && d.air.dust >= 100);
+    if (dust && (n.kind === 'clear' || n.kind === 'partly' || n.kind === 'cloud')) return night ? ['#2b1e12', '#6c4f35'] : ['#9a6a35', '#dba35c'];
+    if (n.kind === 'clear' && night) return WX_G.clear[1];
+    if (n.kind === 'clear' || n.kind === 'partly') {
+      if (t >= 36) return ['#c92a2a', '#ff922b'];
+      if (t >= 31) return ['#e8590c', '#ffb454'];
+      if (t <= 3) return ['#4a89c8', '#b6dcf7'];
+    }
+    return (WX_G[n.kind] || WX_G.clear)[night ? 1 : 0];
+  }
+  function wxmCloud(x, y, s, fill, op) {
+    return '<g transform="translate(' + x + ' ' + y + ') scale(' + s + ')" opacity="' + (op || 1) + '"><path d="' + WXM_CLOUD + '" fill="' + fill + '"/></g>';
+  }
+  function wxmSun(cx, cy, r, dim) {
+    var rays = '', i;
+    for (i = 0; i < 12; i++) rays += '<path d="M' + cx + ' ' + (cy - r - 7) + 'v-' + (i % 2 ? 6 : 10) + '" transform="rotate(' + (i * 30) + ' ' + cx + ' ' + cy + ')"/>';
+    return '<g opacity="' + (dim ? .45 : 1) + '"><circle cx="' + cx + '" cy="' + cy + '" r="' + (r + 18) + '" fill="#ffe27a" opacity=".16"/><circle cx="' + cx + '" cy="' + cy + '" r="' + (r + 9) + '" fill="#ffe27a" opacity=".26"/>' +
+      '<g class="wm-rot" style="transform-origin:' + cx + 'px ' + cy + 'px" stroke="#fff1a8" stroke-width="2.6" stroke-linecap="round" opacity=".75">' + rays + '</g>' +
+      '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="#ffd43b"/></g>';
+  }
+  function wxmMoon(emoji, cx, cy, r) {
+    var m = WXM_MOON_K[emoji] || [1, 0], k = m[0], lit = '';
+    if (k >= 1) lit = '<circle cx="0" cy="0" r="' + r + '" fill="#f3f0df"/>';
+    else if (k > 0) lit = '<path d="M0 ' + (-r) + 'A' + r + ' ' + r + ' 0 0 1 0 ' + r + 'A' + (r * Math.abs(1 - 2 * k)).toFixed(1) + ' ' + r + ' 0 0 ' + (k > .5 ? 1 : 0) + ' 0 ' + (-r) + 'Z" fill="#f3f0df"/>';
+    if (m[1]) lit = '<g transform="scale(-1 1)">' + lit + '</g>';
+    return '<g transform="translate(' + cx + ' ' + cy + ')"><circle r="' + (r + 12) + '" fill="#c8d6ff" opacity=".12"/><circle r="' + r + '" fill="#252d52" opacity=".9"/>' + lit +
+      '<g fill="#8f93a8" opacity=".28"><circle cx="' + (-r * .3) + '" cy="' + (-r * .3) + '" r="' + (r * .16) + '"/><circle cx="' + (r * .25) + '" cy="' + (r * .2) + '" r="' + (r * .2) + '"/></g></g>';
+  }
+  function wxmStars() {
+    var p = [[14, 20, 1.6], [34, 8, 1.2], [92, 14, 1.5], [128, 30, 1.2], [112, 8, 1], [20, 62, 1.1], [136, 74, 1.4], [100, 100, 1]], s = '';
+    p.forEach(function (q) { s += '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="' + q[2] + '"/>'; });
+    return '<g fill="#fff" opacity=".7">' + s + '</g>';
+  }
+  function wxmDrops(n, x0, y0, step, col) {
+    var s = '', i;
+    for (i = 0; i < n; i++) s += '<path class="wm-d" style="animation-delay:' + (-i * .27).toFixed(2) + 's" d="M' + (x0 + i * step) + ' ' + y0 + 'l-3 8" stroke="' + col + '" stroke-width="2.6" stroke-linecap="round"/>';
+    return s;
+  }
+  function wxmThermo(x, y) {   // دماسنجِ داغ (برای هوای گرم)
+    return '<g transform="translate(' + x + ' ' + y + ')"><rect x="-5" y="0" width="10" height="38" rx="5" fill="#fff" opacity=".9"/><circle cx="0" cy="44" r="9" fill="#fff" opacity=".9"/>' +
+      '<rect x="-2.2" y="8" width="4.4" height="34" rx="2.2" fill="#e03131"/><circle cx="0" cy="44" r="6" fill="#e03131"/>' +
+      '<g stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".8"><path d="M9 8h6M9 16h4M9 24h6"/></g></g>';
+  }
+  function wxmCrystal(x, y) {  // کریستالِ یخ (برای هوای سرد)
+    var l = '', i; for (i = 0; i < 3; i++) l += '<path d="M0 -12V12" transform="rotate(' + (i * 60) + ')"/>';
+    return '<g transform="translate(' + x + ' ' + y + ')" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".85">' + l + '</g>';
+  }
+  function wxmHeat() {
+    var s = '', i;
+    for (i = 0; i < 3; i++) s += '<path d="M46 ' + (96 + i * 9) + 'q9 -6 18 0t18 0t18 0t18 0" opacity="' + (.38 - i * .08) + '"/>';
+    return '<g fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round">' + s + '</g>';
+  }
+  function wxmScene(d) {
+    var n = d.now, k = n.kind, day = n.is_day, t = n.temp == null ? 20 : n.temp, dust = !!(d.air && d.air.dust >= 100), s = '';
+    var hot = day && t >= 31, cold = t <= 3;
+    if (k === 'clear') {
+      if (day) s = wxmSun(66, 52, 17, dust) + (hot ? wxmHeat() + wxmThermo(124, 20) : '') + (cold ? wxmCrystal(122, 32) : '');
+      else s = wxmStars() + wxmMoon(d.moon, 74, 56, 26);
+    } else if (k === 'partly') {
+      s = (day ? wxmSun(50, 40, 13) : wxmStars() + wxmMoon(d.moon, 52, 42, 18)) + wxmCloud(34, 40, 2.3, '#f1f4f8') + (hot ? wxmThermo(126, 22) : '');
+    } else if (k === 'cloud') {
+      s = wxmCloud(48, 14, 2, '#dfe5ec', .6) + wxmCloud(20, 42, 2.5, '#f1f4f8', .95);
+    } else if (k === 'drizzle' || k === 'rain') {
+      s = wxmCloud(24, 12, 2.6, k === 'rain' ? '#aab6c4' : '#d7dee6') + wxmDrops(k === 'rain' ? 6 : 4, 44, 92, 14, '#8fd0ff');
+    } else if (k === 'storm') {
+      s = wxmCloud(24, 8, 2.7, '#6c7788') + '<path class="wm-bolt" d="M72 68l-12 20h9l-4 16 17-24h-10z" fill="#ffd43b"/>' + wxmDrops(3, 44, 96, 26, '#8fd0ff');
+    } else if (k === 'snow') {
+      var fl = '', i, xs = [38, 56, 74, 92, 110], ys = [96, 108, 94, 106, 98];
+      for (i = 0; i < 5; i++) fl += '<circle class="wm-f" style="animation-delay:' + (-i * .8).toFixed(1) + 's" cx="' + xs[i] + '" cy="' + ys[i] + '" r="2.6" fill="#fff"/>';
+      s = wxmCloud(24, 12, 2.6, '#eef2f7') + fl + (cold ? wxmCrystal(126, 30) : '');
+    } else if (k === 'fog') {
+      s = '<g fill="#fff"><rect x="14" y="34" width="110" height="9" rx="4.5" opacity=".55"/><rect x="30" y="54" width="100" height="9" rx="4.5" opacity=".42"/><rect x="10" y="74" width="96" height="9" rx="4.5" opacity=".5"/><rect x="36" y="94" width="88" height="9" rx="4.5" opacity=".3"/></g>';
+    } else s = wxmCloud(30, 30, 2.6, '#f1f4f8');
+    if (dust && day) s += '<g stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".4"><path d="M46 86h60M60 98h70M52 110h66"/></g>';
+    return '<svg viewBox="0 0 150 124" preserveAspectRatio="xMinYMid meet" aria-hidden="true">' + s + '</svg>';
+  }
+  function wxmChips(d) {
+    var n = d.now, t0 = d.days[0] || {}, a = d.air, c = [], i;
+    var mp = Math.max.apply(null, (d.hours || []).slice(0, 12).map(function (x) { return x.pop; }).concat([0]));
+    var feels = n.feels == null ? n.temp : n.feels, uv = t0.uv || 0, dust = !!(a && (a.aqi > 100 || a.dust > 100));
+    if (n.kind === 'storm') { c.push('رعدوبرق؛ بیرون نرو'); if (mp) c.push('بارش ' + mp + '٪'); }
+    else if (n.kind === 'snow') { c.push('برف می‌بارد'); c.push('لباسِ گرم'); }
+    else if (mp >= 40 || n.kind === 'rain' || n.kind === 'drizzle') { c.push('بارش ' + mp + '٪'); c.push(mp >= 60 ? 'چتر ببر' : 'چترِ کوچک'); }
+    else if (dust) { c.push('گردوغبار'); c.push('ماسک بزن'); }
+    else if (n.kind === 'fog') { c.push('دیدِ کم'); c.push('احتیاط در رانندگی'); }
+    else if (n.is_day && feels >= 31) { if (uv >= 6) c.push('UV ' + Math.round(uv)); c.push('آب همراهت باشه'); c.push('لباسِ نخیِ روشن'); }
+    else if (feels != null && feels <= 3) { c.push('خیلی سرده'); c.push('کاپشنِ گرم'); }
+    else if (n.is_day && uv >= 6) { c.push('UV ' + Math.round(uv)); c.push('کلاه و ضدآفتاب'); }
+    else if (!n.is_day) { c.push(feels != null && feels <= 12 ? 'شبِ خنک' : 'شبِ مطبوع'); c.push(mp < 30 ? 'آسمانِ آرام' : 'بارش ' + mp + '٪'); }
+    else { c.push(feels != null && feels <= 15 ? 'ژاکت بردار' : 'هوای مطبوع'); c.push(mp < 30 ? 'چتر لازم نیست' : 'بارش ' + mp + '٪'); }
+    if (feels != null && c.length < 3) c.push('حس ' + feels + '°');
+    return c.slice(0, 3);
+  }
   function weatherCard() {
     var el = h('button', { type: 'button', class: 'wxm', 'aria-label': 'آب‌وهوای سرپل‌ذهاب', onclick: function () { hx.tap(); go('weather'); } });
     function paintMini(d) {
-      var n = d.now, day = n.is_day ? 0 : 1, g = (WX_G[n.kind] || WX_G.clear)[day];
+      var n = d.now, g = wxmGrad(d);
       el.style.setProperty('--w1', g[0]); el.style.setProperty('--w2', g[1]);
-      el.replaceChildren(
-        h('span', { class: 'wx-e', text: (n.kind === 'clear' && day) ? (d.moon || '🌙') : (WX_E[n.kind] || WX_E.clear)[day] }),
-        h('div', { class: 'wx-t' },
-          h('small', { text: 'آب‌وهوای سرپل‌ذهاب' }),
-          h('div', { class: 'wx-row' }, h('b', { dir: 'ltr', text: (n.temp == null ? '—' : n.temp) + '°' }), h('span', { text: n.label })),
-          h('em', { text: d.headline })),
+      var art = h('div', { class: 'wxm-art', 'aria-hidden': 'true' }); art.innerHTML = wxmScene(d);
+      el.replaceChildren(art,
+        h('div', { class: 'wxm-t' },
+          h('small', { text: 'سرپل‌ذهاب · الان' }),
+          h('div', { class: 'wxm-row' }, h('b', { dir: 'ltr', text: (n.temp == null ? '—' : n.temp) + '°' }), h('span', { text: n.label })),
+          h('div', { class: 'wxm-chips' }, wxmChips(d).map(function (t) { return h('i', { text: t }); }))),
         h('span', { class: 'wx-go' }, ic('chev')));
     }
     var c = LS.get('hub:wx');
     if (c && c.d && c.d.now) paintMini(c.d);
-    else el.append(h('span', { class: 'wx-e', text: '🌤️' }), h('div', { class: 'wx-t' }, h('small', { text: 'آب‌وهوای سرپل‌ذهاب' }), h('em', { text: 'در حال دریافت…' })));
+    else el.append(h('div', { class: 'wxm-t' }, h('small', { text: 'آب‌وهوای سرپل‌ذهاب' }), h('div', { class: 'wxm-chips' }, h('i', { text: 'در حال دریافت…' }))));
     if (!c || !c.at || Date.now() - c.at > 300000) {
       api('/hub/api/weather').then(function (d) { LS.set('hub:wx', { d: d, at: Date.now() }); paintMini(d); }).catch(function () {});
     }
