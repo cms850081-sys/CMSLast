@@ -11,6 +11,7 @@
   var h, ic, hx, tg, toast, LS, api, goHome;
   var K = 'hub:wx2';
   var D = null, loading = false, lastAt = 0, shown = false, heroVis = true, aiBusy = false, typeT = 0;
+  var lastSig = '';
   var tickT = 0, tickI = 0, tickItems = [], paintTok = 0, painted = false, io = null, heroIO = null, R = {};
   var NS = 'http://www.w3.org/2000/svg';
 
@@ -300,9 +301,9 @@
   }
   function tickSet(d) {
     tickItems = [{ ic: 'pin', tx: d.headline }].concat((d.advice || []).map(function (a) { return { ic: a.ic || 'spark', tx: a.text }; }));
-    tickI = 0;
+    tickI = Math.min(tickI, tickItems.length - 1);
     R.tkDots.replaceChildren.apply(R.tkDots, tickItems.map(function () { return h('i'); }));
-    tickShow(0, true);
+    tickShow(tickI, true);
     tickRestart();
   }
 
@@ -569,7 +570,8 @@
     R.root.dataset.kind = kind; R.root.dataset.day = day;
     R.root.style.setProperty('--s1', pal[0]); R.root.style.setProperty('--s2', pal[1]); R.root.style.setProperty('--s3', pal[2]);
     R.root.classList.toggle('dusty', dusty);
-    if (painted) R.temp.textContent = n.temp == null ? '—' : n.temp; else countTo(R.temp, n.temp, 900);
+    lastSig = sigOf(d);
+    countTo(R.temp, n.temp, painted ? 600 : 900);
     R.label.textContent = n.label;
     var t0 = d.days[0] || {};
     R.sub.textContent = 'حسِ واقعی ' + (n.feels == null ? '—' : n.feels) + '° · بیشینه ' + (t0.tmax == null ? '—' : t0.tmax) + '° · کمینه ' + (t0.tmin == null ? '—' : t0.tmin) + '°';
@@ -590,10 +592,17 @@
         sec('جزئیاتِ امروز', null, 5),
         h('div', { class: 'wx-grid' }, ringTile(d, 6), airTile(d, 7), feelsTile(d, 8), humTile(d, 9), windTile(d, 10), uvTile(d, 11), presTile(d, 12), moonTile(d, 13), sunTile(d, 14)),
         h('div', { class: 'wx-foot', text: 'منبع: PST-WEATHER' }));
-      R.bodyWrap.replaceChildren(body);
-      reveal(body, painted);
+      var wasPainted = painted;
       painted = true;
-      fxStart();
+      function swapIn() {
+        if (tok !== paintTok) return;
+        R.bodyWrap.replaceChildren(body);
+        R.bodyWrap.classList.remove('swap');
+        reveal(body, false);
+        fxStart();
+      }
+      if (wasPainted) { R.bodyWrap.classList.add('swap'); setTimeout(swapIn, 200); }
+      else swapIn();
     }
     if (painted) build(); else { fxStart(); requestAnimationFrame(function () { setTimeout(build, 0); }); }
   }
@@ -603,16 +612,23 @@
       h('button', { type: 'button', class: 'btn', text: 'تلاش دوباره', onclick: function () { load(true); } })));
   }
 
+  function sigOf(d) {
+    var c = {}; for (var k in d) if (k !== 'updated' && k !== 'stale') c[k] = d[k];
+    return JSON.stringify(c);
+  }
   function load(force) {
     if (loading) return;
-    loading = true; R.refresh.classList.add('spin');
+    loading = true; R.refresh.classList.remove('fin'); R.refresh.classList.add('spin');
     api('/hub/api/weather').then(function (d) {
       D = d; lastAt = Date.now(); LS.set(K, { d: d, at: lastAt });
-      paint(d); if (force) hx.ok();
+      if (painted && sigOf(d) === lastSig) {
+        R.upd.textContent = 'به‌روزرسانی ' + d.updated.slice(11) + (d.stale ? ' · قدیمی' : '');
+      } else paint(d);
+      if (force) hx.ok();
     }).catch(function () {
       if (!D) showError(); else if (force) toast('به‌روزرسانی نشد؛ داده‌ی قبلی نمایش داده می‌شود');
       hx.err();
-    }).then(function () { loading = false; R.refresh.classList.remove('spin'); });
+    }).then(function () { loading = false; R.refresh.classList.add('fin'); });
   }
 
   function mount(root, c) {
@@ -632,6 +648,9 @@
     }
     var cache = LS.get(K);
     if (cache && cache.d && cache.d.now) { D = cache.d; lastAt = cache.at || 0; paint(D); }
+    R.refresh.addEventListener('animationiteration', function () {
+      if (R.refresh.classList.contains('fin') && !loading) R.refresh.classList.remove('spin', 'fin');
+    });
     load(false);
     var rs = 0;
     window.addEventListener('resize', function () {

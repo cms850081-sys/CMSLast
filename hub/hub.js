@@ -729,10 +729,23 @@
   var WXM_ID = { clear: ['clear-day', 'clear-night'], partly: ['partly-day', 'partly-night'], cloud: ['cloud', 'cloud'], drizzle: ['drizzle', 'drizzle'],
     rain: ['rain', 'rain'], storm: ['storm', 'storm'], snow: ['snow', 'snow'], fog: ['fog', 'fog'] };
   var WXM_TINT = { clear: '255,179,0', partly: '255,179,0', cloud: '142,163,182', drizzle: '77,171,247', rain: '77,171,247', storm: '151,117,250', snow: '116,192,252', fog: '173,181,189' };
+  /* آیکونِ کارتِ خانه: خطیِ تک‌رنگ (هم‌سبک با آیکون‌های دیگرِ اپ)، رنگش از همان حسِ آب‌وهوا گرفته می‌شود */
+  var WXM_CLOUD = 'M7.5 18.5h9.2a3.6 3.6 0 0 0 .3-7.2 5.2 5.2 0 0 0-9.8-1.3A4.1 4.1 0 0 0 7.5 18.5z';
+  var WXM_G = {
+    'clear-day': '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
+    'clear-night': '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+    'partly-day': '<circle cx="8.5" cy="8.5" r="3"/><path d="M8.5 2.5v1M2.5 8.5h1M4.3 4.3l.7.7M12.7 4.3l-.7.7"/><path d="' + WXM_CLOUD + '" transform="translate(2 2.5)"/>',
+    'partly-night': '<path d="M9 3.5a6 6 0 1 0 6 8.2A5 5 0 0 1 9 3.5z"/><path d="' + WXM_CLOUD + '" transform="translate(2 2.5)"/>',
+    'cloud': '<path d="' + WXM_CLOUD + '"/>',
+    'drizzle': '<path d="' + WXM_CLOUD + '" transform="translate(0 -1.5)"/><path d="M9 19.5l-.6 1.6M13 20.5l-.6 1.6M17 19.5l-.6 1.6"/>',
+    'rain': '<path d="' + WXM_CLOUD + '" transform="translate(0 -1.5)"/><path d="M8.5 19l-1 3M12.5 19l-1 3M16.5 19l-1 3"/>',
+    'storm': '<path d="' + WXM_CLOUD + '" transform="translate(0 -1.5)"/><path d="M12.8 16.5l-2 3.2h2.4l-1.6 2.8"/>',
+    'snow': '<path d="' + WXM_CLOUD + '" transform="translate(0 -1.5)"/><path d="M9 21h.01M13 22h.01M17 21h.01" stroke-width="2.4"/>',
+    'fog': '<path d="' + WXM_CLOUD + '" transform="translate(0 -3)"/><path d="M4 18.5h16M7 21.5h10"/>'
+  };
+  function raw(html) { var d = document.createElement('div'); d.innerHTML = html; return d.firstChild; }
   function wxmIcon(id) {
-    var s = doc.createElementNS(NS, 'svg'), u = doc.createElementNS(NS, 'use');
-    s.setAttribute('viewBox', '0 0 48 48'); s.setAttribute('aria-hidden', 'true'); s.setAttribute('class', 'wxm-svg');
-    u.setAttribute('href', '#wi-' + id); s.appendChild(u); return s;
+    return raw('<svg class="wxm-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + (WXM_G[id] || WXM_G.cloud) + '</svg>');
   }
   function wxmTint(d) {
     var n = d.now, t = n.temp == null ? 20 : n.temp;
