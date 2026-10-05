@@ -60,6 +60,7 @@
 .wx-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative; z-index:2; }
 .wx-btn{ width:40px; height:40px; border-radius:50%; display:grid; place-items:center; background:rgba(15,23,42,.26); color:#fff; transition:transform .15s; }
 .wx-btn:active{ transform:scale(.88); }
+.wx-sp{ width:40px; height:40px; flex:none; }
 .wx-btn .ic{ width:20px; height:20px; }
 .wx-btn.spin .ic{ animation:wx-spin .8s linear infinite; }
 .wx-city{ display:flex; flex-direction:column; align-items:center; line-height:1.25; }

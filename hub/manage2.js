@@ -423,10 +423,17 @@
     tab.replaceChildren.apply(tab, kids);
     if (can('pishva_panel') && !C.S.pendingLoading) {
       C.S.pendingLoading = true;
+      /* رفعِ فریزِ ۳ثانیه‌ایِ تبِ مدیریت: قبلاً داخلِ callback ابتدا pendingLoading=false می‌شد و بعد renderTab() صدا زده می‌شد.
+         وقتی جوابِ قبلی در memo بود، swr هم‌زمان (sync) callback را صدا می‌زد → renderTab → swr → callback → … بازگشتِ بی‌پایان
+         (بیش از ۲۰۰۰ بار ساختِ کاملِ صفحه، بعد «Maximum call stack size exceeded»). حالا:
+         • فقط وقتی عددِ درخواست‌ها واقعاً عوض شده دوباره رندر می‌شود
+         • قفلِ pendingLoading فقط بعد از پایانِ درخواست باز می‌شود، نه وسطِ callback */
       swr('/hub/api/requests', function (d) {
-        C.S.pending = { total: d.access.length + d.kicks.length + (d.scans || []).length }; C.S.pendingLoading = false;
-        if (C.cur() === 'manage') renderTab();
-      }, function () { C.S.pendingLoading = false; });
+        var total = d.access.length + d.kicks.length + (d.scans || []).length;
+        var changed = !C.S.pending || C.S.pending.total !== total;
+        C.S.pending = { total: total };
+        if (changed && C.cur() === 'manage') renderTab();
+      }, function () {}).then(function () { C.S.pendingLoading = false; }, function () { C.S.pendingLoading = false; });
     }
   }
 

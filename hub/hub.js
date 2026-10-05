@@ -109,16 +109,13 @@
     try { tg.ready(); } catch (e) {}
     try { tg.expand(); } catch (e) {}
     try { tg.disableVerticalSwipes(); } catch (e) {}
-    // تمام‌صفحه‌ی واقعی (مثل ویب‌چس): هدر تلگرام جمع می‌شود. فقط در Bot API
-    // 8.0+ موجوده، expand() بالا به‌عنوان fallback همیشه اجرا شده.
-    // تمام‌صفحه‌ی واقعی (مثل ویب‌چس): هدر تلگرام جمع می‌شود. فقط در Bot API
-    // 8.0+ موجوده؛ expand() بالا به‌عنوان fallback همیشه اجرا شده. متغیرهای
-    // --tg-content-safe-area-inset-* را خودِ تلگرام ست می‌کند و hub.css از
-    // قبل از همان‌ها استفاده می‌کند، پس نیازی به کدِ اضافه نیست.
+    // حالتِ کلاسیکِ تلگرام (مثلِ میرا): هدرِ تلگرام با دکمه‌های بستن/منو بالای صفحه می‌ماند و محتوا زیرِ آن
+    // شروع می‌شود؛ پس دکمه‌های Close/منو دیگر روی دکمه‌ها و عنوان‌های ما نمی‌افتند. (دیگر requestFullscreen نمی‌زنیم.)
+    // اگر تلگرام خودش تمام‌صفحه باز کرد (مثلاً لینکِ mode=fullscreen)، از آن خارج می‌شویم.
     try {
-      if (tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') && typeof tg.requestFullscreen === 'function') {
-        tg.requestFullscreen();
-      }
+      var leaveFs = function () { try { if (tg.isFullscreen && typeof tg.exitFullscreen === 'function') tg.exitFullscreen(); } catch (e) {} };
+      leaveFs();
+      if (tg.onEvent) tg.onEvent('fullscreenChanged', leaveFs);
     } catch (e) {}
     try { tg.BackButton.onClick(function () { var f = backStack[backStack.length - 1]; if (f) f(); }); } catch (e) {}
     try { tg.onEvent('themeChanged', chrome); } catch (e) {}

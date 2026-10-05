@@ -293,7 +293,9 @@
     R.label = h('div', { class: 'wx-label' });
     R.sub = h('div', { class: 'wx-sub' });
     R.refresh = h('button', { type: 'button', class: 'wx-btn', 'aria-label': 'به‌روزرسانی', onclick: function () { hx.tap(); load(true); } }, ic('reset'));
-    var back = h('button', { type: 'button', class: 'wx-btn', 'aria-label': 'بازگشت', onclick: function () { hx.tap(); goHome(); } }, ic('chev'));
+    // هدرِ تلگرام خودش «Back» دارد؛ دکمه‌ی تکراری فقط وقتی لازم است که BackButton نباشد
+    var back = (tg && tg.BackButton) ? h('span', { class: 'wx-sp', 'aria-hidden': 'true' })
+      : h('button', { type: 'button', class: 'wx-btn', 'aria-label': 'بازگشت', onclick: function () { hx.tap(); goHome(); } }, ic('chev'));
     R.city = h('div', { class: 'wx-city' }, h('b', { text: 'سرپل‌ذهاب' }), R.upd = h('small', { text: '' }));
     R.tkIc = h('span', { class: 'ti' }); R.tkTx = h('span', { class: 'tx' }); R.tkDots = h('span', { class: 'dots', 'aria-hidden': 'true' });
     R.tick = h('button', { type: 'button', class: 'wx-tick', 'aria-live': 'polite', onclick: function () { hx.tap(); tickGo(1, true); } }, R.tkIc, R.tkTx, R.tkDots);
