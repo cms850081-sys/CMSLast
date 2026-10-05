@@ -182,7 +182,7 @@
 .g-tee{ color:#ffa94d; } .g-jacket{ color:#6ab7f5; } .g-coat{ color:#4c8dff; } .g-heavy{ color:#9775fa; }
 .wx-adv-row{ display:flex; margin-top:12px; padding-top:12px; border-top:1px solid var(--sep); }
 .wx-it{ flex:1; position:relative; display:flex; align-items:center; justify-content:center; gap:6px; color:var(--c,#2fb344); font-size:12.5px; }
-.wx-it em{ font-style:normal; color:var(--text); font-weight:600; }
+.wx-it em{ font-style:normal; color:var(--text); font-weight:600; white-space:nowrap; }
 .wx-it + .wx-it::before{ content:""; position:absolute; inset-inline-start:0; top:10%; bottom:10%; width:1px; background:var(--sep); }
 
 /* تحلیلِ هوش مصنوعی: فقط یک دکمه‌ی کوچک؛ کادرِ نتیجه فقط بعد از زدن ظاهر می‌شود */

@@ -9,7 +9,7 @@
   'use strict';
 
   var h, ic, hx, tg, toast, LS, api, goHome;
-  var K = 'hub:wx';
+  var K = 'hub:wx2';
   var D = null, loading = false, lastAt = 0, shown = false, heroVis = true, aiBusy = false, typeT = 0;
   var tickT = 0, tickI = 0, tickItems = [], paintTok = 0, painted = false, io = null, heroIO = null, R = {};
   var NS = 'http://www.w3.org/2000/svg';
@@ -117,14 +117,8 @@
     return raw('<svg class="wx-li' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" width="' + (px || 18) + '" height="' + (px || 18) + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (LI[name] || '') + '</svg>');
   }
   var TT_MAP = { '🌧️': 'drop', '🍃': 'leaf', '🌡️': 'thermo', '💧': 'humidity', '🌬️': 'wind', '☀️': 'sun', '🧭': 'gauge', '🌙': 'moon', '🌅': 'sunrise' };
-  var ADV_IC = { wear: 'tee', rain: 'umbrella', air: 'leaf', uv: 'sun', wind: 'wind', yard: 'tree' };
 
-  /* ─── پوشش ───────────────────────────────────────────────── */
-  function outfit(t) {
-    if (t == null) return 'jacket';
-    return t <= 2 ? 'heavy' : t <= 11 ? 'coat' : t <= 19 ? 'jacket' : 'tee';
-  }
-  var OUT_T = { heavy: 'پوششِ خیلی گرم', coat: 'کاپشنِ گرم', jacket: 'ژاکت یا کاپشنِ سبک', tee: 'لباسِ سبک و راحت' };
+  var LV_COL = { ok: '#2fb344', warn: '#f0a500', bad: '#e03131' };
 
   /* ─── موتورِ جلوه‌ها (کانواس) ──────────────────────────────── */
   /* فقط برای بارش/برف/ستاره/گردوغبار/صاعقه؛ در هوای صاف و ابری روزانه هیچ فریمی کشیده نمی‌شود.
@@ -305,7 +299,7 @@
     tickT = setInterval(function () { if (!document.hidden && heroVis) tickGo(1); }, 6000);
   }
   function tickSet(d) {
-    tickItems = [{ ic: 'pin', tx: d.headline }].concat(d.advice.map(function (a) { return { ic: ADV_IC[a.k] || 'spark', tx: a.text }; }));
+    tickItems = [{ ic: 'pin', tx: d.headline }].concat((d.advice || []).map(function (a) { return { ic: a.ic || 'spark', tx: a.text }; }));
     tickI = 0;
     R.tkDots.replaceChildren.apply(R.tkDots, tickItems.map(function () { return h('i'); }));
     tickShow(0, true);
@@ -502,30 +496,17 @@
   }
 
   /* ─── توصیه‌ی امروز: کارتِ ساده و خلوت ─────────────────────── */
-  function maxPopSafe(d) { return maxPop(d); }
-  function adviceItems(d) {
-    var n = d.now, t0 = d.days[0] || {}, a = d.air, mp = maxPop(d), it = [], G = '#2fb344', Y = '#f0a500', Rr = '#e03131';
-    it.push(mp >= 60 ? { ic: 'umbrella', t: 'چتر ببر', c: Rr } : mp >= 30 ? { ic: 'umbrella', t: 'چترِ کوچک', c: Y } : { ic: 'umbrella', t: 'بدونِ چتر', c: G });
-    if (a) it.push((a.aqi > 100 || a.dust > 100) ? { ic: 'mask', t: 'ماسک بزن', c: Rr } : { ic: 'leaf', t: 'هوای پاک', c: G });
-    if ((t0.uv || 0) >= 6) it.push({ ic: 'sun', t: 'ضدآفتاب', c: Y });
-    else if ((n.gust || 0) >= 45) it.push({ ic: 'wind', t: 'باد شدید', c: Y });
-    else {
-      var feels = n.feels == null ? n.temp : n.feels;
-      var ok = feels != null && feels >= 10 && feels <= 31 && mp < 30 && (n.gust || 0) < 40 && !(a && a.aqi > 100);
-      it.push(ok ? { ic: 'tree', t: 'حیاط مناسبه', c: G } : { ic: 'home', t: 'داخلِ ساختمان', c: Y });
-    }
-    return it.slice(0, 3);
-  }
   function adviceCard(d) {
-    var n = d.now, feels = n.feels == null ? n.temp : n.feels, k = outfit(feels);
-    var wear = (d.advice.filter(function (a) { return a.k === 'wear'; })[0] || {}).text || '';
+    var items = d.advice || [], wear = items.filter(function (a) { return a.k === 'wear'; })[0] || { outfit: 'jacket', title: 'پوشش', text: '' };
+    var chips = items.filter(function (a) { return a.k !== 'wear'; }).slice(0, 3);
+    var k = wear.outfit || wear.ic || 'jacket';
     return h('div', { class: 'wx-adv wx-in', style: '--i:1' },
       h('div', { class: 'wx-adv-top' },
         h('span', { class: 'wx-advic g-' + k }, li(k, 26)),
-        h('div', {}, h('h3', { text: OUT_T[k] }), h('p', { text: wear }))),
-      h('div', { class: 'wx-adv-row' }, adviceItems(d).map(function (x) {
-        return h('span', { class: 'wx-it', style: '--c:' + x.c }, li(x.ic, 16), h('em', { text: x.t }));
-      })));
+        h('div', {}, h('h3', { text: wear.title }), h('p', { text: wear.text }))),
+      chips.length ? h('div', { class: 'wx-adv-row' }, chips.map(function (x) {
+        return h('span', { class: 'wx-it', style: '--c:' + (LV_COL[x.level] || LV_COL.ok) }, li(x.ic, 16), h('em', { text: x.short }));
+      })) : null);
   }
 
   /* ─── تحلیلِ هوش مصنوعی (جمع‌وجور) ─────────────────────────── */

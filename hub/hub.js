@@ -743,6 +743,7 @@
     return WXM_TINT[n.kind] || '142,163,182';
   }
   function wxmHint(d) {
+    if (d.hint) return d.hint;       // جمله‌ی آماده از بک‌اند (همان منطقِ توصیه‌ها)
     var n = d.now, t0 = d.days[0] || {}, a = d.air, c = [];
     var mp = Math.max.apply(null, (d.hours || []).slice(0, 12).map(function (x) { return x.pop; }).concat([0]));
     var feels = n.feels == null ? n.temp : n.feels, uv = t0.uv || 0, dust = !!(a && (a.aqi > 100 || a.dust > 100));
@@ -771,11 +772,11 @@
           h('span', { class: 'wxm-l2', text: wxmHint(d) })),
         h('span', { class: 'wxm-go' }, ic('chev')));
     }
-    var c = LS.get('hub:wx');
+    var c = LS.get('hub:wx2');
     if (c && c.d && c.d.now) paintMini(c.d);
     else el.append(h('span', { class: 'wxm-ic' }, wxmIcon('cloud')), h('span', { class: 'wxm-t' }, h('span', { class: 'wxm-l1' }, h('span', { text: 'آب‌وهوای سرپل‌ذهاب' })), h('span', { class: 'wxm-l2', text: 'در حال دریافت…' })));
     if (!c || !c.at || Date.now() - c.at > 300000) {
-      api('/hub/api/weather').then(function (d) { LS.set('hub:wx', { d: d, at: Date.now() }); paintMini(d); }).catch(function () {});
+      api('/hub/api/weather').then(function (d) { LS.set('hub:wx2', { d: d, at: Date.now() }); paintMini(d); }).catch(function () {});
     }
     return el;
   }
