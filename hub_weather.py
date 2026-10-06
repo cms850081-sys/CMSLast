@@ -395,3 +395,102 @@ async def api_weather_ai(request):
     except Exception as e:
         logger.warning("weather ai failed: %r", e)
         return _json({"ok": False, "error": "ai_failed", "message": "تحلیل الان ممکن نشد؛ کمی بعد دوباره امتحان کن."}, 503)
+
+
+# ─── سامانه‌ها: شبکه‌ی جوّی روی آسیا و جزئیاتِ کرمانشاه ──────────────────
+# هر منطقه یک شبکه‌ی منظم از نقاط است؛ داده فقط یک بار در ۱۵ دقیقه از open-meteo گرفته می‌شود
+# و خروجیِ فشرده (آرایه‌های تخت، از شمالِ منطقه به جنوب) به کلاینت می‌رود تا رسمِ نقشه سبک بماند.
+MAP_TTL = 900
+MAP_STALE_MAX = 6 * 3600
+MAP_REGIONS = {
+    # آسیا: ۶ درجه؛ شمال → جنوب، غرب → شرق
+    "asia": {"lat0": 72.0, "lon0": 24.0, "step": 6.0, "rows": 13, "cols": 27},
+    # کرمانشاه: ۰٫۱۵ درجه (حدوداً ۱۶ کیلومتر)، شامل سرپل‌ذهاب
+    "kermanshah": {"lat0": 35.1, "lon0": 45.2, "step": 0.15, "rows": 11, "cols": 17},
+}
+_map_cache = {}   # region -> {"data": ..., "at": monotonic}
+_map_locks = {}
+
+
+def _grid_points(spec):
+    lats, lons = [], []
+    for r in range(spec["rows"]):
+        for c in range(spec["cols"]):
+            lats.append(round(spec["lat0"] - r * spec["step"], 4))
+            lons.append(round(spec["lon0"] + c * spec["step"], 4))
+    return lats, lons
+
+
+async def _fetch_grid(region):
+    spec = MAP_REGIONS[region]
+    lats, lons = _grid_points(spec)
+    params = {
+        "latitude": ",".join(str(x) for x in lats),
+        "longitude": ",".join(str(x) for x in lons),
+        "timezone": "Asia/Tehran",
+        "current": "temperature_2m,relative_humidity_2m,precipitation,cloud_cover,"
+                   "pressure_msl,wind_speed_10m,wind_direction_10m",
+    }
+    async with httpx.AsyncClient(timeout=15.0) as c:
+        r = await c.get(FORECAST_URL, params=params)
+    r.raise_for_status()
+    items = r.json()
+    if isinstance(items, dict):
+        items = [items]
+    if len(items) != len(lats):
+        raise RuntimeError("grid size mismatch")
+
+    def col(key, nd=0):
+        out = []
+        for it in items:
+            v = (it.get("current") or {}).get(key)
+            out.append(None if v is None else (round(float(v), nd) if nd else int(round(float(v)))))
+        return out
+
+    return {
+        "region": region,
+        "rows": spec["rows"], "cols": spec["cols"],
+        "lat0": spec["lat0"], "lon0": spec["lon0"], "step": spec["step"],
+        "t": col("temperature_2m", 1), "pr": col("precipitation", 1),
+        "cl": col("cloud_cover"), "p": col("pressure_msl"),
+        "ws": col("wind_speed_10m"), "wd": col("wind_direction_10m"),
+        "h": col("relative_humidity_2m"),
+        "updated": datetime.now(TEHRAN).strftime("%Y-%m-%d %H:%M"),
+    }
+
+
+async def _get_grid(region):
+    now = time.monotonic()
+    ent = _map_cache.get(region)
+    if ent and ent["data"] and now - ent["at"] < MAP_TTL:
+        return ent["data"]
+    lock = _map_locks.setdefault(region, asyncio.Lock())
+    async with lock:
+        ent = _map_cache.get(region)
+        now = time.monotonic()
+        if ent and ent["data"] and now - ent["at"] < MAP_TTL:
+            return ent["data"]
+        if httpx is None:
+            raise RuntimeError("httpx not installed")
+        try:
+            data = await _fetch_grid(region)
+            _map_cache[region] = {"data": data, "at": time.monotonic()}
+            return data
+        except Exception as e:
+            logger.warning("weather map: fetch failed (%s): %r", region, e)
+            if ent and ent["data"] and now - ent["at"] < MAP_STALE_MAX:
+                return dict(ent["data"], stale=True)
+            raise
+
+
+@routes.get("/hub/api/weather/map")
+async def api_weather_map(request):
+    import hub
+    await hub._require_admin(request)
+    region = request.query.get("region", "asia")
+    if region not in MAP_REGIONS:
+        return _json({"ok": False, "error": "bad_region", "message": "منطقه‌ی نامعتبر است."}, 400)
+    try:
+        return _json(await _get_grid(region))
+    except Exception:
+        return _json({"ok": False, "error": "map_unavailable", "message": "داده‌ی نقشه الان دریافت نشد."}, 503)
