@@ -413,17 +413,56 @@
         label, h('small', { class: 'num', text: n }));
     }
     P.ui.chips.replaceChildren(
-      chip('all', 'همه', P.rows.length), chip('elite', 'برترین‌ها', elite), chip('special', 'نیروهای ویژه', special),
+      chip('top', 'نفرات برتر', ''), chip('all', 'همه', P.rows.length), chip('elite', 'برترین‌ها', elite), chip('special', 'نیروهای ویژه', special),
       can('elo') ? h('button', { type: 'button', class: 'chip', onclick: function () { P.sort = P.sort === 'elo' ? 'name' : 'elo'; hx.sel(); applyPlayers(); } },
         ic('sort', ''), P.sort === 'elo' ? 'بر اساس امتیاز' : 'بر اساس نام') : null);
     P.ui.chips.querySelectorAll('.ic').forEach(function (s) { s.style.width = '16px'; s.style.height = '16px'; });
 
+    if (P.f === 'top') { renderTopView(); return; }
     P.ui.list.replaceChildren();
     if (!a.length) {
       P.ui.list.append(h('div', { class: 'empty', text: P.q ? 'بازیکنی با این نام پیدا نشد.' : 'در این بخش هنوز بازیکنی نیست.' }));
       return;
     }
     renderPlayerChunk();
+  }
+  /* نفرات برتر: ۵ نفر برتر کل + برترینِ هر کلاس (با دکمه‌ی هر کلاس) */
+  var topCls = null;
+  function renderTopView() {
+    P.ui.list.replaceChildren(h('div', { class: 'spin', text: 'در حال بارگذاری…' }));
+    api('/hub/api/rankings').then(drawTop).catch(function () {
+      P.ui.list.replaceChildren(h('div', { class: 'empty', text: 'رتبه‌بندی بارگذاری نشد.' }));
+    });
+  }
+  function topSub(r) {
+    return r.games ? (r.cls ? r.cls + ' · ' : '') + 'امتیاز ' + nn(r.score) + ' · ' + nn(r.games) + ' بازی'
+      : (r.cls ? r.cls + ' · ' : '') + (r.elite ? 'برتر · ' : r.special ? 'ویژه · ' : '') + 'هنوز بازی نکرده';
+  }
+  function topRow(r) {
+    return row({
+      lead: h('span', { class: 'rank num' + (r.pos <= 3 ? ' top' : ''), text: r.pos }),
+      title: r.name, sub: topSub(r),
+      tap: function () { openPlayer(r.id, { name: r.name, cls: r.cls, elite: r.elite, special: r.special, games: r.games }); }
+    });
+  }
+  function drawTop(d) {
+    var kids = [secTitle('۵ نفر برتر')];
+    if (!d.top.length) kids.push(h('div', { class: 'empty', text: 'هنوز بازیکن فعالی نیست.' }));
+    else kids.push(h('div', { class: 'group' }, d.top.map(topRow)));
+    kids.push(secTitle('برترین‌های هر کلاس'));
+    kids.push(h('div', { class: 'chips' }, d.classes.map(function (c) {
+      return h('button', { type: 'button', class: 'chip' + (topCls === c.id ? ' on' : ''),
+        onclick: function () { topCls = topCls === c.id ? null : c.id; hx.sel(); drawTop(d); } },
+        c.name, h('small', { class: 'num', text: c.total }));
+    })));
+    var cc = null;
+    d.classes.forEach(function (c) { if (c.id === topCls) cc = c; });
+    if (cc) {
+      kids.push(secTitle('برترین‌های ' + cc.name));
+      kids.push(cc.top.length ? h('div', { class: 'group' }, cc.top.map(topRow))
+        : h('div', { class: 'empty', text: 'بازیکن فعالی در این کلاس نیست.' }));
+    }
+    P.ui.list.replaceChildren.apply(P.ui.list, kids);
   }
   function renderPlayerChunk() {
     var showRank = P.sort === 'elo' && P.f === 'all' && !P.q;
@@ -476,6 +515,9 @@
 
     api('/hub/api/player/' + id).then(function (d) {
       var kids = [];
+      if (d.pos) kids.push(secTitle('جایگاه'), h('div', { class: 'group' },
+        kv('در کلاس ' + (d.pos.class_name || ''), nn(d.pos.class_pos) + ' از ' + nn(d.pos.class_total)),
+        kv('در کل', nn(d.pos.overall_pos) + ' از ' + nn(d.pos.overall_total))));
       if (d.elo) {
         kids.push(secTitle('رتبه‌بندی'), h('div', { class: 'group' },
           kv('رتبه بین بازیکنان فعال', nn(d.rank)), kv('بالاترین امتیاز', nn(d.elo.peak))));

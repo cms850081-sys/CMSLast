@@ -396,6 +396,11 @@
       })));
     }
 
+    /* جایگاه: در کلاس و در کل */
+    if (p.pos) w.append(secTitle('جایگاه'), h('div', { class: 'group' },
+      kv('در کلاس ' + (p.pos.class_name || ''), nn(p.pos.class_pos) + ' از ' + nn(p.pos.class_total)),
+      kv('در کل', nn(p.pos.overall_pos) + ' از ' + nn(p.pos.overall_total))));
+
     /* انضباطی */
     w.append(secTitle('سابقه‌ی اخطارها', h('small', { class: 'num', text: p.warn_log.length })));
     w.append(p.warn_log.length ? h('div', { class: 'group' }, p.warn_log.map(function (x) {
