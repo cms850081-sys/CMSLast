@@ -56,3 +56,5 @@
 .sy-go .ic{ width:16px; height:16px; transform:scaleX(-1); }
 
 .sy-foot{ text-align:center; font-size:11px; color:var(--hint); margin:16px 0 4px; }
+
+.sy-status{ margin:8px 0 0; font-size:11px; color:var(--hint); direction:ltr; text-align:left; word-break:break-all; }

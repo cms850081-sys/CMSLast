@@ -10,7 +10,7 @@
 
   var h, ic, hx, tg, toast, LS, api, goHome;
   var CDN = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
-  var Lf = null, map = null, root = null, mapEl = null, info = null, legBar = null, legLo = null, legHi = null, legTitle = null;
+  var statusEl = null; var Lf = null, map = null, root = null, mapEl = null, info = null, legBar = null, legLo = null, legHi = null, legTitle = null;
   var cvField, ctxField, cvWave, ctxWave, buf, bctx;
   var mounted = false, shown = false, field = 'temp', showSys = true, showWave = true;
   var grids = {}, loadedAt = 0, fetching = false, hlLayer = null, townLayer = null;
@@ -129,11 +129,9 @@
   function drawField() {
     if (!map || !ctxField) return;
     var s = map.getSize(), W = s.x, H = s.y;
-    if (W !== lastW || H !== lastH) {
-      lastW = W; lastH = H;
-      cvField.width = W; cvField.height = H;
-      cvWave.width = W; cvWave.height = H;
-    }
+    lastW = W; lastH = H;
+    cvField.width = W; cvField.height = H;
+    cvWave.width = W; cvWave.height = H;
     var nw = Math.ceil(W / CELL), nh = Math.ceil(H / CELL), n = nw * nh;
     if (buf.width !== nw) buf.width = nw;
     if (buf.height !== nh) buf.height = nh;
@@ -141,7 +139,7 @@
     cw = nw; ch = nh;
     var img = bctx.createImageData(nw, nh), d = img.data;
     var lut = field !== 'none' ? lutFor(field) : null, F = FIELDS[field];
-    var grid, lat, lng, p, k, gkey, val, idx, a;
+    var grid, lat, lng, p, k, gkey, val, idx, a, painted = 0;
     for (var j = 0; j < nh; j++) for (var i = 0; i < nw; i++) {
       k = j * nw + i;
       p = map.containerPointToLatLng(Lf.point(i * CELL + CELL / 2, j * CELL + CELL / 2));
@@ -158,17 +156,26 @@
       a = lut[idx * 4 + 3];
       if (field === 'cloud') a = Math.round(40 + 150 * clamp(val / 100, 0, 1));
       d[k * 4] = lut[idx * 4]; d[k * 4 + 1] = lut[idx * 4 + 1]; d[k * 4 + 2] = lut[idx * 4 + 2]; d[k * 4 + 3] = a;
+      if (a > 0) painted++;
     }
     bctx.putImageData(img, 0, 0);
     ctxField.clearRect(0, 0, W, H);
     ctxField.imageSmoothingEnabled = true;
     ctxField.drawImage(buf, 0, 0, nw * CELL, nh * CELL);
     if (F) updateLegend();
+    setStatus('نقشه ' + W + '×' + H + ' · آسیا: ' + (grids.asia ? 'رسیده' : 'نرسیده') +
+      ' · جزئیات: ' + (grids.kermanshah ? 'رسیده' : 'نرسیده') + ' · پیکسل رنگی: ' + painted +
+      ' · لایه: ' + field);
     if (showWave) ensureParticles();
   }
+  function setStatus(t) { if (statusEl) statusEl.textContent = t; }
+  function drawFieldSafe() {
+    try { drawField(); }
+    catch (e) { setStatus('خطا در رسم لایه: ' + (e && e.message ? e.message : e)); }
+  }
   function scheduleDraw(immediate) {
-    if (immediate) { clearTimeout(redrawT); redrawT = 0; drawField(); return; }
-    if (!redrawT) redrawT = setTimeout(function () { redrawT = 0; drawField(); }, 160);
+    if (immediate) { clearTimeout(redrawT); redrawT = 0; drawFieldSafe(); return; }
+    if (!redrawT) redrawT = setTimeout(function () { redrawT = 0; drawFieldSafe(); }, 160);
   }
 
   /* ─── موج/باد: ذره‌های سبک ───────────────────────────────── */
@@ -379,7 +386,7 @@
     mapEl = h('div', { class: 'sy-map', 'aria-label': 'نقشه‌ی سامانه‌های جوّی' });
     info = h('div', { class: 'sy-info' });
     legBar = h('i', { class: 'sy-legbar' });
-    legLo = h('small', { class: 'sy-lo' }); legHi = h('small', { class: 'sy-hi' }); legTitle = h('b', { text: 'دما' });
+    legLo = h('small', { class: 'sy-lo', dir: 'ltr' }); legHi = h('small', { class: 'sy-hi', dir: 'ltr' }); legTitle = h('b', { text: 'دما' });
     var back = (tg && tg.BackButton) ? h('span', { class: 'sy-sp' })
       : h('button', { type: 'button', class: 'sy-btn', 'aria-label': 'بازگشت', onclick: function () { hx.tap(); goHome(); } }, ic('chev'));
     var refresh = h('button', { type: 'button', class: 'sy-btn', 'aria-label': 'به‌روزرسانی', onclick: function () { hx.tap(); refreshAll(true); } }, ic('reset'));
@@ -396,11 +403,13 @@
       var b = h('button', { type: 'button', class: 'sy-seg-b' + (r === 'asia' ? ' on' : ''), onclick: function () { hx.tap(); setRegion(r); } }, h('span', { text: t }));
       segBtns[r] = b; return b;
     };
+    statusEl = h('div', { class: 'sy-status' });
     root = h('div', { class: 'sy' },
       h('div', { class: 'sy-seg' }, sBtn('asia', 'آسیا'), sBtn('kermanshah', 'کرمانشاه و سرپل‌ذهاب')),
       h('div', { class: 'sy-chips' }, chipEls),
       h('div', { class: 'sy-chips ovs' }, ov),
       mapEl,
+      statusEl,
       h('div', { class: 'sy-leg' }, legTitle, h('div', { class: 'sy-legrow' }, legLo, legBar, legHi)),
       info,
       h('div', { class: 'sy-foot', text: 'داده: open-meteo · نقشه: OpenStreetMap' }));
@@ -426,6 +435,7 @@
       if (!map) { initMap(); }
       map.invalidateSize();
       rebuildHL(); scheduleDraw(true);
+      setTimeout(function () { if (map) { map.invalidateSize(); scheduleDraw(true); } }, 150);
       if (!info.childNodes.length) updateSarpolInfo();
       refreshAll(false);
       if (showWave) startWave();
