@@ -404,9 +404,9 @@ MAP_TTL = 900
 MAP_STALE_MAX = 6 * 3600
 MAP_REGIONS = {
     # آسیا: ۶ درجه؛ شمال → جنوب، غرب → شرق
-    "asia": {"lat0": 72.0, "lon0": 24.0, "step": 6.0, "rows": 13, "cols": 27},
+    "asia": {"lat0": 70.0, "lon0": 25.0, "step": 10.0, "rows": 8, "cols": 16},
     # کرمانشاه: ۰٫۱۵ درجه (حدوداً ۱۶ کیلومتر)، شامل سرپل‌ذهاب
-    "kermanshah": {"lat0": 35.1, "lon0": 45.2, "step": 0.15, "rows": 11, "cols": 17},
+    "kermanshah": {"lat0": 35.2, "lon0": 45.2, "step": 0.2, "rows": 9, "cols": 13},
 }
 _map_cache = {}   # region -> {"data": ..., "at": monotonic}
 _map_locks = {}
