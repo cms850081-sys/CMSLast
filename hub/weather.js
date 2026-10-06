@@ -661,11 +661,11 @@
     if (sysScript === 1) return;
     sysScript = 1;
     if (!document.getElementById('sy-css')) {
-      var l = document.createElement('link'); l.id = 'sy-css'; l.rel = 'stylesheet'; l.href = 'systems.css?v=' + (window.HUB_V || '1');
+      var l = document.createElement('link'); l.id = 'sy-css'; l.rel = 'stylesheet'; l.href = 'systems.css?v=' + (window.__V || '0');
       document.head.appendChild(l);
     }
     var s = document.createElement('script');
-    s.src = 'systems.js?v=' + (window.HUB_V || '1');
+    s.src = 'systems.js?v=' + (window.__V || '0');
     s.onload = function () {
       sysScript = 2;
       window.HubSystems.mount(sysBox, { h: h, ic: ic, hx: hx, tg: tg, toast: toast, LS: LS, api: api });
