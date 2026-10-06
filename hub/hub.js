@@ -272,7 +272,7 @@
     if (can('calendar')) quick.push(q('تقویم', 'calendar', '', function () { withManage(function (mm) { mm.calendarView(); }); }));
     if (can('comms')) quick.push(q('مخابرات', 'chat', '', function () { withManage(function (mm) { mm.commsView(); }); }));
     frag.append(h('nav', { class: 'quick', 'aria-label': 'میانبرها' }, quick.slice(0, 4)));
-    frag.append(weatherCard());
+    frag.append(weatherCard(), systemsCard());
 
     /* خلاصه */
     var pending = m.pending > 0
@@ -718,6 +718,24 @@
     s.onerror = function () { wxState = 0; toast('بارگذاری آب‌وهوا ناموفق بود'); };
     doc.head.append(s);
   }
+  var syState = 0;
+  function loadSystems() {
+    if (syState) return;
+    syState = 1;
+    if (!doc.getElementById('sy-css')) {
+      var l = doc.createElement('link'); l.id = 'sy-css'; l.rel = 'stylesheet'; l.href = 'systems.css?v=' + V; doc.head.append(l);
+    }
+    var s = doc.createElement('script');
+    s.src = 'systems.js?v=' + V;
+    s.onload = function () {
+      syState = 2;
+      window.HubSystems.mount($('#tab-systems'), { h: h, ic: ic, hx: hx, tg: tg, toast: toast, LS: LS, api: api,
+        goHome: function () { go('home'); }, goWeather: function () { go('weather'); } });
+      if (cur === 'systems' && window.HubSystems.onShow) window.HubSystems.onShow();
+    };
+    s.onerror = function () { syState = 0; toast('بارگذاری سامانه‌ها ناموفق بود'); };
+    doc.head.append(s);
+  }
   function loadWeatherLater() {
     if (wxState) return;
     var a = doc.createElement('link'); a.rel = 'prefetch'; a.as = 'script'; a.href = 'weather.js?v=' + V; doc.head.append(a);
@@ -794,6 +812,15 @@
     return el;
   }
 
+  /* ─── سامانه‌ها: کارتِ ورود از خانه ───────────────────────── */
+  function systemsCard() {
+    var icon = raw('<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M9 5 3.5 7v12L9 17l6 2 5.5-2V5L15 7z"/><path d="M9 5v12M15 7v12"/></svg>');
+    return h('button', { type: 'button', class: 'sysm', 'aria-label': 'سامانه‌ها', onclick: function () { hx.tap(); go('systems'); } },
+      h('span', { class: 'sysm-ic' }, icon),
+      h('span', { class: 'sysm-t' }, h('b', { text: 'سامانه‌ها' }), h('small', { text: 'نقشه‌ی آسیا · ایران · سرپل‌ذهاب' })),
+      h('span', { class: 'sysm-go' }, ic('chev')));
+  }
+
   /* ─── بخشِ مدیریت (تنبل) ───────────────────────────────────── */
   var M = null, mLoading = false, mQueue = [];
   function loadScript(src) {
@@ -821,7 +848,7 @@
   };
 
   /* ─── ناوبری ─────────────────────────────────────────────── */
-  var panels = { home: $('#tab-home'), players: $('#tab-players'), tours: $('#tab-tours'), manage: $('#tab-manage'), clock: $('#tab-clock'), weather: $('#tab-weather'), me: $('#tab-me') };
+  var panels = { home: $('#tab-home'), players: $('#tab-players'), tours: $('#tab-tours'), manage: $('#tab-manage'), clock: $('#tab-clock'), weather: $('#tab-weather'), systems: $('#tab-systems'), me: $('#tab-me') };
   var bar = $('#tabbar'), pill = $('#pill');
   /* حباب قرمزِ زیرِ تبِ فعال.
      قبلاً با getBoundingClientRect اندازه‌گیری می‌شد؛ آن مقدار «transform» را هم شامل می‌شود:
@@ -847,7 +874,7 @@
     cur = name;
     doc.body.dataset.tab = name;
     panels[name].hidden = false;
-    bar.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === (name === 'weather' ? 'home' : name)); });
+    bar.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === (name === 'weather' || name === 'systems' ? 'home' : name)); });
     movePill();
     bar.querySelectorAll('button.pop').forEach(function (x) { x.classList.remove('pop'); });
     if (!built[name]) {
@@ -857,6 +884,7 @@
       else if (name === 'manage') buildManage();
       else if (name === 'clock') loadClock();
       else if (name === 'weather') loadWeather();
+      else if (name === 'systems') loadSystems();
     } else if (name === 'players') { applyPlayers(); ensurePlayers(); }
     else if (name === 'manage' && M) M.renderTab();
     window.scrollTo(0, scrollPos[name] || 0);
@@ -867,6 +895,8 @@
     if (prev === 'clock' && window.HubClock && window.HubClock.onHide) window.HubClock.onHide();
     if (name === 'clock' && window.HubClock && window.HubClock.onShow) window.HubClock.onShow();
     if (prev === 'weather') { popBack(); if (window.HubWeather && window.HubWeather.onHide) window.HubWeather.onHide(); }
+    if (prev === 'systems') { popBack(); if (window.HubSystems && window.HubSystems.onHide) window.HubSystems.onHide(); }
+    if (name === 'systems') { pushBack(function () { go('home'); }); if (window.HubSystems && window.HubSystems.onShow) window.HubSystems.onShow(); }
     if (name === 'weather') { pushBack(function () { go('home'); }); if (window.HubWeather && window.HubWeather.onShow) window.HubWeather.onShow(); }
   }
   bar.addEventListener('click', function (e) {

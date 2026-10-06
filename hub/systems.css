@@ -1,0 +1,58 @@
+/* بخشِ «سامانه‌ها» — ساده و سبک برای گوشی‌های ضعیف: بدون blur/backdrop-filter/filter، بدون fade نقشه */
+.sy{ padding-top:0; }
+.sy-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:calc(var(--top) + 8px) 16px 4px; }
+.sy-tt{ flex:1; text-align:center; min-width:0; }
+.sy-tt b{ display:block; font-size:16px; }
+.sy-tt small{ font-size:11px; color:var(--hint); }
+.sy-btn{ width:40px; height:40px; flex:none; border-radius:50%; display:grid; place-items:center; background:rgba(128,128,128,.14); color:var(--text); }
+.sy-btn:active{ transform:scale(.9); }
+.sy-btn .ic{ width:20px; height:20px; }
+.sy-btn .ic:first-child{ transform:none; }
+.sy-sp{ width:40px; height:40px; flex:none; }
+
+.sy-seg{ display:flex; margin:8px 16px 0; padding:3px; border-radius:14px; background:rgba(128,128,128,.14); }
+.sy-seg-b{ flex:1; height:34px; border-radius:11px; font-size:13px; font-weight:600; color:var(--hint); }
+.sy-seg-b.on{ background:var(--surface); color:var(--text); }
+
+.sy-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:10px 16px 0; }
+.sy-chips.ovs{ margin-top:8px; }
+.sy-chip{ height:32px; padding:0 12px; border-radius:16px; font-size:12.5px; font-weight:600; color:var(--text); background:var(--surface); border:1px solid var(--sep); }
+.sy-chip.on{ background:var(--red); border-color:transparent; color:#fff; }
+.sy-chip:active{ transform:scale(.96); }
+
+.sy-map{ position:relative; margin:12px 16px 0; height:min(58vh,520px); height:min(58dvh,520px); min-height:300px; border-radius:22px; overflow:hidden; border:1px solid var(--sep); background:#0d1528; }
+.sy-cv{ position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
+
+/* برچسب‌های شهر — در زوم‌های پایین فقط نقطه‌ها دیده می‌شوند */
+.sy-town{ display:flex; align-items:center; gap:4px; white-space:nowrap; }
+.sy-town i{ display:block; width:6px; height:6px; border-radius:50%; background:#fff; box-shadow:0 0 0 1px rgba(0,0,0,.45); position:relative; left:-3px; top:-3px; }
+.sy-town span{ display:none; background:rgba(15,23,42,.78); color:#fff; border-radius:8px; padding:1px 6px; font-size:11px; font-weight:600; }
+.z7 .sy-town span{ display:inline-block; }
+.sy-town.main i{ width:10px; height:10px; background:#ffd43b; left:-5px; top:-5px; }
+.sy-town.main span{ display:inline-block; background:#ffd43b; color:#111; font-weight:800; }
+
+/* سامانه‌ها: H و L */
+.sy-hl{ position:relative; left:-13px; top:-13px; display:flex; flex-direction:column; align-items:center; color:#fff; }
+.sy-hl b{ width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:14px; }
+.sy-hl.H b{ background:#e03131; }
+.sy-hl.L b{ background:#1c7ed6; }
+.sy-hl small{ margin-top:2px; font-size:10.5px; font-weight:700; background:rgba(15,23,42,.75); border-radius:6px; padding:0 4px; }
+
+.sy-leg{ margin:12px 16px 0; }
+.sy-leg > b{ font-size:13px; }
+.sy-legrow{ display:flex; align-items:center; gap:8px; margin-top:6px; }
+.sy-legbar{ flex:1; height:8px; border-radius:8px; display:block; background:transparent; }
+.sy-lo,.sy-hi{ font-size:11px; color:var(--hint); white-space:nowrap; }
+
+.sy-info{ margin:12px 16px 0; padding:12px 14px; border-radius:20px; background:var(--surface); border:1px solid var(--sep); }
+.sy-info:empty{ display:none; }
+.sy-i-t b{ display:block; font-size:15px; }
+.sy-i-t small{ display:block; margin-top:2px; font-size:11.5px; color:var(--hint); }
+.sy-i-g{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+.sy-i{ display:flex; flex-direction:column; gap:2px; padding:8px; border-radius:12px; background:rgba(128,128,128,.1); }
+.sy-i small{ font-size:11px; color:var(--hint); }
+.sy-i b{ font-size:13.5px; font-weight:700; font-variant-numeric:tabular-nums; }
+.sy-go{ margin-top:10px; width:100%; height:40px; padding:0 12px; border-radius:14px; display:flex; align-items:center; justify-content:space-between; background:rgba(128,128,128,.12); color:var(--text); font-size:13px; font-weight:600; }
+.sy-go .ic{ width:16px; height:16px; transform:scaleX(-1); }
+
+.sy-foot{ text-align:center; font-size:11px; color:var(--hint); margin:16px 0 4px; }
