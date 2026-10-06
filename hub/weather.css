@@ -228,3 +228,9 @@
 .sys-head.open .sys-chev{ transform:rotate(-90deg); }
 .sys-box{ padding:0 12px 14px; }
 .sys-box[hidden]{ display:none; }
+
+/* ─── سبک‌سازی برای روانی اسکرول: حرکت‌های بی‌پایان حذف شد ─── */
+.wx-glow, .wx-cloud, .wx-fog, .wx-moon::before, .wx-hum .wx-water::before, .wx-skel i, .wx-dots i {
+  animation: none !important; will-change: auto !important;
+}
+.wx-cloud, .wx-fog { display: none !important; }

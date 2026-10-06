@@ -35,7 +35,7 @@
     precip: { key: 'pr', lo: 0, hi: 20, unit: ' mm', title: 'بارش', sqrt: true,
       stops: [[0, '#74c0fc'], [0.25, '#339af0'], [0.5, '#7048e8'], [0.75, '#e64980'], [1, '#c2255c']] },
     cloud: { key: 'cl', lo: 0, hi: 100, unit: '٪', title: 'ابر', sqrt: false,
-      stops: [[0, '#e9eef5'], [1, '#ffffff']] }
+      stops: [[0, '#9fb3c8'], [1, '#4b5d73']] }
   };
   var LUT = {};
 
@@ -135,7 +135,7 @@
       if (v == null || (field === 'precip' && v < 0.05)) { d[o + 3] = 0; continue; }
       var idx = clamp(Math.round(norm(field, v) * 255), 0, 255);
       d[o] = lut[idx * 4]; d[o + 1] = lut[idx * 4 + 1]; d[o + 2] = lut[idx * 4 + 2];
-      d[o + 3] = field === 'cloud' ? Math.round(40 + 150 * clamp(v / 100, 0, 1)) : lut[idx * 4 + 3];
+      d[o + 3] = field === 'cloud' ? Math.round(70 + 150 * clamp(v / 100, 0, 1)) : lut[idx * 4 + 3];
       n++;
     }
     sc.putImageData(img, 0, 0);
@@ -173,6 +173,7 @@
     if (overlays.kermanshah) { var kk = overlays.kermanshah; map.removeLayer(kk); kk.addTo(map); }
     rebuildHL();
     updateLegend();
+    if (field === 'precip' && painted.asia + painted.kermanshah === 0 && legTitle) legTitle.textContent = 'بارش · در این لحظه بارشی ثبت نشده';
     setStatus('آسیا: ' + (grids.asia ? 'رسید' : 'نرسید') + ' · کرمانشاه: ' + (grids.kermanshah ? 'رسید' : 'نرسید') +
       ' · لایه: ' + field + ' · خانه‌های رنگی: ' + (painted.asia + painted.kermanshah));
   }

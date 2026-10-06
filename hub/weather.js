@@ -168,7 +168,7 @@
     fx.nextShoot = performance.now() + rnd(3000, 8000);
     if (fx.c) fx.c.clearRect(0, 0, W, H);
   }
-  function fxAnimated() { return fx.rain.length || fx.snow.length || fx.stars.length || fx.tw.length || fx.dust.length; }
+  function fxAnimated() { return false; return fx.rain.length || fx.snow.length || fx.stars.length || fx.tw.length || fx.dust.length; }
   function makeBolt() {
     var x = rnd(fx.w * 0.15, fx.w * 0.85), y = 0, pts = [[x, y]], endY = fx.h * rnd(0.45, 0.7);
     while (y < endY) { x += rnd(-20, 20); y += rnd(14, 28); pts.push([x, y]); }
