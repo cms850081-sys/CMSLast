@@ -21,7 +21,7 @@
 .sy-chip:active{ transform:scale(.96); }
 
 .sy-map{ position:relative; margin:12px 0 0; height:340px; min-height:0; border-radius:22px; overflow:hidden; border:1px solid var(--sep); background:#0d1528; }
-.sy-cv{ position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
+.sy-cv{ position:absolute; left:0; top:0; pointer-events:none; }
 
 /* برچسب‌های شهر — در زوم‌های پایین فقط نقطه‌ها دیده می‌شوند */
 .sy-town{ display:flex; align-items:center; gap:4px; white-space:nowrap; }

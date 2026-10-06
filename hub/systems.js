@@ -50,7 +50,7 @@
       for (var k = 0; k < st.length - 1; k++) { if (t >= st[k][0] && t <= st[k + 1][0]) { a = st[k]; b = st[k + 1]; break; } }
       var u = b[0] === a[0] ? 0 : (t - a[0]) / (b[0] - a[0]);
       for (var c = 0; c < 3; c++) out[i * 4 + c] = a[1][c] + (b[1][c] - a[1][c]) * u;
-      out[i * 4 + 3] = 200;
+      out[i * 4 + 3] = 170;
     }
     return out;
   }
@@ -132,6 +132,12 @@
     lastW = W; lastH = H;
     cvField.width = W; cvField.height = H;
     cvWave.width = W; cvWave.height = H;
+    cvField.style.width = W + 'px'; cvField.style.height = H + 'px';
+    cvWave.style.width = W + 'px'; cvWave.style.height = H + 'px';
+    // مبدأ canvas باید با مبدأ پیکسلیِ نقشه یکی باشد تا با containerPoint هم‌خوان بماند
+    var o = map.containerPointToLayerPoint([0, 0]);
+    cvField.style.left = o.x + 'px'; cvField.style.top = o.y + 'px';
+    cvWave.style.left = o.x + 'px'; cvWave.style.top = o.y + 'px';
     var nw = Math.ceil(W / CELL), nh = Math.ceil(H / CELL), n = nw * nh;
     if (buf.width !== nw) buf.width = nw;
     if (buf.height !== nh) buf.height = nh;
@@ -247,11 +253,13 @@
       attribution: '© OpenStreetMap'
     }).addTo(map);
     // لایه‌ها روی تایل‌ها و زیرِ نشانگرها
-    cvField = document.createElement('canvas'); cvField.className = 'sy-cv'; cvField.style.zIndex = 350;
-    cvWave = document.createElement('canvas'); cvWave.className = 'sy-cv'; cvWave.style.zIndex = 360;
-    cvWave.style.pointerEvents = 'none';
-    var cont = map.getContainer();
-    cont.appendChild(cvField); cont.appendChild(cvWave);
+    // پن‌های اختصاصی: بین کاشی‌ها (200) و نشانگرها (600) قرار می‌گیرند.
+    // (کاشی‌های OSM کدر هستند؛ canvasِ بیرون از پنِ نقشه زیرشان پنهان می‌شد)
+    var fieldPane = map.createPane('syField'); fieldPane.style.zIndex = 250;
+    var wavePane = map.createPane('syWave'); wavePane.style.zIndex = 260; wavePane.style.pointerEvents = 'none';
+    cvField = document.createElement('canvas'); cvField.className = 'sy-cv';
+    cvWave = document.createElement('canvas'); cvWave.className = 'sy-cv';
+    fieldPane.appendChild(cvField); wavePane.appendChild(cvWave);
     ctxField = cvField.getContext('2d'); ctxWave = cvWave.getContext('2d');
     buf = document.createElement('canvas'); bctx = buf.getContext('2d');
     hlLayer = Lf.layerGroup().addTo(map);
