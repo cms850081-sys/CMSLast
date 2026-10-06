@@ -233,7 +233,7 @@
   function initMap() {
     map = Lf.map(mapEl, {
       zoomControl: false, attributionControl: true, minZoom: 2, maxZoom: 9,
-      fadeAnimation: false, markerZoomAnimation: false, worldCopyJump: false, preferCanvas: false
+      fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, worldCopyJump: false, preferCanvas: false
     }).setView([36, 75], 3);
     Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       subdomains: 'abc', maxZoom: 9, updateWhenIdle: true, keepBuffer: 1, detectRetina: false,
@@ -276,7 +276,9 @@
       try { LS.set('hub:map:' + region, { d: d, at: Date.now() }); } catch (e) {}
       cb && cb();
     }).catch(function () {
-      if (region === 'asia' && !grids.asia) toast('داده‌ی نقشه الان دریافت نشد');
+      if (region === 'asia' && !grids.asia && info) {
+        info.replaceChildren(h('div', { class: 'sy-i-t' }, h('b', { text: 'داده‌ی نقشه الان دریافت نشد' }), h('small', { text: 'چند دقیقه‌ی دیگر دوباره باز کن' })));
+      }
       cb && cb(true);
     }).then(function () { fetching = false; });
   }
@@ -395,7 +397,6 @@
       segBtns[r] = b; return b;
     };
     root = h('div', { class: 'sy' },
-      h('div', { class: 'sy-bar' }, back, h('div', { class: 'sy-tt' }, h('b', { text: 'سامانه‌ها' }), h('small', { text: 'نقشه‌ی جوّی آسیا و ایران' })), refresh),
       h('div', { class: 'sy-seg' }, sBtn('asia', 'آسیا'), sBtn('kermanshah', 'کرمانشاه و سرپل‌ذهاب')),
       h('div', { class: 'sy-chips' }, chipEls),
       h('div', { class: 'sy-chips ovs' }, ov),

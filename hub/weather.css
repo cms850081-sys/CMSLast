@@ -25,7 +25,7 @@
 /* خورشید: هاله‌ی نرم + هسته‌ی کوچک (بدونِ پرتوِ کارتونی و بدونِ box-shadow سنگین) */
 .wx-sun{ position:absolute; width:0; height:0; display:none; }
 .wx[data-day="1"] .wx-sun{ display:block; }
-.wx[data-day="1"][data-kind="cloud"] .wx-sun, .wx[data-day="1"][data-kind="fog"] .wx-sun, .wx[data-day="1"][data-kind="drizzle"] .wx-sun{ opacity:.3; }
+.wx[data-day="1"][data-kind="cloud"] .wx-sun, .wx[data-day="1"][data-kind="fog"] .wx-sun, .wx[data-day="1"][data-kind="drizzle"] .wx-sun{ display:none; }
 .wx[data-day="1"][data-kind="rain"] .wx-sun, .wx[data-day="1"][data-kind="storm"] .wx-sun, .wx[data-day="1"][data-kind="snow"] .wx-sun{ display:none; }
 .wx.dusty .wx-sun{ opacity:.4 !important; }
 .wx-glow{ position:absolute; left:-210px; top:-210px; width:420px; height:420px; border-radius:50%; will-change:opacity; animation:wx-breathe 9s ease-in-out infinite;
@@ -212,3 +212,19 @@
   .wx-in{ opacity:1; transform:none; }
 }
 @media (min-width:560px){ .wx{ max-width:520px; margin:0 auto; } }
+
+/* ─── اصلاحات: بدون انیمیشن ورود، کارت‌ها ثابت ─── */
+.wx-in, .wx-in.vis{ opacity:1 !important; transform:none !important; transition:none !important; }
+.wx.dusty .wx-sun{ display:none !important; }
+
+/* ─── کارتِ نقشه‌ی سامانه‌ها ─── */
+.wx-sysc{ padding:0 !important; overflow:hidden; }
+.sys-head{ width:100%; display:flex; align-items:center; gap:12px; padding:14px 16px; text-align:start; color:var(--text); }
+.sys-t{ flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.sys-t b{ font-size:15px; }
+.sys-t small{ font-size:12px; color:var(--hint); }
+.sys-chev{ display:grid; place-items:center; color:var(--hint); transition:transform .2s ease; }
+.sys-chev .ic{ width:16px; height:16px; transform:scaleX(-1); }
+.sys-head.open .sys-chev{ transform:rotate(-90deg); }
+.sys-box{ padding:0 12px 14px; }
+.sys-box[hidden]{ display:none; }

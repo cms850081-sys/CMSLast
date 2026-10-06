@@ -544,6 +544,7 @@
 
   /* ─── نمایشِ تدریجیِ بخش‌ها (فقط وقتی به صفحه می‌رسند) ──────── */
   function reveal(root, instant) {
+    instant = true; // بدون انیمیشنِ ورود/اسکرول: کارت‌ها همان لحظه دیده می‌شن
     var els = root.querySelectorAll('.wx-in');
     function show(el) {
       el.style.transitionDelay = '0ms';
@@ -566,7 +567,7 @@
   }
 
   function paint(d) {
-    var n = d.now, day = n.is_day, kind = n.kind, dusty = !!(d.air && d.air.dust >= 100), pal = SKY[kind][day ? 0 : 1];
+    var n = d.now, day = n.is_day, kind = n.kind, dusty = false, pal = SKY[kind][day ? 0 : 1];
     if (dusty && (kind === 'clear' || kind === 'partly' || kind === 'cloud')) pal = day ? ['#a8733c', '#d29c5a', '#efcf98'] : ['#2b1e12', '#4b3421', '#6c4f35'];
     R.root.dataset.kind = kind; R.root.dataset.day = day;
     R.root.style.setProperty('--s1', pal[0]); R.root.style.setProperty('--s2', pal[1]); R.root.style.setProperty('--s3', pal[2]);
@@ -599,6 +600,7 @@
       painted = true;
       function swapIn() {
         if (tok !== paintTok) return;
+        body.append(sysCardEl());
         R.bodyWrap.replaceChildren(body);
         R.bodyWrap.classList.remove('swap');
         reveal(body, false);
@@ -632,6 +634,45 @@
       if (!D) showError(); else if (force) toast('به‌روزرسانی نشد؛ داده‌ی قبلی نمایش داده می‌شود');
       hx.err();
     }).then(function () { loading = false; R.refresh.classList.add('fin'); });
+  }
+
+  /* ─── کارتِ «نقشه‌ی سامانه‌ها» داخلِ صفحه‌ی آب‌وهوا ─────────── */
+  var sysEl = null, sysBox = null, sysOpen = false, sysScript = 0;
+  function sysCardEl() {
+    if (sysEl) return sysEl;
+    sysBox = h('div', { class: 'sys-box' });
+    sysBox.hidden = true;
+    var head = h('button', { type: 'button', class: 'sys-head', 'aria-expanded': 'false' },
+      h('span', { class: 'sys-t' }, h('b', { text: 'نقشه‌ی سامانه‌های جوّی' }), h('small', { text: 'آسیا · ایران · کرمانشاه و سرپل‌ذهاب' })),
+      h('span', { class: 'sys-chev' }, ic('chev')));
+    head.addEventListener('click', function () {
+      sysOpen = !sysOpen;
+      hx.sel && hx.sel();
+      sysBox.hidden = !sysOpen;
+      head.classList.toggle('open', sysOpen);
+      head.setAttribute('aria-expanded', String(sysOpen));
+      if (sysOpen) openSystems(); else if (window.HubSystems) window.HubSystems.onHide();
+    });
+    sysEl = h('div', { class: 'wx-card wx-sysc' }, head, sysBox);
+    return sysEl;
+  }
+  function openSystems() {
+    if (window.HubSystems) { window.HubSystems.onShow(); return; }
+    if (sysScript === 1) return;
+    sysScript = 1;
+    if (!document.getElementById('sy-css')) {
+      var l = document.createElement('link'); l.id = 'sy-css'; l.rel = 'stylesheet'; l.href = 'systems.css?v=' + (window.HUB_V || '1');
+      document.head.appendChild(l);
+    }
+    var s = document.createElement('script');
+    s.src = 'systems.js?v=' + (window.HUB_V || '1');
+    s.onload = function () {
+      sysScript = 2;
+      window.HubSystems.mount(sysBox, { h: h, ic: ic, hx: hx, tg: tg, toast: toast, LS: LS, api: api });
+      if (sysOpen) window.HubSystems.onShow();
+    };
+    s.onerror = function () { sysScript = 0; toast('بارگذاری نقشه ناموفق بود'); };
+    document.head.appendChild(s);
   }
 
   function mount(root, c) {
