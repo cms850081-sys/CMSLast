@@ -330,6 +330,12 @@ async def api_player_panel(request):
                         # مدیر ارشد هر اخطاری را می‌تواند حذف کند؛ بقیه فقط اخطارهای خودشان را
                         "removable": bool(("player_warn" in c.caps) and (c.is_pishva or r["issued_by"] == c.uid))} for r in log]
     out["kick_pending"] = bool(pend)
+    # جایگاه در کلاس و در کل (از rankings؛ شکست‌اش نباید پنل را خراب کند)
+    try:
+        import rankings as _rk
+        out["pos"] = await _rk.position_of(pid)
+    except Exception:
+        out["pos"] = None
     # ─ Elo ─
     if want_elo:
         out["elo"] = {"rating": round(e["rating"]), "peak": round(e["peak_rating"]),
@@ -1611,3 +1617,28 @@ async def api_logs(request):
         "type": r["action_type"], "label": (_AL.get(r["action_type"]) or ("", r["action_type"]))[1],
         "text": r["description"], "at": _dt(r["logged_at"]),
         "undone": bool(r["undone"]) if "undone" in r.keys() else False} for r in rows]})
+
+
+@routes.get("/hub/api/rankings")
+async def api_rankings(request):
+    """۵ نفر برتر کل + برترین‌های هر کلاس (فقط بازیکنان فعال). pos در هر ردیف یعنی جایگاه همان فهرست."""
+    await _ctx(request, "players_view")
+    import rankings as _rk
+    st = await _rk.build_standings()
+
+    def row(r, key):
+        return {"id": r["id"], "name": r["full_name"], "cls": r["class_name"], "pos": r[key],
+                "score": r["score"], "games": r["games"], "w": r["wins"], "d": r["draws"], "l": r["losses"],
+                "elite": r["is_elite"], "special": r["is_special"]}
+
+    classes = []
+    for cid, name in sorted(st["class_names"].items(), key=lambda x: x[1] or ""):
+        if cid is None:
+            continue
+        lst = st["by_class"].get(cid, [])
+        classes.append({"id": cid, "name": name, "total": len(lst),
+                        "top": [row(r, "cpos") for r in lst[:_rk.TOP_CLASS_N]]})
+    return web.json_response({
+        "top": [row(r, "pos") for r in st["overall"][:_rk.TOP_OVERALL_N]],
+        "classes": classes, "total": st["total"],
+    }, dumps=lambda o: json.dumps(o, ensure_ascii=False, default=str))

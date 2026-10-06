@@ -392,11 +392,13 @@ async def player_view(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elite_tag = "  🌟 بازیکن برتر" if p["is_elite"] else ""
     special_tag = "  ⚡ نیروی ویژه" if p["is_special"] else ""
 
+    pos_line = await _position_line(pid)
     text = (
         f"{box('👤 ' + p['full_name'])}\n\n"
         f"🏫 کلاس: *{(p['class_name'] or '—')}*\n"
         f"📊 وضعیت: {status_map.get(p['status'], p['status'])}\n"
-        f"🏆 رتبه: {rank}{elite_tag}{special_tag}\n\n"
+        f"🏆 رتبه: {rank}{elite_tag}{special_tag}\n"
+        f"{pos_line}\n\n"
         f"{separator('📊 آمار عملکرد')}\n"
         f"✅ برد: `{p['wins']}` | 🤝 مساوی: `{p['draws']}` | ❌ باخت: `{p['losses']}`\n"
         f"📈 مجموع: `{total}` بازی\n"
@@ -970,3 +972,79 @@ async def player_special_list(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await safe_edit_message_text(query, "⚡ هیچ نیروی ویژه‌ای تعیین نشده.", reply_markup=kb.kb_back("players"))
         return
     await safe_edit_message_text(query, f"⚡ نیروهای ویژه ({len(special)}):", reply_markup=kb.kb_player_list(special, context="special"))
+
+
+# ─── رتبه‌بندیِ امتیازی: ۵ نفر برتر، برترینِ هر کلاس، جایگاهِ هر بازیکن ─────
+import rankings as _rk
+
+
+def _fmt_score(x):
+    return str(int(x)) if float(x).is_integer() else f"{x:.1f}"
+
+
+async def _position_line(pid):
+    """یک بلوک برای پنل بازیکن: جایگاه در کلاس و در کل (فقط بازیکنان فعال شمرده می‌شن)."""
+    try:
+        pos = await _rk.position_of(pid)
+    except Exception:
+        pos = None
+    if not pos:
+        return "📍 جایگاه: — (بازیکن فعال نیست)"
+    return (f"📍 جایگاه در کلاس: {pos['class_pos']} از {pos['class_total']}\n"
+            f"🌍 جایگاه در کل: {pos['overall_pos']} از {pos['overall_total']}")
+
+
+_MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
+
+
+async def ptop_overall(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    rows, _total = await _rk.top_overall()
+    if not rows:
+        await safe_edit_message_text(query, "🏆 هنوز بازیکن فعالی ثبت نشده.", reply_markup=kb.kb_back("players"))
+        return
+    lines = []
+    for r in rows:
+        tag = _MEDALS.get(r["pos"], f"{r['pos']}.")
+        if r["games"]:
+            stat = f"امتیاز {_fmt_score(r['score'])} · {r['games']} بازی"
+        else:
+            extra = " · 🌟 برتر" if r["is_elite"] else (" · ⚡ ویژه" if r["is_special"] else "")
+            stat = "هنوز بازی نکرده" + extra
+        lines.append(f"{tag} {r['full_name']} ({r['class_name']})\n    {stat}")
+    await safe_edit_message_text(query, "🏆 ۵ نفر برتر\n\n" + "\n".join(lines), reply_markup=kb.kb_top_overall(rows))
+
+
+async def ptop_classes(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    classes = await db.get_all_classes()
+    if not classes:
+        await safe_edit_message_text(query, "🎓 هنوز کلاسی ثبت نشده.", reply_markup=kb.kb_back("players"))
+        return
+    await safe_edit_message_text(query, "🎓 برترین‌های هر کلاس — کلاس را انتخاب کن:",
+                                 reply_markup=kb.kb_top_classes(classes))
+
+
+async def ptop_class(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    cid = int(query.data.split("_")[-1])
+    c = await db.get_class(cid)
+    if not c:
+        await safe_edit_message_text(query, "کلاس پیدا نشد.", reply_markup=kb.kb_back("players"))
+        return
+    rows, total = await _rk.top_by_class(cid)
+    if not rows:
+        await safe_edit_message_text(query, f"🎓 کلاس {c['name']}: بازیکن فعالی ندارد.",
+                                     reply_markup=kb.kb_top_class([]))
+        return
+    lines = []
+    for r in rows:
+        tag = _MEDALS.get(r["cpos"], f"{r['cpos']}.")
+        stat = (f"امتیاز {_fmt_score(r['score'])} · {r['games']} بازی" if r["games"]
+                else "هنوز بازی نکرده")
+        lines.append(f"{tag} {r['full_name']}\n    {stat}")
+    text = f"🎓 برترین‌های کلاس {c['name']} ({total} بازیکن فعال)\n\n" + "\n".join(lines)
+    await safe_edit_message_text(query, text, reply_markup=kb.kb_top_class(rows))

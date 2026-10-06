@@ -65,6 +65,7 @@ from tournament import (
     tourn_setdefault, tourn_default, tourn_details, tourn_deleted
 )
 from players import (
+    ptop_overall, ptop_classes, ptop_class,
     class_add_start, class_add_name, class_list, class_select, class_players,
     class_edit, class_perf, class_harddelete_ask, class_harddelete_go,
     class_colors_list, class_color_pick, class_color_set,
@@ -1087,6 +1088,9 @@ def build_application():
     app.add_handler(CallbackQueryHandler(player_revive, pattern="^player_revive_"))
     app.add_handler(CallbackQueryHandler(player_harddelete_ask, pattern="^player_harddelete_ask_"))
     app.add_handler(CallbackQueryHandler(player_harddelete_go, pattern="^player_harddelete_go_"))
+    app.add_handler(CallbackQueryHandler(ptop_overall, pattern="^ptop_overall$"))
+    app.add_handler(CallbackQueryHandler(ptop_classes, pattern="^ptop_classes$"))
+    app.add_handler(CallbackQueryHandler(ptop_class, pattern=r"^ptop_class_\d+$"))
     app.add_handler(CallbackQueryHandler(player_elite_set, pattern="^player_elite_"))
     app.add_handler(CallbackQueryHandler(player_special_set,pattern="^player_special_"))
     app.add_handler(CallbackQueryHandler(player_setclass, pattern="^setclass_"))

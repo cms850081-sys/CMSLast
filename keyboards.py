@@ -115,8 +115,30 @@ def kb_players_menu(role="pishva"):
         InlineKeyboardButton("❌ حذف‌شدگان", callback_data="player_eliminated", style="danger")],
         [InlineKeyboardButton("🌟 بازیکنان برتر", callback_data="player_elite", style="primary"),
         InlineKeyboardButton("⚡ نیروهای ویژه", callback_data="player_special", style="primary")],
+        [InlineKeyboardButton("🏆 ۵ نفر برتر", callback_data="ptop_overall", style="success"),
+        InlineKeyboardButton("🎓 برترین‌های کلاس‌ها", callback_data="ptop_classes", style="success")],
         [InlineKeyboardButton("🔙 بازگشت", callback_data="back_main", style="danger")],
     ])
+
+def kb_top_overall(rows):
+    """هر نفر برتر دکمه‌ی پنل خودش را دارد."""
+    out = [[InlineKeyboardButton(f"{r['pos']}. {r['full_name']}", callback_data=f"player_view_{r['id']}", style="primary")] for r in rows]
+    out.append([InlineKeyboardButton("🎓 برترین‌های کلاس‌ها", callback_data="ptop_classes", style="success")])
+    out.append(kb_back_row("players"))
+    return InlineKeyboardMarkup(out)
+
+def kb_top_classes(classes):
+    """یک دکمه برای هر کلاس."""
+    rows = []
+    for i in range(0, len(classes), 2):
+        rows.append([class_btn(c, f"ptop_class_{c['id']}", default_style="primary") for c in classes[i:i+2]])
+    rows.append(kb_back_row("players"))
+    return InlineKeyboardMarkup(rows)
+
+def kb_top_class(rows):
+    out = [[InlineKeyboardButton(f"{r['cpos']}. {r['full_name']}", callback_data=f"player_view_{r['id']}", style="primary")] for r in rows]
+    out.append([InlineKeyboardButton("🔙 کلاس‌ها", callback_data="ptop_classes", style="danger")])
+    return InlineKeyboardMarkup(out)
 
 # ─── کلاس ────────────────────────────────────────────────────
 # رنگ دکمه‌ی هر کلاس رو مدیر ارشد تنظیم می‌کنه (بی‌رنگ/آبی/سبز/قرمز) و همه‌ی
