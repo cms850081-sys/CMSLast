@@ -402,7 +402,7 @@ async def api_weather_ai(request):
 # (تا سهمیه‌ی رایگان کم نیاید) و خروجیِ فشرده (آرایه‌های تخت، از شمال به جنوب) به کلاینت میره.
 MAP_TTL = 6 * 3600
 MAP_STALE_MAX = 24 * 3600
-MAP_CHUNK = 45           # نقطه در هر درخواست؛ URLِ خیلی کوتاه‌تر، احتمالِ ردشدن توسط پراکسی کمتر
+MAP_CHUNK = 220          # نقطه در هر درخواست؛ کم‌تعداد و بزرگ بهتر از زیاد و موازی است (۴۲۹ از open-meteo)
 MAP_REGIONS = {
     # 33 ردیف × 40 ستون = 1320 نقطه، از ۲۴٫۵ تا ۴۰٫۵ شمالی و ۴۴ تا ۶۳٫۵ شرقی
     "iran": {"lat0": 40.5, "lon0": 44.0, "step": 0.5, "rows": 33, "cols": 40},
@@ -420,7 +420,7 @@ def _grid_points(spec):
     return lats, lons
 
 
-async def _fetch_chunk(client, lats, lons):
+async def _fetch_chunk(client, lats, lons, attempt=0):
     params = {
         "latitude": ",".join(str(x) for x in lats),
         "longitude": ",".join(str(x) for x in lons),
@@ -431,6 +431,13 @@ async def _fetch_chunk(client, lats, lons):
                    "pressure_msl,wind_speed_10m,wind_direction_10m",
     }
     r = await client.get(FORECAST_URL, params=params)
+    if r.status_code == 429:
+        # open-meteo موقتاً محدودمون کرده؛ با وقفه (و احترام به Retry-After اگر باشد) دوباره تلاش می‌کنیم
+        if attempt >= 4:
+            r.raise_for_status()
+        wait = float(r.headers.get("Retry-After", 0)) or (1.5 * (2 ** attempt))
+        await asyncio.sleep(min(wait, 20))
+        return await _fetch_chunk(client, lats, lons, attempt + 1)
     r.raise_for_status()
     items = r.json()
     if isinstance(items, dict):
@@ -444,12 +451,14 @@ async def _fetch_grid(region):
     spec = MAP_REGIONS[region]
     lats, lons = _grid_points(spec)
     chunks = [(lats[i:i + MAP_CHUNK], lons[i:i + MAP_CHUNK]) for i in range(0, len(lats), MAP_CHUNK)]
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        # موازی، نه پشتِ‌سرهم — هم سریع‌تر، هم کمتر در معرضِ تایم‌اوتِ کلیِ درخواست
-        results = await asyncio.gather(*[_fetch_chunk(client, cl, co) for cl, co in chunks])
     items = []
-    for part in results:
-        items.extend(part)
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # پشتِ‌سرهم، نه موازی — چند درخواستِ هم‌زمان باعثِ ۴۲۹ (Too Many Requests) از open-meteo شد.
+        # بینِ هر درخواست یه مکثِ کوتاه هم هست تا به سهمیه‌ی نرخ فشار نیاریم.
+        for i, (cl, co) in enumerate(chunks):
+            items.extend(await _fetch_chunk(client, cl, co))
+            if i < len(chunks) - 1:
+                await asyncio.sleep(0.25)
 
     def col(key, nd=0):
         out = []
