@@ -402,7 +402,7 @@ async def api_weather_ai(request):
 # (تا سهمیه‌ی رایگان کم نیاید) و خروجیِ فشرده (آرایه‌های تخت، از شمال به جنوب) به کلاینت میره.
 MAP_TTL = 6 * 3600
 MAP_STALE_MAX = 24 * 3600
-MAP_CHUNK = 160          # نقطه در هر درخواست؛ URL کوتاه می‌مونه
+MAP_CHUNK = 45           # نقطه در هر درخواست؛ URLِ خیلی کوتاه‌تر، احتمالِ ردشدن توسط پراکسی کمتر
 MAP_REGIONS = {
     # 33 ردیف × 40 ستون = 1320 نقطه، از ۲۴٫۵ تا ۴۰٫۵ شمالی و ۴۴ تا ۶۳٫۵ شرقی
     "iran": {"lat0": 40.5, "lon0": 44.0, "step": 0.5, "rows": 33, "cols": 40},
@@ -443,10 +443,13 @@ async def _fetch_chunk(client, lats, lons):
 async def _fetch_grid(region):
     spec = MAP_REGIONS[region]
     lats, lons = _grid_points(spec)
+    chunks = [(lats[i:i + MAP_CHUNK], lons[i:i + MAP_CHUNK]) for i in range(0, len(lats), MAP_CHUNK)]
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # موازی، نه پشتِ‌سرهم — هم سریع‌تر، هم کمتر در معرضِ تایم‌اوتِ کلیِ درخواست
+        results = await asyncio.gather(*[_fetch_chunk(client, cl, co) for cl, co in chunks])
     items = []
-    async with httpx.AsyncClient(timeout=25.0) as client:
-        for i in range(0, len(lats), MAP_CHUNK):
-            items.extend(await _fetch_chunk(client, lats[i:i + MAP_CHUNK], lons[i:i + MAP_CHUNK]))
+    for part in results:
+        items.extend(part)
 
     def col(key, nd=0):
         out = []
@@ -498,10 +501,10 @@ async def _get_grid(region):
             _map_cache[region] = {"data": data, "at": time.monotonic()}
             return data
         except Exception as e:
-            logger.warning("weather map: fetch failed (%s): %r", region, e)
+            logger.exception("weather map: fetch failed (%s)", region)
             if ent and ent["data"] and now - ent["at"] < MAP_STALE_MAX:
                 return dict(ent["data"], stale=True)
-            raise
+            raise RuntimeError(f"{type(e).__name__}: {e}") from e
 
 
 @routes.get("/hub/api/weather/map")
@@ -513,5 +516,6 @@ async def api_weather_map(request):
         return _json({"ok": False, "error": "bad_region", "message": "منطقه‌ی نامعتبر است."}, 400)
     try:
         return _json(await _get_grid(region))
-    except Exception:
-        return _json({"ok": False, "error": "map_unavailable", "message": "داده‌ی نقشه الان دریافت نشد."}, 503)
+    except Exception as e:
+        return _json({"ok": False, "error": "map_unavailable", "message": "داده‌ی نقشه الان دریافت نشد.",
+                      "reason": str(e)[:200]}, 503)
