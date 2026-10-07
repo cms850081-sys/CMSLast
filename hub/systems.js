@@ -1,41 +1,54 @@
-/* بخشِ «نقشه‌ی سامانه‌های جوّی» (داخلِ کارتِ صفحه‌ی آب‌وهوا).
-   • لایه‌های رنگی (دما/بارش/ابر) یک بار به‌صورت تصویر رسم می‌شوند و با L.imageOverlay روی نقشه قرار می‌گیرند.
-     پس موقع پن و زوم هیچ کاری روی گوشی انجام نمی‌شود؛ Leaflet خودش جابه‌جا می‌کند.
-   • H/L سامانه‌های فشار و شهرها نشانگرِ Leaflet هستند.
-   • هیچ انیمیشن و canvas هم‌گامِ فریمی وجود ندارد. */
+/* نقشه‌ی سامانه‌های جوّی: فقط ایران با حاشیه‌ی همسایه‌ها.
+   • زوم فقط بین ۴ (کل ایران) و ۷ (جزئیات). حرکت نقشه داخل کادری محدود است، پس کاشی‌های دورتر لود نمی‌شوند.
+   • لایه‌ی رنگی (دما/بارش/ابر) یک تصویر ثابت است که با L.imageOverlay قرار می‌گیرد؛ هنگامِ پن و زوم کار اضافه‌ای نیست.
+   • H/L و شهرها نشانگرِ Leaflet هستند. هیچ انیمیشن یا حلقه‌ی فریمی وجود ندارد. */
 (function () {
   'use strict';
 
   var h, ic, hx, toast, LS, api;
   var CDN = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
   var Lf = null, map = null, mapEl = null, info = null, statusEl = null;
-  var legBar = null, legLo = null, legHi = null, legTitle = null;
+  var legBar = null, legLo = null, legHi = null, legTitle = null, legMax = null, legTicks = null;
   var mounted = false, shown = false, field = 'temp', showSys = true;
-  var grids = {}, loadedAt = 0, fetching = false;
-  var overlays = { asia: null, kermanshah: null };
-  var hlLayer = null, townLayer = null, chipBtns = {}, segBtns = {};
+  var grid = null, loadedAt = 0, fetching = false;
+  var overlay = null, hlLayer = null, townLayer = null, chipBtns = {}, townMarkers = [];
 
+  var VIEW = { center: [32.5, 53.5], zoom: 4 };
+  var BOUNDS = [[20, 38], [45, 70]];                 // کادرِ مجاز برای جابه‌جایی نقشه
   var TOWNS = [
     { n: 'سرپل‌ذهاب', lat: 34.4597, lng: 45.8646, main: true },
     { n: 'کرمانشاه', lat: 34.3142, lng: 47.065 },
     { n: 'اسلام‌آبادغرب', lat: 34.125, lng: 46.433 },
     { n: 'جوانرود', lat: 34.783, lng: 46.52 },
-    { n: 'روانسر', lat: 34.7116, lng: 46.66 },
-    { n: 'کنگاور', lat: 34.5, lng: 47.9667 },
-    { n: 'هرسین', lat: 34.26, lng: 47.59 },
-    { n: 'گیلان‌غرب', lat: 34.153, lng: 46.08 },
-    { n: 'قصرشیرین', lat: 34.516, lng: 45.579 },
-    { n: 'پاوه', lat: 35.02, lng: 46.45 }
+    { n: 'سنندج', lat: 35.3144, lng: 46.9963 },
+    { n: 'همدان', lat: 34.7983, lng: 48.5148 },
+    { n: 'تهران', lat: 35.6892, lng: 51.389 },
+    { n: 'اصفهان', lat: 32.6539, lng: 51.666 },
+    { n: 'شیراز', lat: 29.5918, lng: 52.5836 },
+    { n: 'مشهد', lat: 36.2605, lng: 59.6168 },
+    { n: 'تبریز', lat: 38.0962, lng: 46.2738 },
+    { n: 'اهواز', lat: 31.3183, lng: 48.6706 },
+    { n: 'بغداد', lat: 33.3152, lng: 44.3661 },
+    { n: 'بصره', lat: 30.5085, lng: 47.7804 },
+    { n: 'کابل', lat: 34.5553, lng: 69.2075 },
+    { n: 'ارومیه', lat: 37.5527, lng: 45.0761 },
+    { n: 'بندرعباس', lat: 27.1832, lng: 56.2666 }
   ];
   var DIRS = ['شمال', 'شمال‌شرق', 'شرق', 'جنوب‌شرق', 'جنوب', 'جنوب‌غرب', 'غرب', 'شمال‌غرب'];
 
   var FIELDS = {
+    // دما: بنفش (سرد) → آبی → سفید → زرد → نارنجی → قرمز تیره (گرم)
     temp: { key: 't', lo: -15, hi: 45, unit: '°', title: 'دما', sqrt: false,
-      stops: [[0, '#3b5bdb'], [0.25, '#4dabf7'], [0.4, '#38d9a9'], [0.55, '#a9e34b'], [0.65, '#ffd43b'], [0.78, '#ff922b'], [1, '#e03131']] },
-    precip: { key: 'pr', lo: 0, hi: 20, unit: ' mm', title: 'بارش', sqrt: true,
-      stops: [[0, '#74c0fc'], [0.25, '#339af0'], [0.5, '#7048e8'], [0.75, '#e64980'], [1, '#c2255c']] },
-    cloud: { key: 'cl', lo: 0, hi: 100, unit: '٪', title: 'ابر', sqrt: false,
-      stops: [[0, '#9fb3c8'], [1, '#4b5d73']] }
+      ticks: [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45],
+      stops: [[0, '#3c2a8c'], [0.2, '#2f6fd6'], [0.3, '#8fd3ff'], [0.4, '#eef8ff'], [0.5, '#ffe98a'], [0.65, '#ffb347'], [0.8, '#ff4b1f'], [1, '#7a0010']] },
+    // بارش تجمعی امروز: خاکستری کم‌بارش → سبز → آبی → زرد → قرمز → ارغوانی (مقیاس جذر)
+    precip: { key: 'pr', lo: 0, hi: 20, unit: ' mm', title: 'بارش تجمعی امروز', sqrt: true,
+      ticks: [0.2, 1, 2.5, 5, 10, 20],
+      stops: [[0, '#c8d3dd'], [0.1, '#a8e6a1'], [0.3, '#3ccf4a'], [0.5, '#2b9dff'], [0.7, '#ffe066'], [0.85, '#ff7a1a'], [1, '#c2255c']] },
+    // ابر: آبی تیره (صاف) → سفید (ابر کامل)
+    cloud: { key: 'cl', lo: 0, hi: 100, unit: '٪', title: 'پوشش ابر', sqrt: false,
+      ticks: [0, 25, 50, 75, 100],
+      stops: [[0, '#2a5f9e'], [0.5, '#8db4d9'], [1, '#f2f6fb']] }
   };
   var LUT = {};
 
@@ -53,7 +66,7 @@
       }
       var u = b[0] === a[0] ? 0 : (t - a[0]) / (b[0] - a[0]);
       for (var c = 0; c < 3; c++) out[i * 4 + c] = a[1][c] + (b[1][c] - a[1][c]) * u;
-      out[i * 4 + 3] = 170;
+      out[i * 4 + 3] = 175;
     }
     LUT[name] = out;
     return out;
@@ -65,7 +78,8 @@
 
   /* ─── داده ─────────────────────────────────────────────── */
   function detectHL(g) {
-    var out = [], thr = g.step > 0.5 ? 1.5 : 0.4, r, c, p, k, j, q, sum, cnt, isMax, isMin, diff;
+    // برای شبکه‌ی ۰٫۵ درجه آستانه‌ی فشار کمی بالاتر است تا نویز نشان داده نشود
+    var out = [], thr = g.step >= 0.5 ? 1.2 : 0.4, r, c, p, k, j, q, sum, cnt, isMax, isMin, diff;
     for (r = 1; r < g.rows - 1; r++) for (c = 1; c < g.cols - 1; c++) {
       p = g.p[r * g.cols + c];
       if (p == null) continue;
@@ -85,16 +99,9 @@
     }
     return out;
   }
-  function prepGrid(g) { g.hl = detectHL(g); return g; }
-
   function inBox(g, lat, lng) {
     var gy = (g.lat0 - lat) / g.step, gx = (lng - g.lon0) / g.step;
     return gy >= 0 && gy <= g.rows - 1 && gx >= 0 && gx <= g.cols - 1;
-  }
-  function gridFor(lat, lng) {
-    if (grids.kermanshah && inBox(grids.kermanshah, lat, lng)) return grids.kermanshah;
-    if (grids.asia && inBox(grids.asia, lat, lng)) return grids.asia;
-    return null;
   }
   function bil(arr, g, lat, lng) {
     var gy = (g.lat0 - lat) / g.step, gx = (lng - g.lon0) / g.step;
@@ -105,17 +112,15 @@
     return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
   }
   function valuesAt(lat, lng) {
-    var g = gridFor(lat, lng);
-    if (!g) return null;
+    if (!grid || !inBox(grid, lat, lng)) return null;
+    var g = grid;
     var gy = Math.round((g.lat0 - lat) / g.step), gx = Math.round((lng - g.lon0) / g.step);
-    var wd = g.wd[gy * g.cols + gx];
     return {
       t: bil(g.t, g, lat, lng), pr: bil(g.pr, g, lat, lng), cl: bil(g.cl, g, lat, lng), p: bil(g.p, g, lat, lng),
-      ws: bil(g.ws, g, lat, lng), h: bil(g.h, g, lat, lng), wd: wd,
-      detail: g.region === 'kermanshah', updated: g.updated, stale: g.stale
+      ws: bil(g.ws, g, lat, lng), h: bil(g.h, g, lat, lng), wd: g.wd[gy * g.cols + gx],
+      updated: g.updated, stale: g.stale
     };
   }
-  // مرزِ تصویرِ هر شبکه: هر نقطه‌ی داده در مرکزِ یک خانه است، پس نیم‌خانه بیرون‌تر
   function gridBounds(g) {
     return [
       [g.lat0 - (g.rows - 1) * g.step - g.step / 2, g.lon0 - g.step / 2],
@@ -123,7 +128,7 @@
     ];
   }
 
-  /* ─── لایه‌ی رنگی به‌صورت تصویر ───────────────────────────── */
+  /* ─── لایه‌ی رنگی: یک تصویرِ ثابت ───────────────────────── */
   function fieldImage(g) {
     var F = FIELDS[field], lut = lutFor(field), arr = g[F.key];
     var small = document.createElement('canvas');
@@ -139,7 +144,7 @@
       n++;
     }
     sc.putImageData(img, 0, 0);
-    var SCALE = 40;
+    var SCALE = 20;
     var big = document.createElement('canvas');
     big.width = g.cols * SCALE; big.height = g.rows * SCALE;
     var bc = big.getContext('2d');
@@ -148,48 +153,62 @@
     return { url: big.toDataURL('image/png'), painted: n };
   }
 
-  function renderRegion(region) {
-    var g = grids[region];
-    var ov = overlays[region];
-    if (!map) return 0;
-    if (!g || field === 'none') {
-      if (ov) { map.removeLayer(ov); overlays[region] = null; }
-      return 0;
+  function renderField() {
+    if (!map) return;
+    if (!grid || field === 'none') {
+      if (overlay) { map.removeLayer(overlay); overlay = null; }
+      updateLegend(0);
+      return;
     }
-    var img = fieldImage(g);
-    if (!ov) {
-      overlays[region] = Lf.imageOverlay(img.url, gridBounds(g), { interactive: false, opacity: 1 }).addTo(map);
+    var img = fieldImage(grid);
+    if (!overlay) {
+      overlay = Lf.imageOverlay(img.url, gridBounds(grid), { interactive: false, opacity: 1 }).addTo(map);
     } else {
-      ov.setUrl(img.url);
-      ov.setBounds(gridBounds(g));
+      overlay.setUrl(img.url);
+      overlay.setBounds(gridBounds(grid));
     }
-    return img.painted;
+    updateLegend(img.painted);
   }
 
   function renderAll() {
     if (!map) return;
-    var painted = { asia: renderRegion('asia'), kermanshah: renderRegion('kermanshah') };
-    // جزئیات کرمانشاه همیشه روی نقشه‌ی آسیا باشد
-    if (overlays.kermanshah) { var kk = overlays.kermanshah; map.removeLayer(kk); kk.addTo(map); }
+    renderField();
     rebuildHL();
-    updateLegend();
-    if (field === 'precip' && painted.asia + painted.kermanshah === 0 && legTitle) legTitle.textContent = 'بارش · در این لحظه بارشی ثبت نشده';
-    setStatus('آسیا: ' + (grids.asia ? 'رسید' : 'نرسید') + ' · کرمانشاه: ' + (grids.kermanshah ? 'رسید' : 'نرسید') +
-      ' · لایه: ' + field + ' · خانه‌های رنگی: ' + (painted.asia + painted.kermanshah));
+    labelTowns();
+    setStatus('داده: ' + (grid ? 'رسید' : 'نرسید') + ' · لایه: ' + field +
+      (grid ? ' · به‌روزرسانی ' + (grid.updated || '').slice(11) : ''));
   }
 
-  /* ─── سامانه‌ها (H/L) و شهرها ───────────────────────────── */
+  function fmt(v) { return field === 'precip' ? v.toFixed(1) : String(Math.round(v)); }
+  function maxMin() {
+    if (!grid) return null;
+    var arr = grid[FIELDS[field].key], mx = null, mn = null;
+    for (var i = 0; i < arr.length; i++) {
+      var v = arr[i];
+      if (v == null) continue;
+      if (mx === null || v > mx) mx = v;
+      if (mn === null || v < mn) mn = v;
+    }
+    return mx === null ? null : { max: mx, min: mn };
+  }
+  function labelTowns() {
+    townMarkers.forEach(function (x) {
+      var label = x.t.n, val = null;
+      if (grid && field !== 'none') {
+        var v = valuesAt(x.t.lat, x.t.lng);
+        if (v && v[FIELDS[field].key] != null) val = fmt(v[FIELDS[field].key]) + FIELDS[field].unit;
+      }
+      if (val) label += ' ' + val;
+      x.m.setIcon(Lf.divIcon({ className: 'sy-town' + (x.t.main ? ' main' : ''), html: '<i></i><span>' + label + '</span>', iconSize: null }));
+    });
+  }
+
+  /* ─── H/L و شهرها ───────────────────────────────────────── */
   function rebuildHL() {
     if (!hlLayer) return;
     hlLayer.clearLayers();
-    if (!showSys) return;
-    var list = [];
-    if (grids.asia) grids.asia.hl.forEach(function (x) {
-      if (grids.kermanshah && inBox(grids.kermanshah, x.lat, x.lng)) return;
-      list.push(x);
-    });
-    if (grids.kermanshah) list = list.concat(grids.kermanshah.hl);
-    list.forEach(function (x) {
+    if (!showSys || !grid) return;
+    grid.hl.forEach(function (x) {
       Lf.marker([x.lat, x.lng], {
         icon: Lf.divIcon({ className: 'sy-hl ' + x.type, html: '<b>' + x.type + '</b><small>' + Math.round(x.val) + '</small>', iconSize: null }),
         interactive: false, keyboard: false
@@ -217,7 +236,7 @@
     ];
     var kids = [h('div', { class: 'sy-i-t' },
       h('b', { text: title }),
-      h('small', { text: (v.detail ? 'جزئیات کرمانشاه' : 'شبکه‌ی آسیا') + ' · به‌روزرسانی ' + (v.updated || '').slice(11) + (v.stale ? ' · قدیمی' : '') }))];
+      h('small', { text: 'شبکه‌ی ایران · به‌روزرسانی ' + (v.updated || '').slice(11) + (v.stale ? ' · قدیمی' : '') }))];
     kids.push(h('div', { class: 'sy-i-g' }, items.map(function (x) {
       return h('div', { class: 'sy-i' }, h('small', { text: x[0] }), h('b', { dir: 'ltr', text: x[1] }));
     })));
@@ -228,20 +247,27 @@
     showInfoAt(34.4597, 45.8646, 'سرپل‌ذهاب');
   }
 
-  /* ─── وضعیت و راهنما ─────────────────────────────────── */
+  /* ─── وضعیت و لجند ───────────────────────────────────── */
   function setStatus(t) { if (statusEl) statusEl.textContent = t; }
-  function updateLegend() {
-    var f = FIELDS[field];
+  function updateLegend(painted) {
     if (!legTitle) return;
+    legTicks.replaceChildren();
     if (field === 'none') {
       legTitle.textContent = 'بدون لایه‌ی رنگی';
       legBar.style.background = 'transparent';
-      legLo.textContent = ''; legHi.textContent = '';
+      legMax.textContent = '';
       return;
     }
-    legTitle.textContent = f.title;
+    var f = FIELDS[field];
+    legTitle.textContent = f.title + ((field === 'precip' && grid && painted === 0) ? ' · بارشی ثبت نشده' : '');
     legBar.style.background = 'linear-gradient(90deg,' + f.stops.map(function (s) { return s[1] + ' ' + Math.round(s[0] * 100) + '%'; }).join(',') + ')';
-    legLo.textContent = f.lo + f.unit; legHi.textContent = f.hi + f.unit;
+    f.ticks.forEach(function (v) {
+      var t = h('span', { class: 'sy-tk', dir: 'ltr', text: String(v) });
+      t.style.left = (norm(field, v) * 100) + '%';
+      legTicks.appendChild(t);
+    });
+    var mm = maxMin();
+    legMax.textContent = mm ? 'بیشینه ' + fmt(mm.max) + f.unit + ' · کمینه ' + fmt(mm.min) + f.unit : '';
   }
 
   /* ─── نقشه ───────────────────────────────────────────── */
@@ -255,15 +281,18 @@
   }
   function applyZoomClass() {
     if (!mapEl) return;
-    if (map.getZoom() >= 7) mapEl.classList.add('z7'); else mapEl.classList.remove('z7');
+    if (map.getZoom() >= 6) mapEl.classList.add('z7'); else mapEl.classList.remove('z7');
   }
   function initMap() {
     map = Lf.map(mapEl, {
-      zoomControl: false, attributionControl: true, minZoom: 2, maxZoom: 9,
+      zoomControl: false, attributionControl: true,
+      minZoom: VIEW.zoom, maxZoom: 7,
+      maxBounds: BOUNDS, maxBoundsViscosity: 1.0,
       fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, worldCopyJump: false
-    }).setView([36, 75], 3);
+    }).setView(VIEW.center, VIEW.zoom);
     Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 9, updateWhenIdle: true, keepBuffer: 1, attribution: '© OpenStreetMap'
+      subdomains: 'abc', maxZoom: 7, minZoom: VIEW.zoom, updateWhenIdle: true, keepBuffer: 1,
+      attribution: '© OpenStreetMap'
     }).addTo(map);
     hlLayer = Lf.layerGroup().addTo(map);
     townLayer = Lf.layerGroup().addTo(map);
@@ -274,68 +303,61 @@
       });
       m.on('click', function () { showInfoAt(t.lat, t.lng, t.n); });
       m.addTo(townLayer);
+      townMarkers.push({ t: t, m: m });
     });
     map.on('click', function (e) { info.dataset.sticky = '1'; showInfoAt(e.latlng.lat, e.latlng.lng, null); });
     map.on('zoomend', applyZoomClass);
     applyZoomClass();
   }
 
-  /* ─── داده‌ی شبکه‌ها ───────────────────────────────────── */
-  function loadGrid(region, cb) {
+  /* ─── داده‌ی شبکه ─────────────────────────────────────── */
+  function loadGrid(cb) {
     fetching = true;
-    api('/hub/api/weather/map?region=' + region).then(function (d) {
-      grids[region] = prepGrid(d);
-      try { LS.set('hub:map:' + region, { d: d, at: Date.now() }); } catch (e) {}
+    api('/hub/api/weather/map?region=iran').then(function (d) {
+      grid = d;
+      grid.hl = detectHL(d);
+      try { LS.set('hub:map:iran', { d: d, at: Date.now() }); } catch (e) {}
       cb && cb();
     }).catch(function () {
-      if (region === 'asia' && !grids.asia && info) {
+      if (!grid && info) {
         info.replaceChildren(h('div', { class: 'sy-i-t' }, h('b', { text: 'داده‌ی نقشه الان دریافت نشد' }), h('small', { text: 'چند دقیقه‌ی دیگر دوباره باز کن' })));
       }
-      setStatus('خطا در دریافت شبکه‌ی ' + region);
+      setStatus('خطا در دریافت داده‌ی ایران');
     }).then(function () { fetching = false; });
   }
-  function refreshAll(force) {
+  function refresh(force) {
     if (fetching) return;
-    if (!force && Date.now() - loadedAt < 900000 && grids.asia) return;
+    if (!force && grid && Date.now() - loadedAt < 3600000) return;
     loadedAt = Date.now();
-    var wantDetail = !!grids.kermanshah || (map && map.getZoom() >= 6);
-    loadGrid('asia', function () { renderAll(); updateSarpolInfo(); });
-    if (wantDetail) loadGrid('kermanshah', function () { renderAll(); updateSarpolInfo(); });
+    loadGrid(function () { renderAll(); updateSarpolInfo(); });
   }
   function fromCache() {
-    ['asia', 'kermanshah'].forEach(function (r) {
-      var c = LS.get('hub:map:' + r);
-      if (c && c.d && c.d.rows && !grids[r]) grids[r] = prepGrid(c.d);
-    });
+    var c = LS.get('hub:map:iran');
+    if (c && c.d && c.d.rows && !grid) { grid = c.d; grid.hl = detectHL(c.d); }
   }
 
   /* ─── کنترل‌ها ─────────────────────────────────────────── */
   function setField(name) {
     field = name;
     Object.keys(chipBtns).forEach(function (k) { if (k !== 'sys') chipBtns[k].classList.toggle('on', k === name); });
-    if (map) renderAll();
+    renderAll();
   }
   function setOverlay(on) {
     showSys = on;
     chipBtns.sys.classList.toggle('on', on);
     rebuildHL();
   }
-  function setRegion(r) {
-    Object.keys(segBtns).forEach(function (k) { segBtns[k].classList.toggle('on', k === r); });
-    if (!map) return;
-    if (r === 'kermanshah') map.setView([34.6, 46.4], 8, { animate: false });
-    else map.setView([36, 75], 3, { animate: false });
-    refreshAll(false);
-  }
 
   function build() {
-    mapEl = h('div', { class: 'sy-map', 'aria-label': 'نقشه‌ی سامانه‌های جوّی' });
+    mapEl = h('div', { class: 'sy-map', 'aria-label': 'نقشه‌ی سامانه‌های جوّی ایران' });
     info = h('div', { class: 'sy-info' });
     statusEl = h('div', { class: 'sy-status' });
     legBar = h('i', { class: 'sy-legbar' });
     legLo = h('small', { class: 'sy-lo', dir: 'ltr' });
     legHi = h('small', { class: 'sy-hi', dir: 'ltr' });
     legTitle = h('b', { text: 'دما' });
+    legMax = h('small', { class: 'sy-mm', dir: 'ltr' });
+    legTicks = h('div', { class: 'sy-ticks' });
 
     var fields = [['temp', 'دما'], ['precip', 'بارش'], ['cloud', 'ابر'], ['none', 'بدون رنگ']];
     var chipEls = fields.map(function (c) {
@@ -348,18 +370,13 @@
       onclick: function () { hx.sel && hx.sel(); setOverlay(!showSys); } }, h('span', { text: 'سامانه‌ها (H/L)' }));
     chipBtns.sys = sysChip;
 
-    var sBtn = function (r, t) {
-      var b = h('button', { type: 'button', class: 'sy-seg-b' + (r === 'asia' ? ' on' : ''),
-        onclick: function () { hx.sel && hx.sel(); setRegion(r); } }, h('span', { text: t }));
-      segBtns[r] = b;
-      return b;
-    };
     return h('div', { class: 'sy' },
-      h('div', { class: 'sy-seg' }, sBtn('asia', 'آسیا'), sBtn('kermanshah', 'کرمانشاه و سرپل‌ذهاب')),
       h('div', { class: 'sy-chips' }, chipEls, sysChip),
       mapEl,
       statusEl,
-      h('div', { class: 'sy-leg' }, legTitle, h('div', { class: 'sy-legrow' }, legLo, legBar, legHi)),
+      h('div', { class: 'sy-leg' },
+        h('div', { class: 'sy-legtop' }, legTitle, legMax),
+        h('div', { class: 'sy-legbarwrap' }, legBar, legTicks)),
       info,
       h('div', { class: 'sy-foot', text: 'داده: open-meteo · نقشه: OpenStreetMap' }));
   }
@@ -380,7 +397,7 @@
       map.invalidateSize();
       renderAll();
       setTimeout(function () { if (map) { map.invalidateSize(); renderAll(); } }, 150);
-      refreshAll(false);
+      refresh(false);
     });
   }
   function onHide() { shown = false; }

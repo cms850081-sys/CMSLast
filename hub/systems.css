@@ -58,3 +58,11 @@
 .sy-foot{ text-align:center; font-size:11px; color:var(--hint); margin:16px 0 4px; }
 
 .sy-status{ margin:8px 0 0; font-size:11px; color:var(--hint); direction:ltr; text-align:left; word-break:break-all; }
+
+/* نوار رنگی به سبک ECMWF: تیک‌ها زیر نوار، بیشینه و کمینه بالای آن */
+.sy-legtop{ display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.sy-mm{ font-size:11px; color:var(--hint); }
+.sy-legbarwrap{ margin-top:6px; }
+.sy-legbarwrap .sy-legbar{ display:block; width:100%; height:10px; border-radius:6px; }
+.sy-ticks{ position:relative; height:16px; margin-top:3px; }
+.sy-tk{ position:absolute; top:0; transform:translateX(-50%); font-size:10px; color:var(--hint); white-space:nowrap; }

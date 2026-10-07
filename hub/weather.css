@@ -72,7 +72,7 @@
 .wx-btn:active{ transform:scale(.88); }
 .wx-sp{ width:40px; height:40px; flex:none; }
 .wx-btn .ic{ width:20px; height:20px; }
-.wx-btn.spin .ic{ animation:wx-spin .8s linear infinite; }
+.wx-btn.wx-spinning .ic{ animation:wx-spin .8s linear infinite; }
 @keyframes wx-spin{ to{ transform:rotate(360deg); } }
 .wx-city{ display:flex; flex-direction:column; align-items:center; line-height:1.25; }
 .wx-city b{ font-size:16px; font-weight:700; text-shadow:0 1px 10px rgba(0,0,0,.45); }
@@ -233,4 +233,19 @@
 .wx-glow, .wx-cloud, .wx-fog, .wx-moon::before, .wx-hum .wx-water::before, .wx-skel i, .wx-dots i {
   animation: none !important; will-change: auto !important;
 }
-.wx-cloud, .wx-fog { display: none !important; }
+
+/* ─── ابر واقعی‌نما (بافت ثابت) و باران (فقط transform) ─── */
+.wx-clouds{ position:absolute; inset:0; pointer-events:none; display:none;
+  background-repeat:no-repeat; background-size:135% auto; background-position:-12% 6%; }
+.wx[data-kind="cloud"] .wx-clouds, .wx[data-kind="snow"] .wx-clouds{ display:block; background-image:var(--cl-light,none); opacity:.95; }
+.wx[data-kind="drizzle"] .wx-clouds, .wx[data-kind="rain"] .wx-clouds, .wx[data-kind="storm"] .wx-clouds{ display:block; background-image:var(--cl-dark,none); opacity:.98; }
+.wx[data-kind="fog"] .wx-clouds{ display:block; background-image:var(--cl-light,none); opacity:.45; }
+
+.wx-rain{ position:absolute; inset:0; pointer-events:none; display:none; overflow:hidden; }
+.wx[data-kind="rain"] .wx-rain, .wx[data-kind="storm"] .wx-rain, .wx[data-kind="drizzle"] .wx-rain{ display:block; }
+.wx-rain i{ position:absolute; top:-12%; width:1.4px; height:44px; border-radius:2px;
+  background:linear-gradient(rgba(200,220,255,0), rgba(200,220,255,.75));
+  animation:wx-drop linear infinite; will-change:transform; }
+.wx[data-kind="drizzle"] .wx-rain i{ height:26px; opacity:.5 !important; }
+.wx.paused .wx-rain i{ animation-play-state:paused; }
+@keyframes wx-drop{ from{ transform:translate3d(0,0,0); } to{ transform:translate3d(0,125vh,0); } }

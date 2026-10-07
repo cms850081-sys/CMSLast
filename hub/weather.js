@@ -328,7 +328,7 @@
     R.hero = h('header', { class: 'wx-hero' },
       h('div', { class: 'wx-fxl', 'aria-hidden': 'true' },
         R.sun, R.moon,
-        h('i', { class: 'wx-cloud c1' }), h('i', { class: 'wx-cloud c2' }), h('i', { class: 'wx-cloud c3' }),
+        h('div', { class: 'wx-clouds' }), buildRain(),
         h('i', { class: 'wx-fog f1' }), h('i', { class: 'wx-fog f2' })),
       cv,
       h('div', { class: 'wx-bar' }, back, R.city, R.refresh),
@@ -573,6 +573,7 @@
     R.root.style.setProperty('--s1', pal[0]); R.root.style.setProperty('--s2', pal[1]); R.root.style.setProperty('--s3', pal[2]);
     R.root.classList.toggle('dusty', dusty);
     lastSig = sigOf(d);
+    ensureCloudTex();
     if (painted && R.tv != null && n.temp != null && R.tv !== n.temp) countTo(R.temp, n.temp, 700, '', R.tv);
     else R.temp.textContent = n.temp == null ? '—' : n.temp;
     R.tv = n.temp;
@@ -623,7 +624,7 @@
   }
   function load(force) {
     if (loading) return;
-    loading = true; R.refresh.classList.remove('fin'); R.refresh.classList.add('spin');
+    loading = true; R.refresh.classList.remove('fin'); R.refresh.classList.add('wx-spinning');
     api('/hub/api/weather').then(function (d) {
       D = d; lastAt = Date.now(); LS.set(K, { d: d, at: lastAt });
       if (painted && sigOf(d) === lastSig) {
@@ -675,6 +676,68 @@
     document.head.appendChild(s);
   }
 
+
+  /* ─── ابر و باران واقعی‌نما (یک بار ساخته می‌شود، ثابت است؛ بدون انیمیشن ابر) ─── */
+  function cloudUrl(dark) {
+    var W = 512, H = 256, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    var ctx = c.getContext('2d'), img = ctx.createImageData(W, H), d = img.data;
+    var perm = new Float32Array(256 * 256), i, x, y;
+    for (i = 0; i < perm.length; i++) perm[i] = Math.random();
+    function lat(a, b) { return perm[((b & 255) << 8) | (a & 255)]; }
+    function vn(px, py) {
+      var xi = Math.floor(px), yi = Math.floor(py), xf = px - xi, yf = py - yi;
+      var u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+      var a = lat(xi, yi), b = lat(xi + 1, yi), q = lat(xi, yi + 1), e = lat(xi + 1, yi + 1);
+      return a + (b - a) * u + (q - a) * v + (a - b - q + e) * u * v;
+    }
+    function fbm(px, py) {
+      var s = 0, amp = 0.5, f = 1;
+      for (var o = 0; o < 5; o++) { s += amp * vn(px * f, py * f); f *= 2; amp *= 0.5; }
+      return s;
+    }
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var nx = x / W * 4, ny = y / H * 2.2;
+      var n = fbm(nx, ny);
+      var ex = (x / W - 0.5) * 2, ey = (y / H - 0.5) * 2;
+      var fall = Math.max(0, 1 - (ex * ex * 0.55 + ey * ey * 0.9));
+      var t = (n * 0.85 + fall * 0.35 - 0.42) / 0.36;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      var a = t * t * (3 - 2 * t);
+      var shade = 0.78 + 0.22 * (1 - y / H) + 0.08 * (n - 0.5);
+      shade = shade < 0.5 ? 0.5 : shade > 1 ? 1 : shade;
+      var o4 = (y * W + x) * 4;
+      if (dark) { d[o4] = 92 * shade; d[o4 + 1] = 104 * shade; d[o4 + 2] = 122 * shade; }
+      else { d[o4] = 255 * shade; d[o4 + 1] = 255 * shade; d[o4 + 2] = 255 * shade; }
+      d[o4 + 3] = a * 235;
+    }
+    ctx.putImageData(img, 0, 0);
+    return c.toDataURL('image/png');
+  }
+  var clTex = null;
+  function ensureCloudTex() {
+    if (clTex !== null) return;
+    clTex = 0;
+    setTimeout(function () {
+      if (!R.root) return;
+      R.root.style.setProperty('--cl-light', 'url("' + cloudUrl(false) + '")');
+      R.root.style.setProperty('--cl-dark', 'url("' + cloudUrl(true) + '")');
+      clTex = 1;
+    }, 0);
+  }
+  function buildRain() {
+    var box = h('div', { class: 'wx-rain', 'aria-hidden': 'true' });
+    for (var i = 0; i < 36; i++) {
+      var r = h('i');
+      r.style.left = (Math.random() * 100).toFixed(1) + '%';
+      r.style.animationDuration = (0.7 + Math.random() * 0.6).toFixed(2) + 's';
+      r.style.animationDelay = (-Math.random() * 1.2).toFixed(2) + 's';
+      r.style.opacity = (0.35 + Math.random() * 0.5).toFixed(2);
+      box.appendChild(r);
+    }
+    return box;
+  }
+
   function mount(root, c) {
     h = c.h; ic = c.ic; hx = c.hx; tg = c.tg; toast = c.toast; LS = c.LS; api = c.api; goHome = c.goHome;
     R.root = h('div', { class: 'wx', 'data-kind': 'clear', 'data-day': '1' });
@@ -693,7 +756,7 @@
     var cache = LS.get(K);
     if (cache && cache.d && cache.d.now) { D = cache.d; lastAt = cache.at || 0; paint(D); }
     R.refresh.addEventListener('animationiteration', function () {
-      if (R.refresh.classList.contains('fin') && !loading) R.refresh.classList.remove('spin', 'fin');
+      if (R.refresh.classList.contains('fin') && !loading) R.refresh.classList.remove('wx-spinning', 'fin');
     });
     load(false);
     var rs = 0;
