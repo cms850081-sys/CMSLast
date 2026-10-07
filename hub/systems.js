@@ -285,13 +285,13 @@
   }
   function initMap() {
     map = Lf.map(mapEl, {
-      zoomControl: false, attributionControl: true,
+      zoomControl: false, attributionControl: true, preferCanvas: true,
       minZoom: VIEW.zoom, maxZoom: 7,
       maxBounds: BOUNDS, maxBoundsViscosity: 1.0,
-      fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, worldCopyJump: false
+      fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, inertia: false, worldCopyJump: false
     }).setView(VIEW.center, VIEW.zoom);
     Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 7, minZoom: VIEW.zoom, updateWhenIdle: true, keepBuffer: 1,
+      subdomains: 'abc', maxZoom: 7, minZoom: VIEW.zoom, updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 0,
       attribution: '© OpenStreetMap'
     }).addTo(map);
     hlLayer = Lf.layerGroup().addTo(map);
@@ -318,11 +318,12 @@
       grid.hl = detectHL(d);
       try { LS.set('hub:map:iran', { d: d, at: Date.now() }); } catch (e) {}
       cb && cb();
-    }).catch(function () {
+    }).catch(function (err) {
+      var reason = (err && err.data && err.data.reason) ? err.data.reason : (err && err.message) ? err.message : '';
       if (!grid && info) {
-        info.replaceChildren(h('div', { class: 'sy-i-t' }, h('b', { text: 'داده‌ی نقشه الان دریافت نشد' }), h('small', { text: 'چند دقیقه‌ی دیگر دوباره باز کن' })));
+        info.replaceChildren(h('div', { class: 'sy-i-t' }, h('b', { text: 'داده‌ی نقشه الان دریافت نشد' }), h('small', { text: 'چند دقیقه‌ی دیگر دوباره باز کن' + (reason ? ' · ' + reason : '') })));
       }
-      setStatus('خطا در دریافت داده‌ی ایران');
+      setStatus('خطا در دریافت داده‌ی ایران' + (reason ? ' · ' + reason : ''));
     }).then(function () { fetching = false; });
   }
   function refresh(force) {

@@ -328,7 +328,7 @@
     R.hero = h('header', { class: 'wx-hero' },
       h('div', { class: 'wx-fxl', 'aria-hidden': 'true' },
         R.sun, R.moon,
-        h('div', { class: 'wx-clouds' }), buildRain(),
+        h('div', { class: 'wx-clouds' }, h('i')), buildRain(),
         h('i', { class: 'wx-fog f1' }), h('i', { class: 'wx-fog f2' })),
       cv,
       h('div', { class: 'wx-bar' }, back, R.city, R.refresh),
@@ -693,7 +693,7 @@
     }
     function fbm(px, py) {
       var s = 0, amp = 0.5, f = 1;
-      for (var o = 0; o < 5; o++) { s += amp * vn(px * f, py * f); f *= 2; amp *= 0.5; }
+      for (var o = 0; o < 3; o++) { s += amp * vn(px * f, py * f); f *= 2; amp *= 0.5; }
       return s;
     }
     for (y = 0; y < H; y++) for (x = 0; x < W; x++) {

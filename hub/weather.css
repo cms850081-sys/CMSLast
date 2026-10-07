@@ -235,11 +235,20 @@
 }
 
 /* ─── ابر واقعی‌نما (بافت ثابت) و باران (فقط transform) ─── */
-.wx-clouds{ position:absolute; inset:0; pointer-events:none; display:none;
-  background-repeat:no-repeat; background-size:135% auto; background-position:-12% 6%; }
-.wx[data-kind="cloud"] .wx-clouds, .wx[data-kind="snow"] .wx-clouds{ display:block; background-image:var(--cl-light,none); opacity:.95; }
-.wx[data-kind="drizzle"] .wx-clouds, .wx[data-kind="rain"] .wx-clouds, .wx[data-kind="storm"] .wx-clouds{ display:block; background-image:var(--cl-dark,none); opacity:.98; }
-.wx[data-kind="fog"] .wx-clouds{ display:block; background-image:var(--cl-light,none); opacity:.45; }
+/* بیرونی: اندازه‌ش دقیقاً با هیرو یکیه، overflow را می‌بُرد.
+   درونی (i): بزرگ‌تر از لازم (cover + حاشیه‌ی اضافه) تا جابه‌جاییِ آرام هیچ لبه‌ی خالی نشون نده.
+   حرکت فقط با transform است — GPU-only، بدون رنگ‌آمیزیِ دوباره، پس لگ نمی‌سازد. */
+.wx-clouds{ position:absolute; inset:0; pointer-events:none; display:none; overflow:hidden; }
+.wx-clouds i{ position:absolute; inset:-18%; background-repeat:no-repeat; background-size:cover; background-position:center;
+  animation:wx-drift 75s ease-in-out infinite alternate; will-change:transform; }
+.wx.paused .wx-clouds i{ animation-play-state:paused; }
+@keyframes wx-drift{ from{ transform:translate3d(-2.5%,-1%,0) scale(1.01); } to{ transform:translate3d(2.5%,1%,0) scale(1.01); } }
+.wx[data-kind="cloud"] .wx-clouds, .wx[data-kind="snow"] .wx-clouds{ display:block; }
+.wx[data-kind="cloud"] .wx-clouds i, .wx[data-kind="snow"] .wx-clouds i{ background-image:var(--cl-light,none); opacity:.95; }
+.wx[data-kind="drizzle"] .wx-clouds, .wx[data-kind="rain"] .wx-clouds, .wx[data-kind="storm"] .wx-clouds{ display:block; }
+.wx[data-kind="drizzle"] .wx-clouds i, .wx[data-kind="rain"] .wx-clouds i, .wx[data-kind="storm"] .wx-clouds i{ background-image:var(--cl-dark,none); opacity:.98; }
+.wx[data-kind="fog"] .wx-clouds{ display:block; }
+.wx[data-kind="fog"] .wx-clouds i{ background-image:var(--cl-light,none); opacity:.45; }
 
 .wx-rain{ position:absolute; inset:0; pointer-events:none; display:none; overflow:hidden; }
 .wx[data-kind="rain"] .wx-rain, .wx[data-kind="storm"] .wx-rain, .wx[data-kind="drizzle"] .wx-rain{ display:block; }
