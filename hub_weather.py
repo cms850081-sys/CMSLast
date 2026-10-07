@@ -397,18 +397,17 @@ async def api_weather_ai(request):
         return _json({"ok": False, "error": "ai_failed", "message": "تحلیل الان ممکن نشد؛ کمی بعد دوباره امتحان کن."}, 503)
 
 
-# ─── سامانه‌ها: شبکه‌ی جوّی روی آسیا و جزئیاتِ کرمانشاه ──────────────────
-# هر منطقه یک شبکه‌ی منظم از نقاط است؛ داده فقط یک بار در ۱۵ دقیقه از open-meteo گرفته می‌شود
-# و خروجیِ فشرده (آرایه‌های تخت، از شمالِ منطقه به جنوب) به کلاینت می‌رود تا رسمِ نقشه سبک بماند.
-MAP_TTL = 900
-MAP_STALE_MAX = 6 * 3600
+# ─── سامانه‌ها: شبکه‌ی جوّیِ ایران و همسایه‌ها ──────────────────────────
+# یک شبکه‌ی ۰٫۵ درجه روی ایران و حاشیه‌ی همسایه‌ها. داده هر ۶ ساعت از open-meteo گرفته میشه
+# (تا سهمیه‌ی رایگان کم نیاید) و خروجیِ فشرده (آرایه‌های تخت، از شمال به جنوب) به کلاینت میره.
+MAP_TTL = 6 * 3600
+MAP_STALE_MAX = 24 * 3600
+MAP_CHUNK = 160          # نقطه در هر درخواست؛ URL کوتاه می‌مونه
 MAP_REGIONS = {
-    # آسیا: ۶ درجه؛ شمال → جنوب، غرب → شرق
-    "asia": {"lat0": 70.0, "lon0": 25.0, "step": 10.0, "rows": 8, "cols": 16},
-    # کرمانشاه: ۰٫۱۵ درجه (حدوداً ۱۶ کیلومتر)، شامل سرپل‌ذهاب
-    "kermanshah": {"lat0": 35.2, "lon0": 45.2, "step": 0.2, "rows": 9, "cols": 13},
+    # 33 ردیف × 40 ستون = 1320 نقطه، از ۲۴٫۵ تا ۴۰٫۵ شمالی و ۴۴ تا ۶۳٫۵ شرقی
+    "iran": {"lat0": 40.5, "lon0": 44.0, "step": 0.5, "rows": 33, "cols": 40},
 }
-_map_cache = {}   # region -> {"data": ..., "at": monotonic}
+_map_cache = {}
 _map_locks = {}
 
 
@@ -421,37 +420,59 @@ def _grid_points(spec):
     return lats, lons
 
 
-async def _fetch_grid(region):
-    spec = MAP_REGIONS[region]
-    lats, lons = _grid_points(spec)
+async def _fetch_chunk(client, lats, lons):
     params = {
         "latitude": ",".join(str(x) for x in lats),
         "longitude": ",".join(str(x) for x in lons),
         "timezone": "Asia/Tehran",
+        "daily": "precipitation_sum",
+        "forecast_days": 1,
         "current": "temperature_2m,relative_humidity_2m,precipitation,cloud_cover,"
                    "pressure_msl,wind_speed_10m,wind_direction_10m",
     }
-    async with httpx.AsyncClient(timeout=15.0) as c:
-        r = await c.get(FORECAST_URL, params=params)
+    r = await client.get(FORECAST_URL, params=params)
     r.raise_for_status()
     items = r.json()
     if isinstance(items, dict):
         items = [items]
     if len(items) != len(lats):
         raise RuntimeError("grid size mismatch")
+    return items
+
+
+async def _fetch_grid(region):
+    spec = MAP_REGIONS[region]
+    lats, lons = _grid_points(spec)
+    items = []
+    async with httpx.AsyncClient(timeout=25.0) as client:
+        for i in range(0, len(lats), MAP_CHUNK):
+            items.extend(await _fetch_chunk(client, lats[i:i + MAP_CHUNK], lons[i:i + MAP_CHUNK]))
 
     def col(key, nd=0):
         out = []
         for it in items:
             v = (it.get("current") or {}).get(key)
-            out.append(None if v is None else (round(float(v), nd) if nd else int(round(float(v)))))
+            if v is None:
+                out.append(None)
+            elif nd:
+                out.append(round(float(v), nd))
+            else:
+                out.append(int(round(float(v))))
+        return out
+
+    def dsum():
+        out = []
+        for it in items:
+            arr = (it.get("daily") or {}).get("precipitation_sum") or []
+            v = arr[0] if arr else None
+            out.append(None if v is None else round(float(v), 1))
         return out
 
     return {
         "region": region,
         "rows": spec["rows"], "cols": spec["cols"],
         "lat0": spec["lat0"], "lon0": spec["lon0"], "step": spec["step"],
-        "t": col("temperature_2m", 1), "pr": col("precipitation", 1),
+        "t": col("temperature_2m", 1), "pr": dsum(),
         "cl": col("cloud_cover"), "p": col("pressure_msl"),
         "ws": col("wind_speed_10m"), "wd": col("wind_direction_10m"),
         "h": col("relative_humidity_2m"),
@@ -487,7 +508,7 @@ async def _get_grid(region):
 async def api_weather_map(request):
     import hub
     await hub._require_admin(request)
-    region = request.query.get("region", "asia")
+    region = request.query.get("region", "iran")
     if region not in MAP_REGIONS:
         return _json({"ok": False, "error": "bad_region", "message": "منطقه‌ی نامعتبر است."}, 400)
     try:
