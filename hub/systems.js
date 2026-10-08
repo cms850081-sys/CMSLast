@@ -13,11 +13,10 @@
   var grid = null, loadedAt = 0, fetching = false;
   var overlay = null, hlLayer = null, townLayer = null, chipBtns = {}, townMarkers = [];
 
-  var VIEW = { center: [32.5, 53.5], zoom: 4 };
-  // کادرِ مجاز برای جابه‌جاییِ نقشه — دقیقاً با محدوده‌ی خودِ شبکه‌ی داده یکیه (lat 24..40, lon 44..63)
-  // تا جایی که پن می‌کنی همیشه رنگ هست؛ قبلاً این کادر از محدوده‌ی داده بزرگ‌تر بود و نتیجه‌ش
-  // یه «مربعِ رنگی» وسطِ نقشه‌ی خالی بود.
-  var BOUNDS = [[23.5, 43.5], [40.5, 63.5]];
+  var VIEW = { center: [32.5, 50.5], zoom: 4 };
+  // کادرِ مجاز برای جابه‌جاییِ نقشه — دقیقاً با محدوده‌ی خودِ شبکه‌ی داده یکیه (lat 22..43, lon 34..67)
+  // تا جایی که پن می‌کنی همیشه رنگ هست.
+  var BOUNDS = [[21.0, 33.0], [44.0, 68.0]];
   var TOWNS = [
     { n: 'سرپل‌ذهاب', lat: 34.4597, lng: 45.8646, main: true },
     { n: 'کرمانشاه', lat: 34.3142, lng: 47.065 },
@@ -41,15 +40,15 @@
 
   var FIELDS = {
     // دما: بنفش (سرد) → آبی → سفید → زرد → نارنجی → قرمز تیره (گرم)
-    temp: { key: 't', lo: -15, hi: 45, unit: '°', title: 'دما', sqrt: false,
+    temp: { key: 't', lo: -15, hi: 45, unit: '°', title: 'دما', sqrt: false, alpha: 115,
       ticks: [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45],
       stops: [[0, '#3c2a8c'], [0.2, '#2f6fd6'], [0.3, '#8fd3ff'], [0.4, '#eef8ff'], [0.5, '#ffe98a'], [0.65, '#ffb347'], [0.8, '#ff4b1f'], [1, '#7a0010']] },
     // بارش تجمعی امروز: خاکستری کم‌بارش → سبز → آبی → زرد → قرمز → ارغوانی (مقیاس جذر)
-    precip: { key: 'pr', lo: 0, hi: 20, unit: ' mm', title: 'بارش تجمعی امروز', sqrt: true,
+    precip: { key: 'pr', lo: 0, hi: 20, unit: ' mm', title: 'بارش تجمعی امروز', sqrt: true, alpha: 175,
       ticks: [0.2, 1, 2.5, 5, 10, 20],
       stops: [[0, '#c8d3dd'], [0.1, '#a8e6a1'], [0.3, '#3ccf4a'], [0.5, '#2b9dff'], [0.7, '#ffe066'], [0.85, '#ff7a1a'], [1, '#c2255c']] },
     // ابر: آبی تیره (صاف) → سفید (ابر کامل)
-    cloud: { key: 'cl', lo: 0, hi: 100, unit: '٪', title: 'پوشش ابر', sqrt: false,
+    cloud: { key: 'cl', lo: 0, hi: 100, unit: '٪', title: 'پوشش ابر', sqrt: false, alpha: 115,
       ticks: [0, 25, 50, 75, 100],
       stops: [[0, '#2a5f9e'], [0.5, '#8db4d9'], [1, '#f2f6fb']] }
   };
@@ -69,7 +68,7 @@
       }
       var u = b[0] === a[0] ? 0 : (t - a[0]) / (b[0] - a[0]);
       for (var c = 0; c < 3; c++) out[i * 4 + c] = a[1][c] + (b[1][c] - a[1][c]) * u;
-      out[i * 4 + 3] = 175;
+      out[i * 4 + 3] = FIELDS[name].alpha;
     }
     LUT[name] = out;
     return out;
@@ -81,8 +80,8 @@
 
   /* ─── داده ─────────────────────────────────────────────── */
   function detectHL(g) {
-    // برای شبکه‌ی ۰٫۵ درجه آستانه‌ی فشار کمی بالاتر است تا نویز نشان داده نشود
-    var out = [], thr = g.step >= 0.5 ? 1.2 : 0.4, r, c, p, k, j, q, sum, cnt, isMax, isMin, diff;
+    // آستانه‌ی بالاتر: فقط بیشینه/کمینه‌های واقعاً محسوس، نه نوسانِ ریزِ شبکه
+    var cands = [], thr = 2.5, r, c, p, k, j, q, sum, cnt, isMax, isMin, diff;
     for (r = 1; r < g.rows - 1; r++) for (c = 1; c < g.cols - 1; c++) {
       p = g.p[r * g.cols + c];
       if (p == null) continue;
@@ -97,8 +96,20 @@
       }
       if (!cnt) continue;
       diff = p - sum / cnt;
-      if (isMax && diff >= thr) out.push({ lat: g.lat0 - r * g.step, lng: g.lon0 + c * g.step, type: 'H', val: p });
-      else if (isMin && -diff >= thr) out.push({ lat: g.lat0 - r * g.step, lng: g.lon0 + c * g.step, type: 'L', val: p });
+      if (isMax && diff >= thr) cands.push({ lat: g.lat0 - r * g.step, lng: g.lon0 + c * g.step, type: 'H', val: p, mag: diff });
+      else if (isMin && -diff >= thr) cands.push({ lat: g.lat0 - r * g.step, lng: g.lon0 + c * g.step, type: 'L', val: p, mag: -diff });
+    }
+    // سرکوبِ نقاطِ نزدیک‌به‌هم: قوی‌ترین نقطه نگه داشته می‌شه و بقیه‌ی نقاطِ هم‌نوع توی شعاعِ نزدیک حذف می‌شن،
+    // تا به‌جایِ یه خوشه از H/Lِ چسبیده‌به‌هم، فقط سامانه‌های واقعاً مجزا روی نقشه بمونن.
+    cands.sort(function (a, b) { return b.mag - a.mag; });
+    var RADIUS = 4 * g.step, out = [];
+    for (var i = 0; i < cands.length; i++) {
+      var c1 = cands[i], dup = false;
+      for (var j2 = 0; j2 < out.length; j2++) {
+        var c2 = out[j2];
+        if (c2.type === c1.type && Math.abs(c2.lat - c1.lat) < RADIUS && Math.abs(c2.lng - c1.lng) < RADIUS) { dup = true; break; }
+      }
+      if (!dup) out.push(c1);
     }
     return out;
   }
@@ -156,7 +167,7 @@
         if (field === 'precip' && v < 0.05) { d[o + 3] = 0; continue; }
         var idx = clamp(Math.round(norm(field, v) * 255), 0, 255);
         d[o] = lut[idx * 4]; d[o + 1] = lut[idx * 4 + 1]; d[o + 2] = lut[idx * 4 + 2];
-        d[o + 3] = field === 'cloud' ? Math.round(70 + 150 * clamp(v / 100, 0, 1)) : lut[idx * 4 + 3];
+        d[o + 3] = field === 'cloud' ? Math.round(30 + 85 * clamp(v / 100, 0, 1)) : lut[idx * 4 + 3];
       }
     }
     ctx.putImageData(img, 0, 0);
@@ -296,12 +307,12 @@
   function initMap() {
     map = Lf.map(mapEl, {
       zoomControl: false, attributionControl: true,
-      minZoom: VIEW.zoom, maxZoom: 6,
+      minZoom: VIEW.zoom, maxZoom: 5,
       maxBounds: BOUNDS, maxBoundsViscosity: 0.8,
       fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, worldCopyJump: false
     }).setView(VIEW.center, VIEW.zoom);
     Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 6, minZoom: VIEW.zoom, updateWhenIdle: true, keepBuffer: 2,
+      subdomains: 'abc', maxZoom: 5, minZoom: VIEW.zoom, updateWhenIdle: true, keepBuffer: 2,
       attribution: '© OpenStreetMap'
     }).addTo(map);
     hlLayer = Lf.layerGroup().addTo(map);
