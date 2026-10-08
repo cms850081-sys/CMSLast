@@ -462,7 +462,7 @@ _PISHVA_PANEL_PAGES = [
         [("📢 افزودن به کانال", None, f"https://t.me/{BOT_USERNAME}?startchannel&admin=post_messages"),
          ("🛡️ پنل امنیتی APS", "security_panel", None)],
         [("🧑‍💻 مدیریت دستیار", "ai_manage_menu", None), ("⏰ یادآورها", "pishva_reminders", None)],
-        [("🤖 کارهای دستیار", "pishva_ai_scheduled", None)],
+        [("🤖 کارهای دستیار", "pishva_ai_scheduled", None), ("🌅 خلاصه صبحگاهی", "pishva_brief", None)],
     ],
 ]
 
@@ -479,12 +479,16 @@ def kb_pishva_panel(page: int = 0):
             else:
                 row.append(InlineKeyboardButton(label, callback_data=cb, style="primary"))
         rows.append(row)
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton("◀️ قبلی", callback_data=f"pishva_panel_p{page - 1}", style="primary"))
-    nav.append(InlineKeyboardButton(f"صفحه {page + 1}/{total}", callback_data="noop_label", style="primary"))
-    if page < total - 1:
-        nav.append(InlineKeyboardButton("بعدی ▶️", callback_data=f"pishva_panel_p{page + 1}", style="primary"))
+    # FIX: ناوبری چرخشی — هر دو دکمه‌ی «قبلی» و «بعدی» در همه‌ی صفحه‌ها هست.
+    # از صفحه‌ی اول «قبلی» می‌ره آخر، و از صفحه‌ی آخر «بعدی» می‌ره اول؛ پس
+    # دیگه لازم نیست برای برگشتن، همه‌ی صفحه‌ها رو یکی‌یکی رد کنی.
+    prev_page = (page - 1) % total
+    next_page = (page + 1) % total
+    nav = [
+        InlineKeyboardButton("◀️ قبلی", callback_data=f"pishva_panel_p{prev_page}", style="primary"),
+        InlineKeyboardButton(f"صفحه {page + 1}/{total}", callback_data="noop_label", style="primary"),
+        InlineKeyboardButton("بعدی ▶️", callback_data=f"pishva_panel_p{next_page}", style="primary"),
+    ]
     rows.append(nav)
     rows.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back_main", style="danger")])
     return InlineKeyboardMarkup(rows)

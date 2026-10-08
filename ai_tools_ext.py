@@ -83,6 +83,11 @@ CATEGORIES_EXT = [
     ("weather_time", "🌦️ آب‌وهوا و تاریخ/ساعت", ["get_weather_and_time"]),
 ]
 
+# ── خلاصه صبحگاهی (ماژول morning_brief.py): قانون‌ها و روزهای ارسال ──
+import morning_brief as _mb
+TOOL_PERMISSIONS_EXT.update({_n: ONLY_PISHVA for _n in _mb.TOOL_PERMISSIONS})
+CATEGORIES_EXT.append(_mb.CATEGORY)
+
 # ابزارهایی که واقعاً چیزی رو تغییر می‌دن (گزارش سیستم + اطلاع به مدیر ارشد)
 ACTION_TOOL_NAMES_EXT = frozenset({
     "set_player_tiers", "set_top_players", "add_admin", "set_admin_active",
@@ -1444,10 +1449,15 @@ async def _list_warned_players(args):
 # ════════════════════════════════════════════════════════════════
 # دیسپچر — None یعنی این ابزار مال این ماژول نیست
 # ════════════════════════════════════════════════════════════════
+TOOL_DECLARATIONS_EXT = TOOL_DECLARATIONS_EXT + _mb.TOOL_DECLARATIONS
+
+
 async def dispatch_ext(name, args, caller_id, caller_role, ctx):
     if name not in TOOL_PERMISSIONS_EXT:
         return None
     args = args or {}
+    if name in _mb.TOOL_PERMISSIONS:
+        return await _mb.dispatch_tool(name, args, getattr(ctx, "job_queue", None))
     if name == "set_player_tiers":
         return await _set_player_tiers(args, caller_id, caller_role)
     if name == "list_player_tiers":

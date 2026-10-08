@@ -1,4 +1,5 @@
 import logging
+import morning_brief
 import net_utils  # noqa: F401  # اجبار IPv4 برای DNS باید قبل از هر ایمپورتی که httpx می‌سازه اجرا بشه
 from datetime import timedelta
 from telegram import Update, BotCommand, BotCommandScopeChat
@@ -289,6 +290,14 @@ async def post_init(application: Application) -> None:
         logger.info("Working-hours precise jobs restored.")
     except Exception as e:
         logger.warning(f"Could not restore working-hours jobs: {e}")
+
+    # Restore the morning-brief job (exact absolute time, survives restarts)
+    try:
+        import morning_brief
+        await morning_brief.restore(application)
+        logger.info("Morning brief job restored.")
+    except Exception as e:
+        logger.warning(f"Could not restore morning brief: {e}")
 
     # Restore AI-assistant reminders / scheduled actions (survives Railway restarts)
     try:
@@ -1000,8 +1009,10 @@ def build_application():
     # ─── Add all ConversationHandlers first ───────────────────
     for conv in [auth_conv, tourn_conv, player_conv, match_conv, scan_conv,
                  comms_conv, task_conv, feedback_conv, pishva_conv, restore_conv, team_conv,
-                 workhours_conv, calendar_conv]:
+                 workhours_conv, calendar_conv, morning_brief.build_conv()]:
         app.add_handler(conv)
+    for _h in morning_brief.build_handlers():
+        app.add_handler(_h)
 
     # ══════════════════════════════════════════
     # SLASH COMMANDS
