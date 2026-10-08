@@ -398,14 +398,14 @@ async def api_weather_ai(request):
 
 
 # ─── سامانه‌ها: شبکه‌ی جوّیِ ایران و همسایه‌ها ──────────────────────────
-# یک شبکه‌ی ۰٫۵ درجه روی ایران و حاشیه‌ی همسایه‌ها. داده هر ۶ ساعت از open-meteo گرفته میشه
-# (تا سهمیه‌ی رایگان کم نیاید) و خروجیِ فشرده (آرایه‌های تخت، از شمال به جنوب) به کلاینت میره.
+# یک شبکه‌ی ۱ درجه روی ایران و حاشیه‌ی همسایه‌ها، در یک درخواستِ تکی (بدون تکه‌تکه‌کردن، بدون موازی).
+# دلیل: تکه‌تکه‌کردنِ درخواست (چه موازی چه پشتِ‌سرهم) باعثِ ۴۲۹ از open-meteo شد. یک درخواستِ تکیِ
+# کوچک‌تر، هر ۶ ساعت یک‌بار (یعنی حدودِ ۴ درخواست در روز)، هیچ سهمیه‌ای را به خطر نمی‌اندازد.
 MAP_TTL = 6 * 3600
 MAP_STALE_MAX = 24 * 3600
-MAP_CHUNK = 220          # نقطه در هر درخواست؛ کم‌تعداد و بزرگ بهتر از زیاد و موازی است (۴۲۹ از open-meteo)
 MAP_REGIONS = {
-    # 33 ردیف × 40 ستون = 1320 نقطه، از ۲۴٫۵ تا ۴۰٫۵ شمالی و ۴۴ تا ۶۳٫۵ شرقی
-    "iran": {"lat0": 40.5, "lon0": 44.0, "step": 0.5, "rows": 33, "cols": 40},
+    # 17 ردیف × 20 ستون = 340 نقطه، از ۲۴ تا ۴۰ شمالی و ۴۴ تا ۶۳ شرقی — ایران کامل + حاشیه‌ی همسایه‌ها
+    "iran": {"lat0": 40.0, "lon0": 44.0, "step": 1.0, "rows": 17, "cols": 20},
 }
 _map_cache = {}
 _map_locks = {}
@@ -420,7 +420,9 @@ def _grid_points(spec):
     return lats, lons
 
 
-async def _fetch_chunk(client, lats, lons, attempt=0):
+async def _fetch_grid(region, attempt=0):
+    spec = MAP_REGIONS[region]
+    lats, lons = _grid_points(spec)
     params = {
         "latitude": ",".join(str(x) for x in lats),
         "longitude": ",".join(str(x) for x in lons),
@@ -430,35 +432,20 @@ async def _fetch_chunk(client, lats, lons, attempt=0):
         "current": "temperature_2m,relative_humidity_2m,precipitation,cloud_cover,"
                    "pressure_msl,wind_speed_10m,wind_direction_10m",
     }
-    r = await client.get(FORECAST_URL, params=params)
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.get(FORECAST_URL, params=params)
     if r.status_code == 429:
-        # open-meteo موقتاً محدودمون کرده؛ با وقفه (و احترام به Retry-After اگر باشد) دوباره تلاش می‌کنیم
-        if attempt >= 4:
+        if attempt >= 3:
             r.raise_for_status()
-        wait = float(r.headers.get("Retry-After", 0)) or (1.5 * (2 ** attempt))
+        wait = float(r.headers.get("Retry-After", 0)) or (2.0 * (2 ** attempt))
         await asyncio.sleep(min(wait, 20))
-        return await _fetch_chunk(client, lats, lons, attempt + 1)
+        return await _fetch_grid(region, attempt + 1)
     r.raise_for_status()
     items = r.json()
     if isinstance(items, dict):
         items = [items]
     if len(items) != len(lats):
-        raise RuntimeError("grid size mismatch")
-    return items
-
-
-async def _fetch_grid(region):
-    spec = MAP_REGIONS[region]
-    lats, lons = _grid_points(spec)
-    chunks = [(lats[i:i + MAP_CHUNK], lons[i:i + MAP_CHUNK]) for i in range(0, len(lats), MAP_CHUNK)]
-    items = []
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        # پشتِ‌سرهم، نه موازی — چند درخواستِ هم‌زمان باعثِ ۴۲۹ (Too Many Requests) از open-meteo شد.
-        # بینِ هر درخواست یه مکثِ کوتاه هم هست تا به سهمیه‌ی نرخ فشار نیاریم.
-        for i, (cl, co) in enumerate(chunks):
-            items.extend(await _fetch_chunk(client, cl, co))
-            if i < len(chunks) - 1:
-                await asyncio.sleep(0.25)
+        raise RuntimeError(f"grid size mismatch: got {len(items)}, expected {len(lats)}")
 
     def col(key, nd=0):
         out = []
