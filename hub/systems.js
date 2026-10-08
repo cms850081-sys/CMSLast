@@ -130,27 +130,34 @@
 
   /* ─── لایه‌ی رنگی: یک تصویرِ ثابت ───────────────────────── */
   function fieldImage(g) {
-    var F = FIELDS[field], lut = lutFor(field), arr = g[F.key];
-    var small = document.createElement('canvas');
-    small.width = g.cols; small.height = g.rows;
-    var sc = small.getContext('2d');
-    var img = sc.createImageData(g.cols, g.rows), d = img.data, n = 0;
-    for (var k = 0; k < g.cols * g.rows; k++) {
-      var v = arr[k], o = k * 4;
-      if (v == null || (field === 'precip' && v < 0.05)) { d[o + 3] = 0; continue; }
-      var idx = clamp(Math.round(norm(field, v) * 255), 0, 255);
-      d[o] = lut[idx * 4]; d[o + 1] = lut[idx * 4 + 1]; d[o + 2] = lut[idx * 4 + 2];
-      d[o + 3] = field === 'cloud' ? Math.round(70 + 150 * clamp(v / 100, 0, 1)) : lut[idx * 4 + 3];
-      n++;
+    // چندنمونه‌گیریِ دوخطیِ مستقیم — دقیقاً همون فرمولِ bil() که برای کارتِ اطلاعات استفاده می‌شه،
+    // پس نقشه و عددی که با کلیک روی یک نقطه می‌بینی همیشه هم‌خوان‌اند. این برخلافِ رسمِ قبلی
+    // (رنگِ تخت برای هر خونه + بزرگ‌نماییِ خودکارِ canvas) یه گرادیانِ صافِ واقعی می‌سازه، شبیه نقشه‌ی هواشناسی.
+    var F = FIELDS[field], lut = lutFor(field), arr = g[F.key], cols = g.cols, rows = g.rows;
+    var RES = 26; // پیکسل به‌ازایِ هر خانه‌ی شبکه
+    var W = (cols - 1) * RES + 1, H = (rows - 1) * RES + 1;
+    var cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    var ctx = cv.getContext('2d');
+    var img = ctx.createImageData(W, H), d = img.data;
+    var painted = 0;
+    for (var m = 0; m < arr.length; m++) if (arr[m] != null) painted++;
+    for (var py = 0; py < H; py++) {
+      var gy = py / RES, i0 = gy >= rows - 1 ? rows - 2 : Math.floor(gy), fy = gy - i0;
+      for (var px = 0; px < W; px++) {
+        var gx = px / RES, j0 = gx >= cols - 1 ? cols - 2 : Math.floor(gx), fx = gx - j0;
+        var k = i0 * cols + j0, o = (py * W + px) * 4;
+        var a = arr[k], b = arr[k + 1], c = arr[k + cols], e = arr[k + cols + 1];
+        if (a == null || b == null || c == null || e == null) { d[o + 3] = 0; continue; }
+        var v = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + e * fx) * fy;
+        if (field === 'precip' && v < 0.05) { d[o + 3] = 0; continue; }
+        var idx = clamp(Math.round(norm(field, v) * 255), 0, 255);
+        d[o] = lut[idx * 4]; d[o + 1] = lut[idx * 4 + 1]; d[o + 2] = lut[idx * 4 + 2];
+        d[o + 3] = field === 'cloud' ? Math.round(70 + 150 * clamp(v / 100, 0, 1)) : lut[idx * 4 + 3];
+      }
     }
-    sc.putImageData(img, 0, 0);
-    var SCALE = 20;
-    var big = document.createElement('canvas');
-    big.width = g.cols * SCALE; big.height = g.rows * SCALE;
-    var bc = big.getContext('2d');
-    bc.imageSmoothingEnabled = true;
-    bc.drawImage(small, 0, 0, big.width, big.height);
-    return { url: big.toDataURL('image/png'), painted: n };
+    ctx.putImageData(img, 0, 0);
+    return { url: cv.toDataURL('image/png'), painted: painted };
   }
 
   function renderField() {
