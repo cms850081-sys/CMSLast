@@ -243,23 +243,11 @@ async def set_category_state(category: str, enabled: bool):
 # کلید = چیزی که مدل به‌عنوان panel می‌فرسته؛ مقدار = (برچسب دکمه، callback_data، نقش‌های مجاز)
 # نکته: خود دکمه هم وقتی لمس بشه از نو توسط هندلر اصلی‌اش چک دسترسی می‌شه (خط دفاعی دوم).
 # ────────────────────────────────────────────────────────────────
-PANEL_MAP = {
-    "own_main":       ("🏠 پنل شخصی من", "back_main", ALL_ROLES),
-    "pishva_main":    ("👑 پنل مدیر ارشد", "menu_pishva", [ROLE_PISHVA]),
-    "settings":       ("⚙️ تنظیمات ربات", "pishva_settings", [ROLE_PISHVA]),
-    "logs":           ("🔍 پیگیری اقدامات", "pishva_logs", [ROLE_PISHVA]),
-    "chess_games_log": ("♟️ بازی‌های مدیران", "pishva_chess_games", [ROLE_PISHVA]),
-    "requests":       ("📥 درخواست‌های دسترسی", "pishva_requests", [ROLE_PISHVA]),
-    "backup":         ("💾 بکاپ", "pishva_backup", [ROLE_PISHVA]),
-    "workhours":      ("🕐 ساعت کاری", "pishva_workhours", [ROLE_PISHVA]),
-    "security_panel": ("🛡️ پنل امنیتی APS", "security_panel", [ROLE_PISHVA]),
-    "admins_list":    ("👥 مدیریت مدیران", "menu_admins", [ROLE_PISHVA]),
-    "ai_admin_logs":  ("🗂️ سوابق AI ادمین‌ها", "ai_admlog_menu", [ROLE_PISHVA]),
-    "matches":        ("♟️ مدیریت مسابقات", "menu_matches", ALL_ROLES),
-    "players":        ("👤 مدیریت بازیکنان", "menu_players", ALL_ROLES),
-    "dashboard":      ("📊 داشبورد", "dashboard_pishva", [ROLE_PISHVA]),
-    "admin_profile":  (None, "admin_view_{tid}", [ROLE_PISHVA]),  # نیاز به identifier داره
-}
+import panel_registry
+
+# سازگاری با کدهای قبلی: PANEL_MAP حالا از panel_registry (فهرستِ کامل) ساخته می‌شه.
+# کلید = کلیدِ ثبت‌شده؛ مقدار = (برچسب دکمه، callback_data، نقش‌های مجاز)
+PANEL_MAP = {e.key: (e.label, e.cb, e.roles) for e in panel_registry.ENTRIES}
 
 # ────────────────────────────────────────────────────────────────
 # تعریف تابع‌ها برای Gemini (فرمت OpenAPI-schema که Gemini می‌خواد)
@@ -612,23 +600,35 @@ TOOL_DECLARATIONS = [
     {
         "name": "open_panel",
         "description": (
-            "باز کردن یک پنل/بخش از ربات با یک دکمه‌ی شیشه‌ای زیر پیام، دقیقاً همون چیزی که از منو باز می‌شه. "
-            "برای درخواست‌هایی مثل «پنل مدیر ارشد رو باز کن»، «برو پنل تنظیمات»، «پنل فلان ادمین رو نشون بده» از این استفاده کن. "
-            "برای «admin_profile» حتماً identifier (یوزرنیم یا نام ادمین) رو هم بده."
+            "باز کردن یک یا چند پنل/منو/دکمه‌ی ربات با دکمه‌ی شیشه‌ای زیر پیام (دقیقاً همون چیزی که از منو باز می‌شه). "
+            "برای هر درخواستی مثل «پنل مدیر ارشد رو باز کن»، «برو تنظیمات»، «بکاپ خودکار»، «مخابرات»، «تقویم»، «خلاصه صبحگاهی»، "
+            "«پنل فلان ادمین/بازیکن/تیم/کلاس/تورنمنت» از همین استفاده کن. همه‌ی دکمه‌ها و منوهای ربات پوشش داده شدن.\n"
+            "قواعد دقت (خیلی مهم):\n"
+            "• اسمی که کاربر گفته رو عیناً (فقط بدون «باز کن/برو/نشون بده») توی panel بفرست؛ خودت به کلید دیگه‌ای تبدیلش نکن "
+            "مگر مطمئن باشی. سرور خودش بین کلیدها و اسم‌ها و هم‌معنی‌ها تطبیق می‌ده.\n"
+            "• اگه سرور نوشت «مبهم» و گزینه‌ها رو داد، هیچ پنلی باز نشده؛ همون گزینه‌ها رو کوتاه به کاربر بگو و بپرس. حدس نزن.\n"
+            "• چند پنل با هم خواست («تنظیمات و لاگ رو باز کن») → panels رو پر کن، نه چندبار صدا زدن.\n"
+            "• برای پنل یک مدیر/بازیکن/تیم/کلاس/تورنمنتِ مشخص (admin_profile, admin_perms, admin_logs_of, admin_undo_of, "
+            "player_view, team_view, team_members, team_warnings, class_view, class_players, class_perf, tournament_view) "
+            "حتماً identifier (نام/یوزرنیم) هم بده.\n"
+            "• بعضی دکمه‌ها (سوییچ‌ها، شروع/پایان ساعت کاری، …) با زدنِ کاربر همان لحظه اجرا می‌شن؛ رهگشا فقط دکمه رو آماده می‌کنه "
+            "و خودش هرگز به‌جای کاربر نمی‌زنه. اگه کاربر می‌خواد خودت کاری رو انجام بدی، ابزار اجراییِ مربوطه رو صدا بزن نه open_panel.\n"
+            "کلیدهای شناخته‌شده به‌تفکیک گروه: " + panel_registry.catalog_all()
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "panel": {
                     "type": "string",
-                    "description": (
-                        "یکی از: own_main, pishva_main, settings, logs, requests, backup, workhours, "
-                        "security_panel, admins_list, ai_admin_logs, matches, players, dashboard, admin_profile"
-                    ),
+                    "description": "کلیدِ پنل (از فهرست بالا) یا خودِ اسمی که کاربر گفته؛ مثلاً «تنظیمات»، «بکاپ خودکار»، «پنل امنیتی».",
                 },
-                "identifier": {"type": "string", "description": "فقط برای admin_profile: یوزرنیم یا نام مدیر"},
+                "panels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "وقتی کاربر چند پنل با هم خواست؛ هر عضو مثل panel.",
+                },
+                "identifier": {"type": "string", "description": "فقط برای پنل‌های یک موجودیتِ مشخص: نام/یوزرنیم مدیر، نام بازیکن، نام تیم، نام کلاس یا نام تورنمنت."},
             },
-            "required": ["panel"],
         },
     },
     {
@@ -817,6 +817,106 @@ async def _find_admin_by_identifier(identifier: str):
         if identifier.isdigit() and a["telegram_id"] == int(identifier):
             return a
     return None
+
+
+async def _lookup_entity(kind: str, ident: str):
+    """(id, نام نمایشی, None) | (None, None, پیام خطا/ابهام)"""
+    ident = (ident or "").strip()
+    if not ident:
+        return None, None, "نام/شناسه‌ی مورد نظر رو هم بگو."
+    n = panel_registry.norm
+    try:
+        if kind == "admin":
+            a = await _find_admin_by_identifier(ident)
+            if not a:
+                return None, None, f"مدیری با مشخصات «{ident}» پیدا نشد."
+            return a["telegram_id"], a["full_name"], None
+        if kind == "player":
+            rows = list(await db.search_players(ident))
+            exact = [r for r in rows if n(r["full_name"]) == n(ident)]
+            rows = exact or rows
+            if not rows:
+                return None, None, f"بازیکنی با «{ident}» پیدا نشد."
+            if len(rows) > 1:
+                names = "، ".join(f"{r['full_name']} ({r['class_name'] or '—'})" for r in rows[:6])
+                return None, None, f"چند بازیکن پیدا شد: {names} — دقیق‌تر بگو کدوم."
+            return rows[0]["id"], rows[0]["full_name"], None
+        if kind == "team":
+            t, err = await ai_tools_ext._find_team(ident)
+            if not t:
+                return None, None, err or f"تیمی با «{ident}» پیدا نشد."
+            return t["id"], t["name"], None
+        if kind == "class":
+            rows = [c for c in await db.get_all_classes() if n(ident) and n(ident) in n(c["name"])]
+            exact = [c for c in rows if n(c["name"]) == n(ident)]
+            rows = exact or rows
+            if not rows:
+                return None, None, f"کلاسی با «{ident}» پیدا نشد."
+            if len(rows) > 1:
+                return None, None, "چند کلاس پیدا شد: " + "، ".join(c["name"] for c in rows[:6]) + " — دقیق‌تر بگو."
+            return rows[0]["id"], rows[0]["name"], None
+        if kind == "tournament":
+            rows = [t for t in await db.get_all_tournaments() if n(ident) and n(ident) in n(t["name"])]
+            exact = [t for t in rows if n(t["name"]) == n(ident)]
+            rows = exact or rows
+            if not rows:
+                return None, None, f"تورنمنتی با «{ident}» پیدا نشد."
+            if len(rows) > 1:
+                return None, None, "چند تورنمنت پیدا شد: " + "، ".join(t["name"] for t in rows[:6]) + " — دقیق‌تر بگو."
+            return rows[0]["id"], rows[0]["name"], None
+    except Exception:
+        logger.exception("open_panel lookup failed (%s)", kind)
+    return None, None, "جستجو انجام نشد؛ کمی بعد دوباره امتحان کن."
+
+
+async def _open_panels(args: dict, caller_role: str, ctx) -> str:
+    """open_panel: هر درخواست را با panel_registry تطبیق می‌دهد؛ مبهم = چیزی باز نمی‌شود."""
+    names = []
+    if isinstance(args.get("panels"), list):
+        names += [str(x) for x in args["panels"] if str(x).strip()]
+    if (args.get("panel") or "").strip():
+        names.insert(0, args["panel"].strip())
+    if not names:
+        return "❌ نام پنل رو نگفتی."
+    ident = (args.get("identifier") or "").strip()
+    pending = ctx.user_data.setdefault("_ai_pending_buttons", [])
+    ready, notes = [], []
+    for nm in names[:8]:
+        res = panel_registry.resolve(nm, caller_role)
+        if res.status == "forbidden":
+            notes.append(f"⛔ «{res.entry.label}» خارج از دسترسی نقش شماست.")
+            continue
+        if res.status == "unknown":
+            notes.append(f"❌ {res.note}")
+            continue
+        if res.status == "ambiguous":
+            opts = "؛ ".join(f"{o.label} (کلید: {o.key})" for o in res.options)
+            notes.append(f"❓ «{nm}» مبهمه و چیزی باز نشد. منظورت کدومه؟ {opts}")
+            continue
+        e = res.entry
+        label, cb = e.label, e.cb
+        if e.needs:
+            eid, ename, err = await _lookup_entity(e.needs, ident)
+            if err:
+                notes.append(f"❌ برای «{e.label}»: {err}")
+                continue
+            cb = cb.replace("{id}", str(eid))
+            label = f"{e.label} — {ename}"
+        if len(cb.encode("utf-8")) > 64:
+            notes.append(f"❌ «{label}» الان قابل‌ارائه نیست (شناسه‌ی دکمه خیلی بلند است).")
+            continue
+        if any(c == cb for _, c in pending):
+            continue
+        pending.append((label, cb))
+        ready.append((e, label))
+    out = []
+    if ready:
+        out.append("✅ دکمه‌ی " + "، ".join(f"«{l}»" for _, l in ready) + " رو آماده کردم؛ پایین پیام بزنید روش.")
+        acts = [l for e, l in ready if e.kind == "action"]
+        if acts:
+            out.append("⚠️ این دکمه‌ها با زدنِ شما همان لحظه اجرا می‌شن: " + "، ".join(acts) + ".")
+    out += notes
+    return "\n".join(out) or "❌ پنلی آماده نشد."
 
 
 # ────────────────────────────────────────────────────────────────
@@ -1188,27 +1288,7 @@ async def _dispatch_impl(name: str, args: dict, caller_id: int, caller_role: str
 
         # ── باز کردن پنل (دکمه‌ی شیشه‌ای) ──
         elif name == "open_panel":
-            panel = (args.get("panel") or "").strip()
-            info = PANEL_MAP.get(panel)
-            if not info:
-                return f"❌ پنل «{panel}» شناخته‌شده نیست."
-            label, cb_template, allowed = info
-            if caller_role not in allowed:
-                return f"⛔ پنل «{panel}» خارج از دسترسی نقش شماست."
-            if panel == "admin_profile":
-                ident = args.get("identifier")
-                if not ident:
-                    return "برای باز کردن پروفایل یک مدیر، نام یا یوزرنیمش رو بگو."
-                a = await _find_admin_by_identifier(ident)
-                if not a:
-                    return f"مدیری با مشخصات «{ident}» پیدا نشد."
-                label = f"👤 پروفایل {a['full_name']}"
-                cb = cb_template.format(tid=a["telegram_id"])
-            else:
-                cb = cb_template
-            pending = ctx.user_data.setdefault("_ai_pending_buttons", [])
-            pending.append((label, cb))
-            return f"✅ دکمه‌ی «{label}» رو براتون آماده کردم، پایین پیام بزنید روش."
+            return await _open_panels(args, caller_role, ctx)
 
         # ── پروفایل کامل یک ادمین (متنی) ──
         elif name == "get_admin_profile":

@@ -93,6 +93,7 @@ ACTION_TOOL_NAMES_EXT = frozenset({
     "set_player_tiers", "set_top_players", "add_admin", "set_admin_active",
     "set_admin_display_name", "set_admin_permissions", "resolve_access_request",
     "create_team", "edit_team", "manage_team_members", "warn_team", "delete_team",
+    "brief_times_set",
 })
 
 SCHEDULABLE_TOOL_NAMES_EXT = frozenset(TOOL_PERMISSIONS_EXT.keys())
@@ -1457,7 +1458,7 @@ async def dispatch_ext(name, args, caller_id, caller_role, ctx):
         return None
     args = args or {}
     if name in _mb.TOOL_PERMISSIONS:
-        return await _mb.dispatch_tool(name, args, getattr(ctx, "job_queue", None))
+        return await _mb.dispatch_tool(name, args, getattr(ctx, "job_queue", None), ctx)
     if name == "set_player_tiers":
         return await _set_player_tiers(args, caller_id, caller_role)
     if name == "list_player_tiers":

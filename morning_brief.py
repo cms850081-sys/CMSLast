@@ -142,11 +142,14 @@ TOOL_PERMISSIONS = {
     "brief_rule_delete": ["pishva"],
     "brief_days_get": ["pishva"],
     "brief_days_set": ["pishva"],
+    "brief_times_get": ["pishva"],
+    "brief_times_set": ["pishva"],
+    "brief_now": ["pishva"],
 }
 
 CATEGORY = ("morning_brief", "🌅 قانون‌های خلاصه صبحگاهی",
             ["brief_rule_add", "brief_rule_list", "brief_rule_edit", "brief_rule_delete",
-             "brief_days_get", "brief_days_set"])
+             "brief_days_get", "brief_days_set", "brief_times_get", "brief_times_set", "brief_now"])
 
 TOOL_DECLARATIONS = [
     {
@@ -186,6 +189,39 @@ TOOL_DECLARATIONS = [
             "صدا بزن. با rule_id یا query؛ اگه چند قانون پیدا شد فهرست رو نشون بده و بپرس کدوم."
         ),
         "parameters": {"type": "object", "properties": {"rule_id": {"type": "integer"}, "query": _STR}},
+    },
+    {
+        "name": "brief_times_get",
+        "description": "ساعت‌های ارسال «خلاصه صبحگاهی» (با دقیقه)، روزها و روشن/خاموش بودنش و زمان ارسال بعدی رو نشون می‌ده.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "brief_times_set",
+        "description": (
+            "ساعت‌های ارسال «خلاصه صبحگاهی» رو ویرایش می‌کنه. هر وقت مدیر گفت «ساعت خلاصه صبحگاهی رو بذار ۶:۴۵»، "
+            "«یه ساعت ۱۲:۳۰ هم اضافه کن»، «ساعت ۷ رو بردار»، «ساعت خلاصه رو از ۷ به ۶:۳۰ تغییر بده» یا مشابه، همین رو صدا بزن "
+            "(نه brief_rule_add). ساعت‌ها با دقیقه‌ی دقیق (HH:MM، ۰۰ تا ۲۳ و ۰۰ تا ۵۹، ارقام فارسی هم قبوله).\n"
+            "mode: «replace» = کل ساعت‌ها بشه همین لیست (برای «ساعت رو بذار …»)؛ «add» = به ساعت‌های فعلی اضافه بشه؛ "
+            "«remove» = از ساعت‌های فعلی حذف بشه؛ «change» = ساعتِ from_time به to_time تغییر کنه (برای «از ۷ به ۶:۳۰ ببر»). "
+            "حداکثر ۶ ساعت. بعد از اجرا ساعت‌های جدید و زمان ارسال بعدی گزارش می‌شه؛ همون رو دقیق به مدیر بگو."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "mode": {"type": "string", "enum": ["replace", "add", "remove", "change"]},
+            "times": {"type": "array", "items": _STR, "description": "ساعت‌ها، مثلاً [\"06:45\"] (برای replace/add/remove)"},
+            "from_time": {**_STR, "description": "فقط برای change: ساعتِ فعلی"},
+            "to_time": {**_STR, "description": "فقط برای change: ساعتِ جدید"}},
+            "required": ["mode"]},
+    },
+    {
+        "name": "brief_now",
+        "description": (
+            "«همین الان خلاصه کن» — خلاصه صبحگاهی رو همین لحظه، با داده‌های زنده‌ی فعلی، می‌سازه و برای مدیر ارشد می‌فرسته؛ "
+            "بدون توجه به روشن/خاموش بودنِ خلاصه صبحگاهی، ساعت‌ها، روزهای تعطیل یا ارسال بعدی (هیچ‌کدوم دست نمی‌خورن) و "
+            "همراهش دکمه‌ی «منوی خلاصه صبحگاهی» رو زیر پیام می‌ذاره. وقتی مدیر گفت «همین الان خلاصه کن»، «خلاصه صبحگاهی رو "
+            "الان بده/باز کن»، «همین الان خلاصه‌ی روز رو بگو» صدا بزن؛ هیچ سؤالی نپرس. "
+            "full=true یعنی تحلیل کاملِ هوش مصنوعی (دکمه‌ی «روز من رو خلاصه کن») هم همین الان ساخته بشه."
+        ),
+        "parameters": {"type": "object", "properties": {"full": {"type": "boolean", "description": "تحلیل کاملِ هوش مصنوعی هم ساخته بشه (پیش‌فرض false)"}}},
     },
     {
         "name": "brief_days_get",
@@ -232,8 +268,96 @@ async def _resolve(args):
     return found[0], None
 
 
-async def dispatch_tool(name: str, args: dict, job_queue=None):
+async def _times_report(job_queue=None):
+    times = await get_times()
+    days = await get_days()
+    en = await is_enabled()
+    nxt = next_target(datetime.now(TEHRAN_TZ), times, days) if (en and times and days) else None
+    return (f"ساعت‌های ارسال: {'، '.join(times) or '— هیچ —'}\n"
+            f"روزها: {'، '.join(WD_FA[d] for d in WD_ORDER if d in days) or 'هیچ روزی'}\n"
+            f"وضعیت: {'روشن' if en else 'خاموش'}\n"
+            f"ارسال بعدی: {nxt.strftime('%Y-%m-%d %H:%M') if nxt else '—'}"
+            + ("" if en else "\n⚠️ خلاصه صبحگاهی الان خاموشه؛ ساعت‌ها ثبت می‌شن ولی تا روشن نشه ارسالی نیست."))
+
+
+async def _brief_now(ctx, full: bool):
+    """«همین الان خلاصه کن»: با داده‌های فعلی، بدون توجه به روشن/خاموش، ساعت‌ها و روزها."""
+    bot = ctx.bot
+    await bot.send_message(PISHVA_ID, await build_brief_text(), reply_markup=_brief_keyboard())
+    if full:
+        context_text = await _collect_context()
+        rules = await list_rules()
+        try:
+            text, ok = await _ai_summary(context_text, rules), True
+        except Exception as e:
+            logger.warning("morning_brief: brief_now AI failed (%r)", e)
+            text, ok = "⚠️ تحلیل هوش مصنوعی الان ممکن نشد؛ این هم داده‌های خام امروز:\n\n" + context_text, False
+        for part in _chunks(text):
+            if not ok:
+                await bot.send_message(PISHVA_ID, part)
+                continue
+            try:
+                await bot.send_message(PISHVA_ID, _to_tg_html(part), parse_mode="HTML")
+            except BadRequest:
+                await bot.send_message(PISHVA_ID, _plain(part))
+    # دکمه‌ی منوی خلاصه صبحگاهی زیر پیام رهگشا
+    ctx.user_data.setdefault("_ai_pending_buttons", []).append(("🌅 منوی خلاصه صبحگاهی", "pishva_brief"))
+    return ("✅ خلاصه صبحگاهی همین الان با داده‌های فعلی ساخته و فرستاده شد"
+            + (" (همراه با تحلیل کامل)" if full else " (برای تحلیل کامل، دکمه‌ی «✨ روز من رو خلاصه کن» زیرش هست)")
+            + ". تنظیمات و ساعت‌های ارسال دست نخورد؛ دکمه‌ی منوی خلاصه صبحگاهی هم پایین پیام هست.")
+
+
+async def dispatch_tool(name: str, args: dict, job_queue=None, ctx=None):
     args = args or {}
+    if name == "brief_now":
+        if ctx is None:
+            return "❌ این ابزار الان قابل اجرا نیست."
+        return await _brief_now(ctx, bool(args.get("full")))
+    if name == "brief_times_get":
+        return await _times_report()
+    if name == "brief_times_set":
+        mode = (args.get("mode") or "").strip().lower()
+        cur = list(await get_times())
+
+        def parse_all(vals):
+            ok, bad = [], []
+            for v in vals or []:
+                t = parse_hhmm(str(v))
+                (ok if t else bad).append(t or str(v))
+            return ok, bad
+        if mode == "change":
+            f, t = parse_hhmm(str(args.get("from_time") or "")), parse_hhmm(str(args.get("to_time") or ""))
+            if not f or not t:
+                return "❌ برای تغییر، هم ساعت فعلی (from_time) و هم ساعت جدید (to_time) لازمه؛ مثل 06:45."
+            if f not in cur:
+                return f"❌ ساعت {f} جزو ساعت‌های فعلی نیست.\n" + await _times_report()
+            new = [x for x in cur if x != f]
+            if t not in new:
+                new.append(t)
+            bad = []
+        else:
+            vals, bad = parse_all(args.get("times"))
+            if not vals:
+                return "❌ ساعتِ معتبری نگفتی؛ مثل 06:45 (ساعت ۰–۲۳، دقیقه ۰–۵۹)." + (f" (نامعتبر: {'، '.join(bad)})" if bad else "")
+            if mode == "replace":
+                new = vals
+            elif mode == "add":
+                new = cur + [v for v in vals if v not in cur]
+            elif mode == "remove":
+                missing = [v for v in vals if v not in cur]
+                new = [x for x in cur if x not in vals]
+                if missing and len(missing) == len(vals):
+                    return f"❌ {'، '.join(missing)} جزو ساعت‌های فعلی نیست.\n" + await _times_report()
+            else:
+                return "❌ mode باید یکی از replace، add، remove، change باشه."
+        new = sorted(set(new))
+        if len(new) > MAX_TIMES:
+            return f"❌ حداکثر {MAX_TIMES} ساعت در روز مجازه (الان می‌شد {len(new)})."
+        await set_times(new)
+        if job_queue is not None:
+            await reschedule(job_queue)
+        return ("✅ ساعت‌های خلاصه صبحگاهی ویرایش شد.\n" + await _times_report()
+                + (f"\n⚠️ نامعتبر و نادیده‌گرفته‌شده: {'، '.join(bad)}" if bad else ""))
     if name == "brief_days_get":
         days, times = await get_days(), await get_times()
         return (f"روزهای ارسال: {'، '.join(WD_FA[d] for d in WD_ORDER if d in days) or 'هیچ روزی'}\n"
