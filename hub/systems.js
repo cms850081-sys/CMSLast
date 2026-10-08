@@ -14,7 +14,10 @@
   var overlay = null, hlLayer = null, townLayer = null, chipBtns = {}, townMarkers = [];
 
   var VIEW = { center: [32.5, 53.5], zoom: 4 };
-  var BOUNDS = [[20, 38], [45, 70]];                 // کادرِ مجاز برای جابه‌جایی نقشه
+  // کادرِ مجاز برای جابه‌جاییِ نقشه — دقیقاً با محدوده‌ی خودِ شبکه‌ی داده یکیه (lat 24..40, lon 44..63)
+  // تا جایی که پن می‌کنی همیشه رنگ هست؛ قبلاً این کادر از محدوده‌ی داده بزرگ‌تر بود و نتیجه‌ش
+  // یه «مربعِ رنگی» وسطِ نقشه‌ی خالی بود.
+  var BOUNDS = [[23.5, 43.5], [40.5, 63.5]];
   var TOWNS = [
     { n: 'سرپل‌ذهاب', lat: 34.4597, lng: 45.8646, main: true },
     { n: 'کرمانشاه', lat: 34.3142, lng: 47.065 },
@@ -134,7 +137,7 @@
     // پس نقشه و عددی که با کلیک روی یک نقطه می‌بینی همیشه هم‌خوان‌اند. این برخلافِ رسمِ قبلی
     // (رنگِ تخت برای هر خونه + بزرگ‌نماییِ خودکارِ canvas) یه گرادیانِ صافِ واقعی می‌سازه، شبیه نقشه‌ی هواشناسی.
     var F = FIELDS[field], lut = lutFor(field), arr = g[F.key], cols = g.cols, rows = g.rows;
-    var RES = 26; // پیکسل به‌ازایِ هر خانه‌ی شبکه
+    var RES = 16; // پیکسل به‌ازایِ هر خانه‌ی شبکه؛ کوچیک‌تر از قبل تا بافتِ رویِ GPU سبک‌تر پن بشه
     var W = (cols - 1) * RES + 1, H = (rows - 1) * RES + 1;
     var cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
@@ -292,13 +295,13 @@
   }
   function initMap() {
     map = Lf.map(mapEl, {
-      zoomControl: false, attributionControl: true, preferCanvas: true,
-      minZoom: VIEW.zoom, maxZoom: 7,
-      maxBounds: BOUNDS, maxBoundsViscosity: 1.0,
-      fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, inertia: false, worldCopyJump: false
+      zoomControl: false, attributionControl: true,
+      minZoom: VIEW.zoom, maxZoom: 6,
+      maxBounds: BOUNDS, maxBoundsViscosity: 0.8,
+      fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, worldCopyJump: false
     }).setView(VIEW.center, VIEW.zoom);
     Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 7, minZoom: VIEW.zoom, updateWhenIdle: true, updateWhenZooming: false, keepBuffer: 0,
+      subdomains: 'abc', maxZoom: 6, minZoom: VIEW.zoom, updateWhenIdle: true, keepBuffer: 2,
       attribution: '© OpenStreetMap'
     }).addTo(map);
     hlLayer = Lf.layerGroup().addTo(map);
