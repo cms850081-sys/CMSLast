@@ -14,12 +14,14 @@ morning_brief.py — «خلاصه صبحگاهی» مدیر ارشد
     job_queue.run_once(callback, when=next)  ← ساعتِ مطلق، نه شمارش معکوس
 """
 import asyncio
+import html as _html
 import logging
 import re
 import time as _time
 from datetime import datetime, timedelta, time as dtime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import (CallbackQueryHandler, ContextTypes, ConversationHandler,
                           MessageHandler, filters)
 
@@ -625,7 +627,14 @@ async def _ai_summary(context_text: str, rules) -> str:
         "تو «رهگشا»، دستیار هوشمند LUX هستی و داری «خلاصه‌ی روز» را برای مدیر ارشد می‌نویسی. "
         f"با «سلام {name}» شروع کن. فارسی، گرم و مؤدبانه، کوتاه و مناسب موبایل (حداکثر حدود ۲۵۰۰ نویسه). "
         "فقط از داده‌های زیر استفاده کن؛ چیزی از خودت نساز و حدس نزن. اگر داده‌ای «هیچ/نامشخص» بود، همان را صادقانه بگو.\n"
-        "ساختار (با ایموجی و تیتر کوتاه، بدون مارک‌داون سنگین):\n"
+        "قالب‌بندی (خیلی مهم، دقیق رعایت کن):\n"
+        f"• اولین خط: «سلام {name}» به‌صورت **ضخیم** + یک ایموجی مناسب.\n"
+        "• هر بخش با یک خط تیتر شروع شود: ایموجی + عنوان ضخیم، مثل «♟ **مسابقه‌های دیشب**». بین دو بخش فقط یک خط خالی بگذار.\n"
+        "• زیر هر تیتر، موردها را بلافاصله و بدون خط خالی بین‌شان، هر کدام در یک خط کوتاه و با «• » شروع کن.\n"
+        "• اسم بازیکن‌ها، نتیجه‌ها، عددهای مهم (دما، AQI) و ساعت‌ها را با **ضخیم** بنویس؛ ولی همه‌ی متن را ضخیم نکن.\n"
+        "• هیچ‌وقت بیشتر از یک خط خالی پشت‌سرهم نذار. از فاصله‌ی اضافه، تورفتگی، جدول، «#»، بک‌تیک و خط جداکننده استفاده نکن.\n"
+        "• فقط از **ضخیم** و «•» و ایموجی استفاده کن؛ هیچ مارک‌داون دیگری نه.\n"
+        "ساختار بخش‌ها:\n"
         "۱) مسابقه‌های ثبت‌شده در بازه‌ی گفته‌شده در داده‌ها (دیشب یا از شب‌های تعطیل): چه کسانی با چه کسانی بازی کردند و نتیجه چه شد.\n"
         "۲) کلاس‌هایی که امروز باید مسابقه‌های بدون‌نتیجه‌شان را برگزار و نتیجه را ثبت کنند.\n"
         "۳) درباره‌ی هر بازیکنِ درگیر در آن مسابقه‌ها یک توضیح خیلی مختصر (آمار و نکته‌ی قابل‌توجه).\n"
@@ -640,6 +649,36 @@ async def _ai_summary(context_text: str, rules) -> str:
     if not text:
         raise ValueError("empty AI reply")
     return text
+
+
+def _tidy(text: str) -> str:
+    """مرتب‌سازی خروجی هوش مصنوعی: حذف فاصله‌های اضافه، خط‌های خالی تکراری و تبدیل سرتیترها/بولت‌ها."""
+    out = []
+    for ln in text.replace("\r\n", "\n").split("\n"):
+        ln = ln.replace("\u00a0", " ").strip()
+        m = re.match(r"^#{1,6}\s*(.+)$", ln)
+        if m:
+            ln = "**" + m.group(1).replace("**", "").strip() + "**"
+        ln = re.sub(r"^[-*]\s+", "• ", ln)
+        ln = re.sub(r"^[-–—_=]{3,}$", "", ln)  # خط جداکننده
+        out.append(ln)
+    t = "\n".join(out)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    t = re.sub(r"(^•[^\n]*)\n\n(?=•)", r"\1\n", t, flags=re.M)  # بین موردهای یک بخش خط خالی نباشد
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    return t.strip()
+
+
+def _to_tg_html(text: str) -> str:
+    """متن (با **ضخیم**) → HTML امن تلگرام."""
+    t = _html.escape(_tidy(text), quote=False)
+    t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+    t = t.replace("*", "").replace("`", "")
+    return t
+
+
+def _plain(text: str) -> str:
+    return _tidy(text).replace("**", "").replace("*", "").replace("`", "")
 
 
 def _chunks(text: str, n: int = 3900):
@@ -669,9 +708,11 @@ async def day_summary_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         context_text = await _collect_context()
         rules = await list_rules()
+        ai_ok = True
         try:
             text = await _ai_summary(context_text, rules)
         except Exception as e:
+            ai_ok = False
             logger.warning("morning_brief: AI summary failed (%r); fallback to raw data", e)
             text = "⚠️ تحلیل هوش مصنوعی الان ممکن نشد؛ این هم داده‌های خام امروز:\n\n" + context_text
         try:
@@ -679,7 +720,14 @@ async def day_summary_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
         for part in _chunks(text):
-            await ctx.bot.send_message(q.message.chat_id, part)
+            if not ai_ok:
+                await ctx.bot.send_message(q.message.chat_id, part)
+                continue
+            try:
+                await ctx.bot.send_message(q.message.chat_id, _to_tg_html(part), parse_mode="HTML")
+            except BadRequest as e:
+                logger.warning("morning_brief: HTML send failed (%r); sending plain", e)
+                await ctx.bot.send_message(q.message.chat_id, _plain(part))
     except Exception:
         logger.exception("morning_brief: day summary failed")
         await note.edit_text("❌ ساخت خلاصه‌ی روز ممکن نشد؛ کمی بعد دوباره امتحان کن.")
@@ -717,7 +765,7 @@ async def _settings_view():
                  InlineKeyboardButton("📜 قانون‌های رهگشا", callback_data="mb_rules", style="primary")])
     rows.append([InlineKeyboardButton("📚 این هفته: سطر بالا (دینی)", callback_data="mb_alt_a", style="primary"),
                  InlineKeyboardButton("📚 این هفته: سطر پایین (بیکار)", callback_data="mb_alt_b", style="primary")])
-    rows.append([InlineKeyboardButton("🔙 بازگشت", callback_data="pishva_panel", style="danger")])
+    rows.append([InlineKeyboardButton("🔙 بازگشت", callback_data="menu_pishva", style="danger")])
     return text, InlineKeyboardMarkup(rows)
 
 
