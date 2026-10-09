@@ -837,7 +837,7 @@ def _admin_name(a):
 
 async def _name_map():
     pname, admins = await asyncio.gather(db.get_setting("pishva_display_name", "مدیر ارشد"), db.get_all_admins())
-    m = {PISHVA_ID: pname}
+    m = {PISHVA_ID: pname, 0: "پنل وب ادمین", -1: "پنل مدیر مدرسه", -2: "ناشناس/بدون احراز"}
     for a in admins:
         m[a["telegram_id"]] = _admin_name(a)
     return m
@@ -1607,7 +1607,10 @@ async def api_logs(request):
         period = "today"
     page = max(0, _int(q.get("page", 0), "page"))
     admin_id = _int(q["admin"], "admin") if q.get("admin") else None
-    (rows, total), names = await asyncio.gather(db.get_action_logs(period, admin_id, page, 25), _name_map())
+    scope = q.get("scope", "actions")
+    if scope not in ("actions", "trail", "all"):
+        scope = "actions"
+    (rows, total), names = await asyncio.gather(db.get_action_logs(period, admin_id, page, 25, scope=scope), _name_map())
     try:
         from helpers import ACTION_LOG_LABELS as _AL
     except Exception:

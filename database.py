@@ -2589,7 +2589,31 @@ async def log_action(admin_id, action_type, description, target_id=None, snapsho
     _fire_and_forget(_write())
 
 
-async def get_action_logs(period="all", admin_id=None, page=0, page_size=10):
+TRAIL_PREFIX = "trail_"   # ردیف‌های «ردیابیِ کامل» (هر کلیک/درخواست) با این پیشوند در action_logs ذخیره می‌شن
+
+
+def _scope_condition(scope):
+    """scope: 'actions' (پیش‌فرض: بدون ردیابی، تا شمارنده‌ها/منوی خنثی‌سازی همان‌طور بمانند) | 'trail' | 'all'"""
+    if scope == "trail":
+        return "action_type LIKE 'trail\\_%' ESCAPE '\\'"
+    if scope == "all":
+        return None
+    return "action_type NOT LIKE 'trail\\_%' ESCAPE '\\'"
+
+
+async def log_actions_bulk(rows):
+    """rows: لیستی از (admin_id, action_type, description, target_id, logged_at)؛ همه با یک درخواستِ شبکه و به ترتیب."""
+    if not rows:
+        return
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.batch():
+            for r in rows:
+                await db.execute(
+                    "INSERT INTO action_logs(admin_id,action_type,description,target_id,logged_at,snapshot) "
+                    "VALUES (?,?,?,?,?,NULL)", tuple(r))
+
+
+async def get_action_logs(period="all", admin_id=None, page=0, page_size=10, scope="actions"):
     """لاگِ اقدامات رو صفحه‌بندی‌شده برمی‌گردونه: (ردیف‌ها, تعداد کل).
     page از ۰ شروع می‌شه؛ حتی اگه تعداد کل نتایج خیلی زیاد باشه (مثلاً
     ده‌ها هزار ردیف)، فقط همون صفحه‌ی درخواستی از دیتابیس خونده می‌شه.
@@ -2619,6 +2643,9 @@ async def get_action_logs(period="all", admin_id=None, page=0, page_size=10):
     if admin_id:
         conditions.append("admin_id = ?")
         params.append(admin_id)
+    _sc = _scope_condition(scope)
+    if _sc:
+        conditions.append(_sc)
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     offset = max(page, 0) * page_size
     async with aiosqlite.connect(DB_PATH) as db:
@@ -2626,7 +2653,7 @@ async def get_action_logs(period="all", admin_id=None, page=0, page_size=10):
         count_cur, rows_cur = await asyncio.gather(
             db.execute(f"SELECT COUNT(*) AS c FROM action_logs {where}", params),
             db.execute(
-                f"SELECT * FROM action_logs {where} ORDER BY logged_at DESC LIMIT ? OFFSET ?",
+                f"SELECT * FROM action_logs {where} ORDER BY logged_at DESC, id DESC LIMIT ? OFFSET ?",
                 params + [page_size, offset]
             ),
         )
@@ -2636,7 +2663,7 @@ async def get_action_logs(period="all", admin_id=None, page=0, page_size=10):
         return rows, total
 
 
-async def search_action_logs(term: str = "", hour_from=None, hour_to=None, admin_id=None, page=0, page_size=10):
+async def search_action_logs(term: str = "", hour_from=None, hour_to=None, admin_id=None, page=0, page_size=10, scope="actions"):
     """جستجو در لاگ اقدامات: term توی توضیحات/نوع اقدام/تاریخ-ساعت خام و
     همچنین نام/یوزرنیم مدیرِ ثبت‌کننده جستجو می‌شه. hour_from/hour_to
     (هر دو ۰ تا ۲۳) یه فیلترِ بازه‌ی ساعتِ رخداد رو اضافه می‌کنه — با
@@ -2682,6 +2709,9 @@ async def search_action_logs(term: str = "", hour_from=None, hour_to=None, admin
         conditions.append("admin_id = ?")
         params.append(admin_id)
 
+    _sc = _scope_condition(scope)
+    if _sc:
+        conditions.append(_sc)
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     offset = max(page, 0) * page_size
     async with aiosqlite.connect(DB_PATH) as db:
@@ -2692,7 +2722,7 @@ async def search_action_logs(term: str = "", hour_from=None, hour_to=None, admin
         count_cur, rows_cur = await asyncio.gather(
             db.execute(f"SELECT COUNT(*) AS c FROM action_logs {where}", params),
             db.execute(
-                f"SELECT * FROM action_logs {where} ORDER BY logged_at DESC LIMIT ? OFFSET ?",
+                f"SELECT * FROM action_logs {where} ORDER BY logged_at DESC, id DESC LIMIT ? OFFSET ?",
                 params + [page_size, offset]
             ),
         )
@@ -2719,7 +2749,7 @@ async def get_admin_actions_on_date(admin_id: int, date_str: str):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM action_logs WHERE admin_id=? AND logged_at LIKE ? ORDER BY id ASC",
+            "SELECT * FROM action_logs WHERE admin_id=? AND logged_at LIKE ? AND action_type NOT LIKE 'trail\\_%' ESCAPE '\\' ORDER BY id ASC",
             (admin_id, f"{date_str}%")
         ) as cur:
             return await cur.fetchall()

@@ -247,26 +247,28 @@ async def hub_bootstrap(request):
     is_pishva, admin, user, caps, feats = await _require_cap(request)
     now_iso = datetime.now().isoformat()
     has_match_caps = any(c in caps for c in ("match_create", "match_edit", "match_delete", "predictions"))
-    want_top = "elo" in caps
+    # «برترین‌ها» دیگر بر پایه‌ی Elo نیست؛ بر پایه‌ی قانونِ اصلیِ rankings.py است
+    # (همان منبعِ مشترکِ ربات و تبِ «نفرات برتر»)، پس شرطش هم دیدنِ بازیکنان است.
+    want_top = "players_view" in caps
 
     async def _none():
         return None
 
-    async def _elo_map():
-        await elo.ensure_elo_table()
-        return await db.get_all_player_elo()
+    async def _standings():
+        import rankings
+        return await rankings.build_standings()
 
     # همه‌ی خوانش‌های مستقل «هم‌زمان» (قبلاً ~۱۰ خوانشِ پشتِ‌سرِهم؛ با تأخیرِ
     # شبکه‌ی Turso هر کدام چند ده تا چند صد میلی‌ثانیه بود).
     (all_players, tours, m_summary, trend, me, active_admins,
-     elo_map, pishva_mate, sys_vals) = await asyncio.gather(
+     standings, pishva_mate, sys_vals) = await asyncio.gather(
         db.get_all_players(),
         db.get_tournaments_with_counts() if has_match_caps else _none(),
         db.get_hub_matches_summary() if has_match_caps else _none(),
         db.get_hub_trend(7) if has_match_caps else _none(),
         _me_public(is_pishva, admin),
         db.get_active_admins(),
-        _elo_map() if want_top else _none(),
+        _standings() if want_top else _none(),
         _pishva_teammate_public() if not is_pishva else _none(),
         db.get_settings_with_defaults(
             {"system_status": "normal", "repair_mode": "0", "bot_update_mode": "0"}) if is_pishva else _none(),
@@ -283,7 +285,7 @@ async def hub_bootstrap(request):
         m_summary = {"pending": 0, "oldest_pending_days": 0, "done_today": 0}
         trend = {"days": [], "mix": {"white": 0, "black": 0, "draw": 0}}
 
-    top = await _top_players(active_players, elo_map=elo_map) if want_top else []
+    top = _top_players(standings) if (want_top and standings) else []
 
     # تیمِ مدیران: پیشوا همیشه اول (اگر خودِ بیننده پیشوا نیست)، بعد بقیه‌ی
     # مدیرانِ فعال بجز خودِ بیننده.
@@ -318,23 +320,21 @@ async def hub_bootstrap(request):
     })
 
 
-async def _top_players(active_players, limit=5, elo_map=None):
-    """چند نفرِ برتر بر اساسِ Elo، برای کارتِ «برترین‌ها»ی خانه‌ی هاب.
-    یک کوئریِ واحد برای Elo همه‌ی بازیکنان (نه N تا کوئریِ جدا)."""
-    if elo_map is None:
-        await elo.ensure_elo_table()
-        elo_map = await db.get_all_player_elo()
-    ranked = []
-    for p in active_players:
-        e = elo_map.get(p["id"])
-        rating = e["rating"] if e else elo.ELO_DEFAULT
-        ranked.append((rating, p))
-    ranked.sort(key=lambda x: -x[0])
+def _top_players(standings, limit=None):
+    """نفرات برتر کارتِ «برترین‌ها»ی خانه، دقیقاً بر پایه‌ی قانونِ اصلیِ rankings.py:
+      ۱) امتیاز (برد=۱، مساوی=۰٫۵) ← ۲) فقط در برابریِ امتیاز: ویژه > برتر > عادی
+      ← ۳) اخطار (ویژه‌ها معاف) ← تعدادِ مسابقات ← سختیِ حریف.
+    هیچ ترتیبِ جداگانه‌ای اینجا ساخته نمی‌شود؛ فقط خروجیِ rankings.build_standings خوانده می‌شود،
+    تا ربات، تبِ «نفرات برتر» و کارتِ خانه همیشه یک لیستِ واحد را نشان بدهند."""
+    import rankings
+    n = limit or rankings.TOP_OVERALL_N
     out = []
-    for rating, p in ranked[:limit]:
+    for r in (standings.get("overall") or [])[:n]:
         out.append({
-            "id": p["id"], "name": p["full_name"], "elo": round(rating),
-            "cls": elo.get_elo_title(rating), "elite": bool(p["is_elite"]),
+            "id": r["id"], "name": r["full_name"], "cls": r["class_name"], "pos": r["pos"],
+            "score": r["score"], "games": r["games"],
+            "w": r["wins"], "d": r["draws"], "l": r["losses"],
+            "elite": bool(r["is_elite"]), "special": bool(r["is_special"]),
         })
     return out
 

@@ -1323,6 +1323,7 @@ async def newyear_yes(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await safe_edit_message_text(query, "🔐 رمز امنیتی را وارد کنید:")
+    ctx.user_data["_audit_secret"] = True       # پیامِ بعدی (رمز) در ردیابی ثبت نمی‌شود
     return ST_NEW_YEAR_PASSWORD
 
 async def newyear_password(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

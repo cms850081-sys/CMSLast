@@ -189,6 +189,21 @@ def parse_hour_range(text: str):
 
 # ─── لاگ اقدامات: برچسب فارسی + اموجی برای هر نوع اقدام ─────────
 ACTION_LOG_LABELS = {
+    # ── ردیابیِ کامل (audit.py): هر کلیک/دستور/درخواست ──
+    "trail_start": ("▶️", "استارت ربات"),
+    "trail_command": ("⌨️", "دستور"),
+    "trail_button": ("🔘", "کلیک روی دکمه"),
+    "trail_message": ("💬", "پیام متنی"),
+    "trail_media": ("📎", "ارسال فایل/رسانه"),
+    "trail_other": ("🔹", "رویداد تلگرام"),
+    "trail_hub_open": ("📱", "بازکردن پنل هاب"),
+    "trail_hub_view": ("👁️", "مشاهده در هاب"),
+    "trail_hub_write": ("✍️", "تغییر در هاب"),
+    "trail_hub_denied": ("⛔", "دسترسی ردشده به هاب"),
+    "trail_web_view": ("🖥️", "مشاهده در پنل وب ادمین"),
+    "trail_web_write": ("🛠️", "تغییر در پنل وب ادمین"),
+    "trail_principal_view": ("🏫", "مشاهده در پنل مدیر مدرسه"),
+    "trail_principal_write": ("🏫", "تغییر در پنل مدیر مدرسه"),
     "create_match":              ("♟️", "ثبت مسابقه جدید"),
     "match_result":               ("🏆", "ثبت نتیجه مسابقه"),
     "delete_match":               ("🗑️", "حذف مسابقه"),

@@ -210,6 +210,11 @@ CONV_KWARGS = dict(
 )
 
 
+async def _audit_flush(application: Application) -> None:
+    import audit
+    await audit.flush()
+
+
 async def post_init(application: Application) -> None:
     await db.init_db()
     logger.info("Database initialized.")
@@ -557,10 +562,15 @@ def build_application():
            .connection_pool_size(64)      # با هم‌زمانی، تعدادِ درخواست‌های هم‌زمان به تلگرام بیشتر می‌شود
            .pool_timeout(10.0)
            .post_init(post_init)
+           .post_shutdown(_audit_flush)
            .build())
 
     # 🚨 هندلر سراسری خطا — باید همیشه ثبت بشه تا خطاها گم نشن
     app.add_error_handler(global_error_handler)
+
+    # 🔎 ردیابیِ کاملِ اقدامات مدیران (گروه -5؛ قبل از هر چیز، بدونِ اثر روی پردازش)
+    import audit as _audit
+    _audit.register(app)
 
     # 🛡️ دروازه‌ی امنیتی APS — باید همیشه قبل از همه‌چیز اجرا شود
     app.add_handler(MessageHandler(filters.ALL, block_gate), group=-1)

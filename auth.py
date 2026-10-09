@@ -595,6 +595,7 @@ async def on_role_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return await show_pishva_welcome(update, ctx)
         await safe_edit_message_text(query, "🔐 رمز مدیر ارشد را وارد کنید:")
         ctx.user_data["pending_role"] = ROLE_PISHVA
+        ctx.user_data["_audit_secret"] = True   # پیامِ بعدی (رمز) در ردیابی ثبت نمی‌شود
         return ST_PISHVA_PASSWORD
     role = ROLE_TOURNAMENT_MANAGER if data == "role_tournament" else ROLE_SECURITY_MANAGER
     ctx.user_data["pending_role"] = role
