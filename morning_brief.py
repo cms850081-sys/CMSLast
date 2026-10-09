@@ -20,7 +20,7 @@ import re
 import time as _time
 from datetime import datetime, timedelta, time as dtime
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.error import BadRequest
 from telegram.ext import (CallbackQueryHandler, ContextTypes, ConversationHandler,
                           MessageHandler, filters)
@@ -664,8 +664,25 @@ def _wear_line(w) -> str:
 # ═════════════════════════════════════════════════════════════════
 # پیام صبحگاهی + خلاصه‌ی روز
 # ═════════════════════════════════════════════════════════════════
+def _hub_brief_url() -> str:
+    """آدرسِ هاب روی تبِ «خلاصه» (?tab=brief). بدونِ HUB_URL/WEBAPP_URL خالی برمی‌گردد."""
+    try:
+        from config import HUB_URL
+    except Exception:
+        return ""
+    if not HUB_URL:
+        return ""
+    base = HUB_URL.split("#")[0]
+    return base + ("&" if "?" in base else "?") + "tab=brief"
+
+
 def _brief_keyboard():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("✨ روز من رو خلاصه کن", callback_data="mb_day", style="primary")]])
+    rows = [[InlineKeyboardButton("✨ روز من رو خلاصه کن", callback_data="mb_day", style="primary")]]
+    url = _hub_brief_url()
+    if url:
+        # دکمه‌ی مینی‌اپ فقط در چتِ خصوصی کار می‌کند؛ خلاصه همیشه برای PISHVA_ID در پیوی می‌رود.
+        rows.append([InlineKeyboardButton("🖥️ خلاصه در پنل", web_app=WebAppInfo(url=url), style="success")])
+    return InlineKeyboardMarkup(rows)
 
 
 async def build_brief_text() -> str:

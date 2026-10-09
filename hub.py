@@ -596,5 +596,10 @@ def register_hub_routes(app: web.Application):
         app.add_routes(hub_weather.routes)
     except Exception:
         logger.exception("hub_weather routes could not be registered")
+    try:
+        import hub_brief
+        app.add_routes(hub_brief.routes)
+    except Exception:
+        logger.exception("hub_brief routes could not be registered")
     app.add_routes(routes)
     logger.info("Hub (پنل من) routes registered.")
