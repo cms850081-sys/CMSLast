@@ -9,7 +9,7 @@ body[data-tab="brief"] #tabbar{ display:none; }
 #tab-brief{ padding:0 !important; }
 .bf{ --ink:#fff; --ink2:rgba(255,255,255,.72); --glass:rgba(255,255,255,.12); --glass2:rgba(255,255,255,.2);
   position:fixed; inset:0; z-index:30; overflow:hidden; color:var(--ink); background:#0b1020; user-select:none; -webkit-user-select:none;
-  font-feature-settings:"ss01"; touch-action:pan-y; text-shadow:0 1px 12px rgba(0,0,0,.16); }
+  font-feature-settings:"ss01"; touch-action:pan-y; }
 
 /* ─── پس‌زمینه‌ها ───────────────────────────────────────────── */
 .bf-bgs{ position:absolute; inset:0; }
@@ -19,8 +19,9 @@ body[data-tab="brief"] #tabbar{ display:none; }
 .bf-bg::after{ content:""; position:absolute; inset:-20%; background:
   radial-gradient(40% 32% at 20% 18%, var(--b1,rgba(255,255,255,.18)), transparent 70%),
   radial-gradient(46% 36% at 82% 78%, var(--b2,rgba(255,255,255,.12)), transparent 70%);
-  animation:bfDrift 16s ease-in-out infinite alternate; }
-@keyframes bfDrift{ to{ transform:translate3d(-6%,4%,0) scale(1.12); } }
+  will-change:transform; }
+.bf-bg.on::after{ animation:bfDrift 22s ease-in-out infinite alternate; }
+@keyframes bfDrift{ to{ transform:translate3d(-5%,3%,0); } }
 
 /* ─── نوارِ بالا ────────────────────────────────────────────── */
 .bf-top{ position:absolute; z-index:6; inset-inline:0; top:0; padding:calc(var(--top) + 10px) 14px 0; display:flex; flex-direction:column; gap:10px; pointer-events:none; }
@@ -54,6 +55,12 @@ body[data-tab="brief"] #tabbar{ display:none; }
 @keyframes bfOutN{ from{ opacity:1; } to{ opacity:0; transform:translate3d(9%,0,0) scale(.97); } }
 @keyframes bfOutP{ from{ opacity:1; } to{ opacity:0; transform:translate3d(-9%,0,0) scale(.97); } }
 
+/* اسلایدهای غیرفعال اصلاً رسم نمی‌شوند و انیمیشنشان (ابر، ستاره، باران…) متوقف است */
+.bf-s:not(.on):not(.out){ visibility:hidden; contain:strict; }
+.bf-s:not(.on):not(.out) *, .bf-s:not(.on):not(.out) *::before, .bf-s:not(.on):not(.out) *::after{ animation:none !important; }
+.bf-sky{ contain:layout paint; }
+.bf-sky > i, .orb, .orb::before, .wx-ic{ will-change:transform; }
+
 /* آیتم‌هایی که پشتِ‌سرهم وارد می‌شوند: --i = شماره */
 .rv{ opacity:0; transform:translate3d(0,22px,0) scale(.97); }
 .bf-s.on .rv{ animation:bfRv .65s cubic-bezier(.2,.9,.25,1.1) both; animation-delay:calc(.12s + var(--i,0) * .085s); }
@@ -70,9 +77,9 @@ body[data-tab="brief"] #tabbar{ display:none; }
 /* ═══ ۱) معرفی ═══ */
 .bf-sky{ position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
 .orb{ position:absolute; width:150px; height:150px; border-radius:50%; inset-inline-end:-30px; top:calc(var(--top) + 74px); transform:translate3d(var(--ox,0),var(--oy,0),0); }
-.orb.sun{ background:radial-gradient(circle at 38% 34%, #fffbe0 0%, #ffd23f 42%, #ff9a1a 100%); box-shadow:0 0 70px 26px rgba(255,190,60,.5); animation:bfSun 6s ease-in-out infinite; }
+.orb.sun{ background:radial-gradient(circle at 38% 34%, #fffbe0 0%, #ffd23f 42%, #ff9a1a 100%); box-shadow:0 0 40px 14px rgba(255,190,60,.45); animation:bfSun 8s ease-in-out infinite; }
 .orb.sun::before{ content:""; position:absolute; inset:-60px; border-radius:50%; background:repeating-conic-gradient(from 0deg, rgba(255,214,90,.22) 0 6deg, transparent 6deg 24deg); -webkit-mask-image:radial-gradient(circle, transparent 38%, #000 40%, transparent 72%); mask-image:radial-gradient(circle, transparent 38%, #000 40%, transparent 72%); animation:bfSpin 60s linear infinite; }
-.orb.moon{ background:radial-gradient(circle at 36% 32%, #fffef5, #dfe5f7 60%, #aab6d8 100%); box-shadow:0 0 60px 18px rgba(190,205,255,.35); animation:bfSun 7s ease-in-out infinite; }
+.orb.moon{ background:radial-gradient(circle at 36% 32%, #fffef5, #dfe5f7 60%, #aab6d8 100%); box-shadow:0 0 36px 12px rgba(190,205,255,.3); animation:bfSun 9s ease-in-out infinite; }
 .orb.moon::after{ content:""; position:absolute; width:26px; height:26px; border-radius:50%; background:rgba(120,135,180,.28); inset-inline-start:34px; top:44px; box-shadow:44px 34px 0 -4px rgba(120,135,180,.22), 10px 70px 0 -8px rgba(120,135,180,.2); }
 @keyframes bfSun{ 0%,100%{ transform:translate3d(var(--ox,0),var(--oy,0),0) scale(1); } 50%{ transform:translate3d(var(--ox,0),calc(var(--oy,0px) - 8px),0) scale(1.05); } }
 @keyframes bfSpin{ to{ transform:rotate(360deg); } }
@@ -95,8 +102,8 @@ body[data-tab="brief"] #tabbar{ display:none; }
 @keyframes bfHint{ 0%,100%{ opacity:.35; transform:translateX(0); } 50%{ opacity:1; transform:translateX(-6px); } }
 
 /* ═══ نکته‌های هوشمند (رهگشا) ═══ */
-.ai-orb{ width:54px; height:54px; border-radius:18px; display:grid; place-items:center; background:conic-gradient(from 0deg,#ff6a74,#ffd23f,#4dabf7,#a78bfa,#ff6a74); animation:bfSpin 6s linear infinite; }
-.ai-orb i{ width:46px; height:46px; border-radius:15px; background:#150d24; display:grid; place-items:center; animation:bfSpin 6s linear infinite reverse; }
+.ai-orb{ width:54px; height:54px; border-radius:18px; display:grid; place-items:center; background:conic-gradient(from 0deg,#16c784,#12b5b0,#2f80ed,#5eead4,#16c784); animation:bfSpin 10s linear infinite; will-change:transform; }
+.ai-orb i{ width:46px; height:46px; border-radius:15px; background:#07201f; display:grid; place-items:center; animation:bfSpin 10s linear infinite reverse; will-change:transform; }
 .ai-orb .ic{ width:26px; height:26px; color:#ffd23f; stroke-width:1.6; }
 .tip{ display:flex; gap:12px; align-items:flex-start; padding:14px 16px; border-radius:20px; background:var(--glass); font-size:17px; line-height:1.7; font-weight:600; }
 .tip em{ flex:none; width:26px; height:26px; margin-top:2px; border-radius:50%; background:linear-gradient(135deg,#ff6a74,#ffb347); display:grid; place-items:center; font-style:normal; font-size:13px; font-weight:800; }
@@ -153,7 +160,7 @@ body[data-tab="brief"] #tabbar{ display:none; }
 
 /* ═══ هوا ═══ */
 .wx-hero{ display:flex; align-items:center; gap:6px; }
-.wx-ic{ width:92px; height:92px; flex:none; filter:drop-shadow(0 10px 18px rgba(0,0,0,.28)); animation:bfFloat 5s ease-in-out infinite; }
+.wx-ic{ width:92px; height:92px; flex:none; animation:bfFloat 6s ease-in-out infinite; }
 @keyframes bfFloat{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-8px); } }
 .wx-t{ direction:ltr; text-align:start; font-size:72px; font-weight:800; line-height:1; letter-spacing:-3px; }
 .wx-t sup{ font-size:34px; letter-spacing:0; vertical-align:top; position:relative; top:10px; }

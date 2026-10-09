@@ -73,8 +73,8 @@
     orb.style.setProperty('--oy', Math.round((1 - Math.sin(clamp(p, 0, 1) * Math.PI)) * 46) + 'px');
     var box = div('bf-sky', [orb]);
     var i, c;
-    for (i = 0; i < 4; i++) { c = h('i', { class: 'cloud' }); c.style.cssText = '--y:' + Math.round(rnd(14, 46)) + '%;--t:' + Math.round(rnd(30, 56)) + 's;--dl:-' + Math.round(rnd(0, 40)) + 's;opacity:' + rnd(.5, 1).toFixed(2); box.append(c); }
-    if (!day || d.hour < 7) for (i = 0; i < 34; i++) { c = h('i', { class: 'star' }); c.style.cssText = 'left:' + rnd(2, 98).toFixed(1) + '%;top:' + rnd(3, 55).toFixed(1) + '%;--t:' + rnd(2, 5).toFixed(1) + 's;--dl:-' + rnd(0, 4).toFixed(1) + 's'; box.append(c); }
+    for (i = 0; i < 3; i++) { c = h('i', { class: 'cloud' }); c.style.cssText = '--y:' + Math.round(rnd(14, 46)) + '%;--t:' + Math.round(rnd(30, 56)) + 's;--dl:-' + Math.round(rnd(0, 40)) + 's;opacity:' + rnd(.5, 1).toFixed(2); box.append(c); }
+    if (!day || d.hour < 7) for (i = 0; i < 16; i++) { c = h('i', { class: 'star' }); c.style.cssText = 'left:' + rnd(2, 98).toFixed(1) + '%;top:' + rnd(3, 55).toFixed(1) + '%;--t:' + rnd(2, 5).toFixed(1) + 's;--dl:-' + rnd(0, 4).toFixed(1) + 's'; box.append(c); }
     return box;
   }
 
@@ -200,13 +200,13 @@
     var sky = div('bf-sky', []);
     var i, p;
     if (kind === 'rain' || kind === 'drizzle' || kind === 'storm' || kind === 'snow') {
-      for (i = 0; i < (kind === 'snow' ? 24 : 30); i++) {
+      for (i = 0; i < (kind === 'snow' ? 12 : 16); i++) {
         p = h('i', { class: 'pt' + (kind === 'snow' ? ' snow' : '') });
         p.style.cssText = '--x:' + rnd(0, 100).toFixed(1) + '%;--t:' + (kind === 'snow' ? rnd(3.5, 6) : rnd(.7, 1.3)).toFixed(2) + 's;--dl:-' + rnd(0, 5).toFixed(2) + 's';
         sky.append(p);
       }
     }
-    for (i = 0; i < 3; i++) { p = h('i', { class: 'cloud' }); p.style.cssText = '--y:' + Math.round(rnd(12, 40)) + '%;--t:' + Math.round(rnd(34, 60)) + 's;--dl:-' + Math.round(rnd(0, 40)) + 's'; sky.append(p); }
+    for (i = 0; i < 2; i++) { p = h('i', { class: 'cloud' }); p.style.cssText = '--y:' + Math.round(rnd(12, 40)) + '%;--t:' + Math.round(rnd(34, 60)) + 's;--dl:-' + Math.round(rnd(0, 40)) + 's'; sky.append(p); }
     s.el.append(sky, head('🌤 هوای ' + (w.city || 'سرپل‌ذهاب'), w.stale ? 'قدیمی' : null));
     s.el.append(R(div('wx-hero', [icoSvg, h('div', null, h('div', { class: 'wx-t' }, cu(Math.round(n.temp == null ? 0 : n.temp)), h('sup', { text: '°' })),
       h('div', { class: 'wx-l', text: n.label || '' }),
@@ -268,7 +268,7 @@
   function sEnd() {
     var s = slide('end', 0, ['#2a0a10', '#a11019', '#ff6a74']);
     var box = div('bf-sky', []), cols = ['#ffd23f', '#ffffff', '#4dabf7', '#ff6a74', '#69db7c'], i, c;
-    for (i = 0; i < 22; i++) { c = h('i', { class: 'spark' }); c.style.cssText = '--x:' + rnd(0, 100).toFixed(1) + '%;--c:' + cols[i % 5] + ';--t:' + rnd(3.5, 6).toFixed(1) + 's;--dl:-' + rnd(0, 6).toFixed(1) + 's;--dx:' + Math.round(rnd(-50, 50)) + 'px'; box.append(c); }
+    for (i = 0; i < 12; i++) { c = h('i', { class: 'spark' }); c.style.cssText = '--x:' + rnd(0, 100).toFixed(1) + '%;--c:' + cols[i % 5] + ';--t:' + rnd(3.5, 6).toFixed(1) + 's;--dl:-' + rnd(0, 6).toFixed(1) + 's;--dx:' + Math.round(rnd(-50, 50)) + 'px'; box.append(c); }
     s.el.append(box, R(div('end', [h('div', { class: 'big-e', text: '🌟' }), h('h2', { class: 'bf-lead', text: 'روزِ خوبی داشته باشی، ' + D.name }), h('p', { class: 'bf-sub', text: 'خلاصه‌ی امروز تمام شد.' }),
       div('end-b', [h('button', { type: 'button', text: 'بازگشت به پنل', onclick: function () { hx.tap(); goHome(); } }),
         h('button', { type: 'button', class: 'g', text: 'پخش دوباره', onclick: function () { hx.tap(); show(0, 1); } })])])));

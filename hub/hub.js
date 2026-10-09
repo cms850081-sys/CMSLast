@@ -271,8 +271,10 @@
     if (!quick.length) quick.push(q('مدیریت', 'gear', '', function () { go('manage'); }));
     if (can('calendar')) quick.push(q('تقویم', 'calendar', '', function () { withManage(function (mm) { mm.calendarView(); }); }));
     if (can('comms')) quick.push(q('مخابرات', 'chat', '', function () { withManage(function (mm) { mm.commsView(); }); }));
-    frag.append(h('nav', { class: 'quick', 'aria-label': 'میانبرها' }, quick.slice(0, 4)));
-    if (B.me && B.me.role === 'pishva') frag.append(briefCard());
+    quick = quick.slice(0, 4);
+    var isP = !!(B.me && B.me.role === 'pishva');
+    if (isP) quick.splice(Math.ceil(quick.length / 2), 0, briefTile());
+    frag.append(h('nav', { class: 'quick' + (isP ? ' q5' : ''), 'aria-label': 'میانبرها' }, quick));
     frag.append(weatherCard());
 
     /* خلاصه */
@@ -765,11 +767,12 @@
     s.onerror = function () { bfState = 0; toast('بارگذاری خلاصه ناموفق بود'); if (cur === 'brief') go('home'); };
     doc.head.append(s);
   }
-  function briefCard() {
-    return h('button', { type: 'button', class: 'bfc', 'aria-label': 'خلاصه‌ی امروز', onclick: function () { hx.tap(); go('brief'); } },
-      h('span', { class: 'bfc-ic' }, ic('sparkle')),
-      h('span', { class: 'bfc-t' }, h('b', { text: 'خلاصه‌ی امروز' }), h('small', { text: 'مسابقه‌ها، هوا و برنامه‌ی درسی — در یک نگاه' })),
-      h('span', { class: 'bfc-go' }, ic('chev')));
+  function briefTile() {
+    return h('button', { type: 'button', class: 'q-ai', 'aria-label': 'خلاصه‌ی امروز', onclick: function () { hx.tap(); go('brief'); } },
+      h('span', { class: 'q-ic ai' },
+        h('i', { class: 'ai-ring' }), h('i', { class: 'ai-ring r2' }),
+        ic('sparkle'),
+        h('i', { class: 'ai-st s1' }), h('i', { class: 'ai-st s2' })));
   }
 
   /* ─── آب‌وهوا (تنبل) ───────────────────────────────────────── */
@@ -822,7 +825,6 @@
   }
   function wxmTint(d) {
     var n = d.now, t = n.temp == null ? 20 : n.temp;
-    if (d.air && d.air.dust >= 100) return '210,156,90';
     if (!n.is_day && (n.kind === 'clear' || n.kind === 'partly')) return '124,140,255';
     if ((n.kind === 'clear' || n.kind === 'partly') && t >= 31) return '255,107,53';
     if ((n.kind === 'clear' || n.kind === 'partly') && t <= 3) return '116,192,252';
@@ -854,13 +856,12 @@
      وقتی کارت دیده نمی‌شود، صفحه در پس‌زمینه است یا reduced-motion فعال است، انیمیشن می‌ایستد. */
   function wxmScene(d) {
     var n = d.now, t = n.temp == null ? 20 : n.temp, feels = n.feels == null ? t : n.feels;
-    var wind = n.wind || 0, gust = n.gust || 0, dust = !!(d.air && d.air.dust >= 100);
+    var wind = n.wind || 0, gust = n.gust || 0;
     var clearish = n.kind === 'clear' || n.kind === 'partly';
     if (n.kind === 'storm') return 'storm';
     if (n.kind === 'snow') return 'snow';
     if (n.kind === 'rain') return 'rain';
     if (n.kind === 'drizzle') return 'drizzle';
-    if (dust) return 'dust';
     if (n.kind === 'fog') return 'fog';
     if (wind >= 45 || gust >= 65) return 'wind';
     if (clearish && n.is_day && feels >= 33) return 'hot';
@@ -875,46 +876,43 @@
     function add(cls, css) { box.append(h('i', { class: cls, style: css })); }
     var i, wind = d && d.now ? (d.now.wind || 0) : 0;
     if (scene === 'rain' || scene === 'storm' || scene === 'drizzle') {
-      var cnt = scene === 'storm' ? 30 : scene === 'rain' ? 24 : 14;
+      var cnt = scene === 'storm' ? 14 : scene === 'rain' ? 12 : 8;
       add('cl dark', 'left:-10%;width:60%;--d:26s;--dl:-4s');
       add('cl dark', 'left:35%;width:70%;--d:34s;--dl:-18s');
       for (i = 0; i < cnt; i++) {
-        add('dr', 'left:' + r(-5, 105).toFixed(1) + '%;animation-duration:' + (scene === 'drizzle' ? r(1.1, 1.8) : r(0.55, 1.0)).toFixed(2) +
+        add('dr', 'left:' + r(-5, 105).toFixed(1) + '%;animation-duration:' + (scene === 'drizzle' ? r(2.2, 3.2) : r(1.4, 2.1)).toFixed(2) +
           's;animation-delay:-' + r(0, 1.8).toFixed(2) + 's;opacity:' + r(0.35, 0.85).toFixed(2) + ';height:' + (scene === 'drizzle' ? r(8, 12) : r(12, 20)).toFixed(0) + 'px');
       }
-      for (i = 0; i < 4; i++) add('sp', 'left:' + r(5, 95).toFixed(0) + '%;animation-delay:-' + r(0, 1.2).toFixed(2) + 's');
+      for (i = 0; i < 2; i++) add('sp', 'left:' + r(5, 95).toFixed(0) + '%;animation-delay:-' + r(0, 1.2).toFixed(2) + 's');
       if (scene === 'storm') { add('flash', ''); box.append(raw('<svg class="bolt" viewBox="0 0 40 80"><path d="M24 0 6 44h13L12 80 36 30H22z"/></svg>')); }
     } else if (scene === 'snow') {
       add('cl', 'left:-10%;width:70%;--d:40s;--dl:-8s');
-      for (i = 0; i < 20; i++) {
+      for (i = 0; i < 12; i++) {
         var z = r(2, 5);
-        add('fl', 'left:' + r(0, 100).toFixed(1) + '%;width:' + z.toFixed(1) + 'px;height:' + z.toFixed(1) + 'px;animation-duration:' + r(4, 8).toFixed(1) +
-          's;animation-delay:-' + r(0, 8).toFixed(1) + 's;opacity:' + r(0.55, 1).toFixed(2));
+        add('fl', 'left:' + r(0, 100).toFixed(1) + '%;width:' + z.toFixed(1) + 'px;height:' + z.toFixed(1) + 'px;animation-duration:' + r(8, 13).toFixed(1) +
+          's;animation-delay:-' + r(0, 12).toFixed(1) + 's;opacity:' + r(0.55, 1).toFixed(2));
       }
     } else if (scene === 'cold') {
       add('frost', '');
-      for (i = 0; i < 16; i++) add('tw ice', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(6, 90).toFixed(0) + '%;animation-delay:-' + r(0, 3).toFixed(2) + 's;animation-duration:' + r(1.8, 3.4).toFixed(2) + 's');
+      for (i = 0; i < 8; i++) add('tw ice', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(6, 90).toFixed(0) + '%;animation-delay:-' + r(0, 3).toFixed(2) + 's;animation-duration:' + r(1.8, 3.4).toFixed(2) + 's');
       add('mist', 'animation-duration:16s'); add('mist m2', 'animation-duration:23s');
     } else if (scene === 'hot') {
       add('sunhalo', ''); add('rays', '');
-      add('hz', 'top:22%;animation-duration:3.6s'); add('hz', 'top:48%;animation-duration:4.4s;animation-delay:-1.2s'); add('hz', 'top:72%;animation-duration:5s;animation-delay:-2.4s');
+      
     } else if (scene === 'clear') {
       add('sunhalo soft', ''); add('rays soft', '');
       add('cl light', 'left:-20%;width:45%;--d:60s;--dl:-20s');
     } else if (scene === 'night') {
       add('moonglow', '');
-      for (i = 0; i < 22; i++) add('tw', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(4, 92).toFixed(0) + '%;animation-delay:-' + r(0, 4).toFixed(2) + 's;animation-duration:' + r(1.6, 3.8).toFixed(2) + 's');
+      for (i = 0; i < 12; i++) add('tw', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(4, 92).toFixed(0) + '%;animation-delay:-' + r(0, 4).toFixed(2) + 's;animation-duration:' + r(1.6, 3.8).toFixed(2) + 's');
       add('shoot', '');
     } else if (scene === 'cloud') {
       add('cl', 'left:-30%;width:65%;--d:30s;--dl:-2s'); add('cl', 'left:20%;width:85%;top:30%;--d:44s;--dl:-22s'); add('cl', 'left:-10%;width:55%;top:52%;--d:36s;--dl:-12s');
     } else if (scene === 'fog') {
       add('mist', 'animation-duration:18s'); add('mist m2', 'animation-duration:26s'); add('mist m3', 'animation-duration:34s');
-    } else if (scene === 'dust') {
-      add('haze', '');
-      for (i = 0; i < 16; i++) add('ds', 'top:' + r(4, 94).toFixed(0) + '%;width:' + r(40, 100).toFixed(0) + 'px;animation-duration:' + r(1.8, 3.6).toFixed(2) + 's;animation-delay:-' + r(0, 3.6).toFixed(2) + 's');
     } else if (scene === 'wind') {
-      add('cl dark', 'left:-20%;width:60%;--d:14s;--dl:-3s');
-      for (i = 0; i < 16; i++) add('ws', 'top:' + r(4, 94).toFixed(0) + '%;width:' + r(50, 120).toFixed(0) + 'px;animation-duration:' + clampN(1.9 - wind / 60, 0.7, 1.9).toFixed(2) + 's;animation-delay:-' + r(0, 2).toFixed(2) + 's');
+      add('cl', 'left:-20%;width:60%;--d:32s;--dl:-3s');
+      for (i = 0; i < 6; i++) add('ws', 'top:' + r(4, 94).toFixed(0) + '%;width:' + r(50, 120).toFixed(0) + 'px;animation-duration:' + clampN(5.2 - wind / 25, 3, 5.2).toFixed(2) + 's;animation-delay:-' + r(0, 2).toFixed(2) + 's');
     }
     return box;
   }
