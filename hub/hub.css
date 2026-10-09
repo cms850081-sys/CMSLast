@@ -391,3 +391,18 @@ input[type=date].inp{ text-align:right; direction:ltr; }
 .sysm-t small{ font-size:12px; color:var(--hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .sysm-go{ flex:none; color:var(--hint); display:grid; place-items:center; }
 .sysm-go .ic{ width:16px; height:16px; transform:scaleX(-1); }
+
+/* ─── کارتِ «خلاصه‌ی امروز» در خانه (فقط مدیر ارشد) ─── */
+.bfc{ position:relative; overflow:hidden; display:flex; align-items:center; gap:12px; width:calc(100% - 32px); margin:0 16px 14px; padding:12px 14px; min-height:64px; border-radius:20px; text-align:start; color:#fff;
+  background:linear-gradient(120deg,#6a3cff 0%,#c4121f 55%,#ff9a3c 100%); background-size:180% 100%; animation:bfcShift 7s ease-in-out infinite alternate; transition:transform .2s; }
+.bfc:active{ transform:scale(.98); }
+.bfc::after{ content:""; position:absolute; inset:0; background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.28) 50%,transparent 65%); transform:translateX(120%); animation:bfcSheen 4.5s ease-in-out infinite; }
+.bfc-ic{ flex:none; width:44px; height:44px; border-radius:15px; background:rgba(255,255,255,.2); display:grid; place-items:center; }
+.bfc-ic .ic{ width:26px; height:26px; animation:bfcTwinkle 2.6s ease-in-out infinite; }
+.bfc-t{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.bfc-t b{ font-size:16px; font-weight:800; } .bfc-t small{ font-size:12px; opacity:.85; }
+.bfc-go{ flex:none; opacity:.9; }
+@keyframes bfcShift{ to{ background-position:100% 0; } }
+@keyframes bfcSheen{ 0%,55%{ transform:translateX(120%); } 100%{ transform:translateX(-120%); } }
+@keyframes bfcTwinkle{ 0%,100%{ transform:scale(1) rotate(0); } 50%{ transform:scale(1.18) rotate(14deg); } }
+@media (prefers-reduced-motion:reduce){ .bfc,.bfc::after,.bfc-ic .ic{ animation:none; } }

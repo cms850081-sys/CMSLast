@@ -272,6 +272,7 @@
     if (can('calendar')) quick.push(q('تقویم', 'calendar', '', function () { withManage(function (mm) { mm.calendarView(); }); }));
     if (can('comms')) quick.push(q('مخابرات', 'chat', '', function () { withManage(function (mm) { mm.commsView(); }); }));
     frag.append(h('nav', { class: 'quick', 'aria-label': 'میانبرها' }, quick.slice(0, 4)));
+    if (B.me && B.me.role === 'pishva') frag.append(briefCard());
     frag.append(weatherCard());
 
     /* خلاصه */
@@ -741,6 +742,31 @@
     doc.head.append(s);
   }
 
+  /* ─── خلاصه در پنل (تنبل؛ فقط مدیر ارشد) ─── */
+  var bfState = 0; // 0 نه، 1 در حال بارگذاری، 2 آماده
+  function loadBrief() {
+    if (bfState) return;
+    bfState = 1;
+    if (!doc.getElementById('bf-css')) {
+      var l = doc.createElement('link'); l.id = 'bf-css'; l.rel = 'stylesheet'; l.href = 'brief.css?v=' + V; doc.head.append(l);
+    }
+    var s = doc.createElement('script');
+    s.src = 'brief.js?v=' + V;
+    s.onload = function () {
+      bfState = 2;
+      window.HubBrief.mount($('#tab-brief'), { h: h, ic: ic, hx: hx, tg: tg, toast: toast, LS: LS, api: api, goHome: function () { go('home'); } });
+      if (cur === 'brief' && window.HubBrief.onShow) window.HubBrief.onShow();
+    };
+    s.onerror = function () { bfState = 0; toast('بارگذاری خلاصه ناموفق بود'); if (cur === 'brief') go('home'); };
+    doc.head.append(s);
+  }
+  function briefCard() {
+    return h('button', { type: 'button', class: 'bfc', 'aria-label': 'خلاصه‌ی امروز', onclick: function () { hx.tap(); go('brief'); } },
+      h('span', { class: 'bfc-ic' }, ic('sparkle')),
+      h('span', { class: 'bfc-t' }, h('b', { text: 'خلاصه‌ی امروز' }), h('small', { text: 'مسابقه‌ها، هوا و برنامه‌ی درسی — در یک نگاه' })),
+      h('span', { class: 'bfc-go' }, ic('chev')));
+  }
+
   /* ─── آب‌وهوا (تنبل) ───────────────────────────────────────── */
   var wxState = 0; // 0 نه، 1 در حال بارگذاری، 2 آماده
   function loadWeather() {
@@ -863,7 +889,7 @@
   };
 
   /* ─── ناوبری ─────────────────────────────────────────────── */
-  var panels = { home: $('#tab-home'), players: $('#tab-players'), tours: $('#tab-tours'), manage: $('#tab-manage'), clock: $('#tab-clock'), weather: $('#tab-weather'), me: $('#tab-me') };
+  var panels = { home: $('#tab-home'), players: $('#tab-players'), tours: $('#tab-tours'), manage: $('#tab-manage'), clock: $('#tab-clock'), weather: $('#tab-weather'), brief: $('#tab-brief'), me: $('#tab-me') };
   var bar = $('#tabbar'), pill = $('#pill');
   /* حباب قرمزِ زیرِ تبِ فعال.
      قبلاً با getBoundingClientRect اندازه‌گیری می‌شد؛ آن مقدار «transform» را هم شامل می‌شود:
@@ -889,7 +915,7 @@
     cur = name;
     doc.body.dataset.tab = name;
     panels[name].hidden = false;
-    bar.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === (name === 'weather' ? 'home' : name)); });
+    bar.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === ((name === 'weather' || name === 'brief') ? 'home' : name)); });
     movePill();
     bar.querySelectorAll('button.pop').forEach(function (x) { x.classList.remove('pop'); });
     if (!built[name]) {
@@ -899,6 +925,7 @@
       else if (name === 'manage') buildManage();
       else if (name === 'clock') loadClock();
       else if (name === 'weather') loadWeather();
+      else if (name === 'brief') loadBrief();
     } else if (name === 'players') { applyPlayers(); ensurePlayers(); }
     else if (name === 'manage' && M) M.renderTab();
     window.scrollTo(0, scrollPos[name] || 0);
@@ -910,6 +937,8 @@
     if (name === 'clock' && window.HubClock && window.HubClock.onShow) window.HubClock.onShow();
     if (prev === 'weather') { popBack(); if (window.HubWeather && window.HubWeather.onHide) window.HubWeather.onHide(); }
     if (name === 'weather') { pushBack(function () { go('home'); }); if (window.HubWeather && window.HubWeather.onShow) window.HubWeather.onShow(); }
+    if (prev === 'brief') { popBack(); if (window.HubBrief && window.HubBrief.onHide) window.HubBrief.onHide(); }
+    if (name === 'brief') { pushBack(function () { go('home'); }); if (window.HubBrief && window.HubBrief.onShow) window.HubBrief.onShow(); }
   }
   bar.addEventListener('click', function (e) {
     var b = e.target.closest('button[data-go]'); if (b) go(b.dataset.go);
@@ -950,7 +979,8 @@
       tours: hasMatchCaps(),
       manage: canAny('player_register', 'match_create', 'match_edit', 'match_delete', 'predictions', 'elo', 'comms', 'classes', 'teams',
                      'calendar', 'admins_manage', 'settings', 'pishva_panel'),
-      clock: true, weather: true, me: true
+      clock: true, weather: true, me: true,
+      brief: !!(S.boot.me && S.boot.me.role === 'pishva')
     };
     var n = 0;
     bar.querySelectorAll('button[data-go]').forEach(function (b) {
@@ -997,6 +1027,13 @@
     var cached = LS.get(K_BOOT);
     if (cached && cached.me) { S.boot = cached; renderAll(); }
     refresh(true).then(function () {
+      try {
+        var q = new URLSearchParams(location.search), sp0 = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
+        if ((q.get('tab') === 'brief' || sp0 === 'brief') && S.boot && S.boot.me && S.boot.me.role === 'pishva') {
+          go('brief');
+          if (history.replaceState) history.replaceState(null, '', location.pathname);
+        }
+      } catch (e) {}
       var idle = window.requestIdleCallback || function (f) { setTimeout(f, 800); };
       idle(function () { if (!P.rows && canAny('players_view', 'player_register', 'match_create', 'match_edit')) { var c = LS.get(K_PL); if (c) setPlayers(c); ensurePlayers(true); } });
       idle(function () { loadClockLater(); loadWeatherLater(); });
