@@ -244,38 +244,64 @@
   }
   function riconEl(name, bg) { return h('div', { class: 'r-ic ' + bg }, ic(name)); }
 
-  /* ─── خانه ────────────────────────────────────────────────── */
+  /* ─── خانه ──────────────────────────────────────────────────
+     قبلاً با هر رفرش (کشِ محلی، پاسخِ شبکه، هر جابه‌جاییِ تب، برگشت به برنامه) کلِ خانه از نو ساخته می‌شد:
+     کارتِ آب‌وهوا با همه‌ی انیمیشن‌هایش نابود و دوباره ساخته می‌شد، نمودارِ روند از نو انیمیت می‌شد و
+     این‌ها دقیقاً وسطِ اسکرول/جابه‌جاییِ تب اتفاق می‌افتاد = لگ.
+     حالا: بالای صفحه (میانبرها + آب‌وهوا) فقط یک‌بار ساخته می‌شود، میانبرها فقط وقتی دسترسی‌ها عوض شوند
+     و بخشِ داده (خلاصه/روند/برترین‌ها) فقط وقتی خودِ داده واقعاً تغییر کرده باشد. */
+  var homeEls = null, homeSigQ = '', homeSigD = '';
+  function homeParts() {
+    if (homeEls) return homeEls;
+    var top = h('div', { id: 'home-top' }), data = h('div', { id: 'home-data' });
+    $('#home-body').replaceChildren(top, data);
+    homeEls = { top: top, data: data, quick: null, wx: null };
+    return homeEls;
+  }
+  function setTxt(el, t) { if (el && el.textContent !== t) el.textContent = t; }
   function renderHome() {
     var B = S.boot; if (!B) return;
     var sm = B.summary, m = sm.matches;
-    $('#hello').textContent = 'سلام، ' + (B.me.name || 'مدیر');
     var sub;
     if (m.pending > 0) sub = m.pending + ' مسابقه منتظر ثبت نتیجه است' + (m.done_today ? ' و امروز ' + m.done_today + ' نتیجه ثبت شده.' : '.');
     else if (m.done_today > 0) sub = 'همه‌چیز به‌روز است؛ امروز ' + m.done_today + ' نتیجه ثبت شده.';
     else sub = 'همه‌چیز به‌روز است. مسابقه‌ی بازی نداریم.';
-    $('#hello-sub').textContent = hasMatchCaps() ? sub : 'به پنل مدیریت خوش آمدید.';
+    setTxt($('#hello'), 'سلام، ' + (B.me.name || 'مدیر'));
+    setTxt($('#hello-sub'), hasMatchCaps() ? sub : 'به پنل مدیریت خوش آمدید.');
 
-    var body = $('#home-body');
-    var frag = doc.createDocumentFragment();
-
-    /* میانبرها */
-    function q(label, icon, cls, fn) {
-      return h('button', { type: 'button', onclick: fn }, h('span', { class: 'q-ic ' + (cls || '') }, ic(icon)), label);
-    }
+    var E = homeParts();
     var hasP = canAny('players_view', 'player_register'), hasT = hasMatchCaps();
-    var quick = [];
-    if (hasP) quick.push(q('بازیکنان', 'users', '', function () { go('players', { f: 'all' }); }));
-    if (hasT) quick.push(q('مسابقات', 'trophy', '', function () { go('tours'); }));
-    if (hasP) quick.push(q('برترین‌ها', 'crown', 'gold', function () { go('players', { f: 'elite' }); }));
-    if (hasP) quick.push(q('نیروهای ویژه', 'bolt', '', function () { go('players', { f: 'special' }); }));
-    if (!quick.length) quick.push(q('مدیریت', 'gear', '', function () { go('manage'); }));
-    if (can('calendar')) quick.push(q('تقویم', 'calendar', '', function () { withManage(function (mm) { mm.calendarView(); }); }));
-    if (can('comms')) quick.push(q('مخابرات', 'chat', '', function () { withManage(function (mm) { mm.commsView(); }); }));
-    quick = quick.slice(0, 4);
     var isP = !!(B.me && B.me.role === 'pishva');
-    if (isP) quick.splice(Math.ceil(quick.length / 2), 0, briefTile());
-    frag.append(h('nav', { class: 'quick' + (isP ? ' q5' : ''), 'aria-label': 'میانبرها' }, quick));
-    frag.append(weatherCard());
+
+    /* میانبرها: فقط وقتی دسترسی/نقش عوض شده */
+    var sigQ = (B.caps || []).join(',') + '|' + (isP ? 1 : 0);
+    if (sigQ !== homeSigQ || !E.quick) {
+      homeSigQ = sigQ;
+      var q = function (label, icon, cls, fn) {
+        return h('button', { type: 'button', onclick: fn }, h('span', { class: 'q-ic ' + (cls || '') }, ic(icon)), label);
+      };
+      var quick = [];
+      if (hasP) quick.push(q('بازیکنان', 'users', '', function () { go('players', { f: 'all' }); }));
+      if (hasT) quick.push(q('مسابقات', 'trophy', '', function () { go('tours'); }));
+      if (hasP) quick.push(q('برترین‌ها', 'crown', 'gold', function () { go('players', { f: 'elite' }); }));
+      if (hasP) quick.push(q('نیروهای ویژه', 'bolt', '', function () { go('players', { f: 'special' }); }));
+      if (!quick.length) quick.push(q('مدیریت', 'gear', '', function () { go('manage'); }));
+      if (can('calendar')) quick.push(q('تقویم', 'calendar', '', function () { withManage(function (mm) { mm.calendarView(); }); }));
+      if (can('comms')) quick.push(q('مخابرات', 'chat', '', function () { withManage(function (mm) { mm.commsView(); }); }));
+      quick = quick.slice(0, 4);
+      if (isP) quick.splice(Math.ceil(quick.length / 2), 0, briefTile());
+      var nav = h('nav', { class: 'quick' + (isP ? ' q5' : ''), 'aria-label': 'میانبرها' }, quick);
+      if (E.quick) E.top.replaceChild(nav, E.quick); else E.top.insertBefore(nav, E.top.firstChild);
+      E.quick = nav;
+    }
+    /* کارتِ آب‌وهوا: یک نمونه برای همیشه (انیمیشن‌هایش هیچ‌وقت از نو شروع نمی‌شوند) */
+    if (!E.wx) { E.wx = weatherCard(); E.top.append(E.wx); }
+
+    /* بخشِ داده: اگر چیزی عوض نشده، هیچ کاری نکن */
+    var sigD = JSON.stringify([sm, B.trend, B.top, hasT, hasP]);
+    if (sigD === homeSigD) return;
+    homeSigD = sigD;
+    var frag = doc.createDocumentFragment();
 
     /* خلاصه */
     var pending = m.pending > 0
@@ -292,28 +318,31 @@
               tap: hasP ? function () { go('players', { f: 'all' }); } : null }));
     frag.append(secTitle('خلاصه'), h('div', { class: 'group' }, sumRows));
 
-    /* روندها */
-    if (hasT && B.trend && B.trend.days.length) frag.append(secTitle('روند ۷ روز اخیر', h('small', { text: 'نتیجه‌های ثبت‌شده' })), trendCard(B.trend));
+    /* روندها (زیرِ صفحه‌ی اول: رندرش تا نزدیک‌شدنِ اسکرول عقب می‌افتد) */
+    if (hasT && B.trend && B.trend.days.length) {
+      var tc = trendCard(B.trend); tc.classList.add('cv', 'cv-trend');
+      frag.append(secTitle('روند ۷ روز اخیر', h('small', { text: 'نتیجه‌های ثبت‌شده' })), tc);
+    }
 
     /* برترین‌ها — بر پایه‌ی قانونِ اصلیِ رتبه‌بندی (امتیاز ← ویژه/برتر در برابری ← اخطار ← تعداد بازی ← سختیِ حریف)؛
        همان فهرستِ تبِ «نفرات برتر» و ربات */
     if (B.top && B.top.length) {
-      frag.append(secTitle('برترین‌ها', h('button', { type: 'button', text: 'همه', onclick: function () { go('players', { f: 'top' }); } })),
-        h('div', { class: 'group' }, B.top.map(function (p, i) {
-          var tag = p.special ? 'ویژه' : p.elite ? 'برتر' : '';
-          var subParts = [];
-          if (p.cls) subParts.push(p.cls);
-          if (tag) subParts.push(tag);
-          subParts.push(p.games ? num(p.score) + ' امتیاز · ' + num(p.games) + ' بازی' : 'هنوز بازی نکرده');
-          return row({
-            lead: h('span', { class: 'rank num' + (i < 3 ? ' top' : ''), text: p.pos || (i + 1) }),
-            title: p.name,
-            sub: subParts.join(' · '),
-            tap: function () { openPlayer(p.id, { name: p.name, cls: p.cls, elite: p.elite, special: p.special, games: p.games }); }
-          });
-        })));
+      var tl = h('div', { class: 'group cv cv-top' }, B.top.map(function (p, i) {
+        var tag = p.special ? 'ویژه' : p.elite ? 'برتر' : '';
+        var subParts = [];
+        if (p.cls) subParts.push(p.cls);
+        if (tag) subParts.push(tag);
+        subParts.push(p.games ? num(p.score) + ' امتیاز · ' + num(p.games) + ' بازی' : 'هنوز بازی نکرده');
+        return row({
+          lead: h('span', { class: 'rank num' + (i < 3 ? ' top' : ''), text: p.pos || (i + 1) }),
+          title: p.name,
+          sub: subParts.join(' · '),
+          tap: function () { openPlayer(p.id, { name: p.name, cls: p.cls, elite: p.elite, special: p.special, games: p.games }); }
+        });
+      }));
+      frag.append(secTitle('برترین‌ها', h('button', { type: 'button', text: 'همه', onclick: function () { go('players', { f: 'top' }); } })), tl);
     }
-    body.replaceChildren(frag);
+    E.data.replaceChildren(frag);
   }
 
   function trendCard(t) {
@@ -876,7 +905,7 @@
     function add(cls, css) { box.append(h('i', { class: cls, style: css })); }
     var i, wind = d && d.now ? (d.now.wind || 0) : 0;
     if (scene === 'rain' || scene === 'storm' || scene === 'drizzle') {
-      var cnt = scene === 'storm' ? 14 : scene === 'rain' ? 12 : 8;
+      var cnt = scene === 'storm' ? 9 : scene === 'rain' ? 8 : 5;
       add('cl dark', 'left:-10%;width:60%;--d:26s;--dl:-4s');
       add('cl dark', 'left:35%;width:70%;--d:34s;--dl:-18s');
       for (i = 0; i < cnt; i++) {
@@ -887,14 +916,14 @@
       if (scene === 'storm') { add('flash', ''); box.append(raw('<svg class="bolt" viewBox="0 0 40 80"><path d="M24 0 6 44h13L12 80 36 30H22z"/></svg>')); }
     } else if (scene === 'snow') {
       add('cl', 'left:-10%;width:70%;--d:40s;--dl:-8s');
-      for (i = 0; i < 12; i++) {
+      for (i = 0; i < 8; i++) {
         var z = r(2, 5);
         add('fl', 'left:' + r(0, 100).toFixed(1) + '%;width:' + z.toFixed(1) + 'px;height:' + z.toFixed(1) + 'px;animation-duration:' + r(8, 13).toFixed(1) +
           's;animation-delay:-' + r(0, 12).toFixed(1) + 's;opacity:' + r(0.55, 1).toFixed(2));
       }
     } else if (scene === 'cold') {
       add('frost', '');
-      for (i = 0; i < 8; i++) add('tw ice', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(6, 90).toFixed(0) + '%;animation-delay:-' + r(0, 3).toFixed(2) + 's;animation-duration:' + r(1.8, 3.4).toFixed(2) + 's');
+      for (i = 0; i < 5; i++) add('tw ice', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(6, 90).toFixed(0) + '%;animation-delay:-' + r(0, 3).toFixed(2) + 's;animation-duration:' + r(1.8, 3.4).toFixed(2) + 's');
       add('mist', 'animation-duration:16s'); add('mist m2', 'animation-duration:23s');
     } else if (scene === 'hot') {
       add('sunhalo', ''); add('rays', '');
@@ -904,7 +933,7 @@
       add('cl light', 'left:-20%;width:45%;--d:60s;--dl:-20s');
     } else if (scene === 'night') {
       add('moonglow', '');
-      for (i = 0; i < 12; i++) add('tw', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(4, 92).toFixed(0) + '%;animation-delay:-' + r(0, 4).toFixed(2) + 's;animation-duration:' + r(1.6, 3.8).toFixed(2) + 's');
+      for (i = 0; i < 7; i++) add('tw', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(4, 92).toFixed(0) + '%;animation-delay:-' + r(0, 4).toFixed(2) + 's;animation-duration:' + r(1.6, 3.8).toFixed(2) + 's');
       add('shoot', '');
     } else if (scene === 'cloud') {
       add('cl', 'left:-30%;width:65%;--d:30s;--dl:-2s'); add('cl', 'left:20%;width:85%;top:30%;--d:44s;--dl:-22s'); add('cl', 'left:-10%;width:55%;top:52%;--d:36s;--dl:-12s');
@@ -912,7 +941,7 @@
       add('mist', 'animation-duration:18s'); add('mist m2', 'animation-duration:26s'); add('mist m3', 'animation-duration:34s');
     } else if (scene === 'wind') {
       add('cl', 'left:-20%;width:60%;--d:32s;--dl:-3s');
-      for (i = 0; i < 6; i++) add('ws', 'top:' + r(4, 94).toFixed(0) + '%;width:' + r(50, 120).toFixed(0) + 'px;animation-duration:' + clampN(5.2 - wind / 25, 3, 5.2).toFixed(2) + 's;animation-delay:-' + r(0, 2).toFixed(2) + 's');
+      for (i = 0; i < 4; i++) add('ws', 'top:' + r(4, 94).toFixed(0) + '%;width:' + r(50, 120).toFixed(0) + 'px;animation-duration:' + clampN(5.2 - wind / 25, 3, 5.2).toFixed(2) + 's;animation-delay:-' + r(0, 2).toFixed(2) + 's');
     }
     return box;
   }
@@ -999,26 +1028,58 @@
   function movePill() {
     var b = $('button.on', bar);
     if (!b || b.hidden || !b.offsetWidth) return;
-    var t = 'translateX(' + b.offsetLeft + 'px)', w = b.offsetWidth + 'px';
+    placePill(b.offsetLeft, b.offsetWidth);
+  }
+  function placePill(l, w) {
+    var t = 'translateX(' + l + 'px)';
     var first = !pill.style.transform;
     if (first) pill.style.transition = 'none';          // اولین جایگذاری بدونِ «پرواز» از گوشه
-    else if (pill.style.transform !== t) { pill.classList.remove('go'); void pill.offsetWidth; pill.classList.add('go'); }
-    pill.style.width = w;
+    else if (pill.style.transform !== t) {
+      // شروعِ دوباره‌ی انیمیشنِ کشیده‌شدن بدونِ reflowِ اجباری (قبلاً void offsetWidth)
+      pill.classList.remove('go');
+      requestAnimationFrame(function () { pill.classList.add('go'); });
+    }
+    pill.style.width = w + 'px';
     pill.style.transform = t;
     if (first) { void pill.offsetWidth; pill.style.transition = ''; }
   }
+  var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  /* ─── اسکرول: وقتی صفحه در حالِ اسکرول است، انیمیشن‌های بی‌پایانِ خانه می‌ایستند و رندرِ سنگین عقب می‌افتد ─── */
+  var scrolling = false, scrollT = 0, pendingRender = false, rootEl = doc.documentElement;
+  function endScroll() {
+    scrolling = false; rootEl.classList.remove('scrolling');
+    if (pendingRender) { pendingRender = false; renderAll(); }
+  }
+  window.addEventListener('scroll', function () {
+    if (!scrolling) { scrolling = true; rootEl.classList.add('scrolling'); }
+    clearTimeout(scrollT); scrollT = setTimeout(endScroll, 140);
+  }, { passive: true });
+
   function go(name, opts) {
     if (name === 'players' && opts) { if (opts.f) P.f = opts.f; if (opts.sort) P.sort = opts.sort; }
     if (cur === name) { if (name === 'players' && built.players) applyPlayers(); return; }
-    scrollPos[cur] = window.scrollY;
-    panels[cur].hidden = true;
     var prev = cur;
+
+    /* ۱) همه‌ی خواندن‌ها، وقتی layout هنوز تمیز است (بدونِ reflowِ اجباری وسطِ نوشتن‌ها) */
+    scrollPos[prev] = window.scrollY;
+    var barKey = (name === 'weather' || name === 'brief') ? 'home' : name;
+    var tb = bar.querySelector('button[data-go="' + barKey + '"]');
+    var pl = -1, pw = 0;
+    if (tb && !tb.hidden && tb.offsetWidth) { pl = tb.offsetLeft; pw = tb.offsetWidth; }
+
+    /* ۲) نوشتن‌ها: همه با هم، پشتِ‌سرِ هم */
+    panels[prev].hidden = true;
     cur = name;
     doc.body.dataset.tab = name;
     panels[name].hidden = false;
-    bar.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === ((name === 'weather' || name === 'brief') ? 'home' : name)); });
-    movePill();
-    bar.querySelectorAll('button.pop').forEach(function (x) { x.classList.remove('pop'); });
+    var btns = bar.children;
+    for (var i = 0; i < btns.length; i++) {
+      var bt = btns[i];
+      if (bt.dataset && bt.dataset.go) { bt.classList.toggle('on', bt.dataset.go === barKey); bt.classList.remove('pop'); }
+    }
+    if (pl >= 0) placePill(pl, pw); else movePill();
+
     if (!built[name]) {
       if (name === 'players') buildPlayers();
       else if (name === 'tours') buildTours();
@@ -1030,16 +1091,27 @@
     } else if (name === 'players') { applyPlayers(); ensurePlayers(); }
     else if (name === 'manage' && M) M.renderTab();
     window.scrollTo(0, scrollPos[name] || 0);
-    chrome();
+
+    /* ورودِ نرم: فقط opacity (روی GPU)، بدونِ هیچ کارِ layout */
+    if (!reduceMotion && panels[name].animate) {
+      try { panels[name].animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' }); } catch (e) {}
+    }
     hx.sel();
-    // همگام‌سازی: با هر جابه‌جاییِ تب، اگر داده‌ی خانه بیش از ۲۰ ثانیه قدیمی است، بی‌صدا تازه‌اش کن
-    if (S.boot && Date.now() - lastFetch > 20000) refresh(false);
+
     if (prev === 'clock' && window.HubClock && window.HubClock.onHide) window.HubClock.onHide();
     if (name === 'clock' && window.HubClock && window.HubClock.onShow) window.HubClock.onShow();
     if (prev === 'weather') { popBack(); if (window.HubWeather && window.HubWeather.onHide) window.HubWeather.onHide(); }
     if (name === 'weather') { pushBack(function () { go('home'); }); if (window.HubWeather && window.HubWeather.onShow) window.HubWeather.onShow(); }
     if (prev === 'brief') { popBack(); if (window.HubBrief && window.HubBrief.onHide) window.HubBrief.onHide(); }
     if (name === 'brief') { pushBack(function () { go('home'); }); if (window.HubBrief && window.HubBrief.onShow) window.HubBrief.onShow(); }
+
+    /* ۳) کارهای غیرضروری (رنگِ هدرِ تلگرام، همگام‌سازیِ داده) بعد از اولین فریمِ تب، نه وسطِ آن */
+    requestAnimationFrame(function () {
+      setTimeout(function () {
+        chrome();
+        if (S.boot && Date.now() - lastFetch > 20000) refresh(false);
+      }, 0);
+    });
   }
   bar.addEventListener('click', function (e) {
     var b = e.target.closest('button[data-go]'); if (b) go(b.dataset.go);
@@ -1111,10 +1183,24 @@
     mi.append(im);
   }
 
-  var lastFetch = 0;
+  var lastFetch = 0, lastBootSig = '';
+  /* «now» هر بار عوض می‌شود؛ از امضای داده کنار گذاشته می‌شود تا رفرشِ بی‌تغییر، رندر نسازد */
+  function bootSig(d) { return JSON.stringify(d, function (k, v) { return (k === 'now' && this === d) ? undefined : v; }); }
+  function saveBootLater(d) {
+    var idle = window.requestIdleCallback || function (f) { setTimeout(f, 300); };
+    idle(function () { LS.set(K_BOOT, d); });
+  }
   function refresh(first) {
     return api('/hub/api/bootstrap').then(function (d) {
-      S.boot = d; lastFetch = Date.now(); LS.set(K_BOOT, d); renderAll();
+      var sig = bootSig(d);
+      S.boot = d; lastFetch = Date.now();
+      if (sig === lastBootSig) {                       // هیچ چیز عوض نشده: نه رندر، نه نوشتن در localStorage
+        if (cur === 'me' && built.me) renderMe();      // فقط زمان‌های نسبیِ «من» تازه شود (کوچک و سبک)
+        return;
+      }
+      lastBootSig = sig;
+      saveBootLater(d);
+      if (scrolling) pendingRender = true; else renderAll();   // وسطِ اسکرول رندر نکن؛ بعد از ایستادن
       var pf = function () { if (d.caps && d.caps.length) withManage(function (m) { m.prefetch(); }); };
       if (window.requestIdleCallback) window.requestIdleCallback(pf); else setTimeout(pf, 800);
     }).catch(function (e) {
@@ -1126,7 +1212,7 @@
   function start() {
     initTelegram();
     var cached = LS.get(K_BOOT);
-    if (cached && cached.me) { S.boot = cached; renderAll(); }
+    if (cached && cached.me) { S.boot = cached; lastBootSig = bootSig(cached); renderAll(); }
     refresh(true).then(function () {
       try {
         var q = new URLSearchParams(location.search), sp0 = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
