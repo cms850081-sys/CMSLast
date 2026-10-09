@@ -817,17 +817,10 @@ async def _auto_note(ctx, subject: str, content: str, visibility: str, caller_id
 # توابع کمکی داخلی
 # ────────────────────────────────────────────────────────────────
 async def _find_admin_by_identifier(identifier: str):
-    identifier = (identifier or "").strip().lstrip("@")
-    admins = await db.get_all_admins()
-    for a in admins:
-        uname = (a["username"] or "").lstrip("@")
-        if uname.lower() == identifier.lower():
-            return a
-        if a["full_name"] and identifier.lower() in a["full_name"].lower():
-            return a
-        if identifier.isdigit() and a["telegram_id"] == int(identifier):
-            return a
-    return None
+    """یوزرنیم، آیدی عددی، نام کامل و *نام نمایشی* (display_name) — با نرمال‌سازی فارسی
+    (ی/ک عربی، نیم‌فاصله، فاصله‌ها) و تطبیق تقریبی. قبلاً فقط یوزرنیمِ دقیق یا بخشی از full_name
+    چک می‌شد، برای همین مدیری که با نام نمایشی صدا زده می‌شد «پیدا نشد» می‌خورد."""
+    return await ai_tools_ext._find_admin(identifier)
 
 
 async def _lookup_entity(kind: str, ident: str):

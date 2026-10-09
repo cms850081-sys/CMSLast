@@ -457,6 +457,26 @@ async def _find_admin(identifier):
     for a in admins:
         if ident in norm(a["full_name"]) or ident in norm(a["display_name"]):
             return a
+    # اسمِ تایپ‌شده ممکنه با اسمِ ثبت‌شده کمی فرق داشته باشه (فاصله/نیم‌فاصله، حرف‌های شبیه، غلط املایی):
+    # تطبیقِ تقریبی روی فشرده‌ی اسم‌ها (بدون فاصله)، فقط اگه یک نفر واضحاً نزدیک‌تر از بقیه باشه.
+    squash = lambda t: norm(t).replace(" ", "")
+    q = squash(ident)
+    if len(q) >= 3:
+        scored = []
+        for a in admins:
+            best = 0.0
+            for nm in (a["full_name"], a["display_name"], (a["username"] or "")):
+                c = squash(nm)
+                if not c:
+                    continue
+                r = difflib.SequenceMatcher(None, q, c).ratio()
+                if q in c:   # فقط «عبارتِ تایپ‌شده داخل اسمِ ثبت‌شده»؛ برعکسش (اسم کوتاه داخل عبارتِ بلند) ممکنه آدمِ اشتباه رو بگیره
+                    r = max(r, 0.9)
+                best = max(best, r)
+            scored.append((best, a))
+        scored.sort(key=lambda x: -x[0])
+        if scored and scored[0][0] >= 0.75 and (len(scored) == 1 or scored[0][0] - scored[1][0] >= 0.08):
+            return scored[0][1]
     return None
 
 
