@@ -27,6 +27,7 @@ import database as db
 from helpers import safe_edit_message_text, get_user_role, pishva_display, admin_display, now_context_for_ai
 from config import PISHVA_ID, ROLE_PISHVA, ROLE_TOURNAMENT_MANAGER, ROLE_SECURITY_MANAGER
 import ai_tools
+import ai_tools_oversight
 import ai_memory
 import knowledge_base
 
@@ -313,6 +314,8 @@ def _system_prompt(role: str, display_name: str = "", memory_rows=None, user_tex
             "brief_times_set با دقیقه‌ی دقیق؛ دیدن ساعت‌ها = brief_times_get. روزهای هفته = brief_days_set. قانون‌ها = brief_rule_*. "
             "فقط بعد از موفقیت ابزار بگو انجام شد و ساعت‌های جدیدی که ابزار گزارش کرده را عیناً بگو."
         )
+    cms_block += (ai_tools_oversight.PISHVA_PROMPT_BLOCK if role == ROLE_PISHVA
+                  else ai_tools_oversight.OTHERS_PROMPT_BLOCK)
     if _looks_like_weather_time(user_text):
         cms_block += (
             "\n\nسیستم آب‌وهوا و خوش‌آمدگویی CMS (برای وقتی درباره‌ش می‌پرسن): داده‌ی زنده‌ی "
