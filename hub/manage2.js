@@ -363,13 +363,15 @@
 
   /* ═══════════ لاگ اقدامات ═══════════ */
   function logsView() {
-    var st = { period: 'today', page: 0 };
+    var st = { period: 'today', page: 0, scope: 'all' };
     root('پیگیری اقدامات', function () {
       var box = h('div', null), bar = h('div', null);
       function draw() {
-        bar.replaceChildren(chipsBar([['today', 'امروز'], ['week', 'هفته'], ['month', 'ماه'], ['all', 'همه']], st.period, function (k) { st.period = k; st.page = 0; draw(); }));
+        bar.replaceChildren(
+          chipsBar([['all', 'همه‌چیز'], ['trail', 'ردیابیِ کامل (هر کلیک)'], ['actions', 'فقط اقدام‌ها']], st.scope, function (k) { st.scope = k; st.page = 0; draw(); }),
+          chipsBar([['today', 'امروز'], ['week', 'هفته'], ['month', 'ماه'], ['all', 'همه']], st.period, function (k) { st.period = k; st.page = 0; draw(); }));
         box.replaceChildren(M.spin());
-        swr('/hub/api/logs?period=' + st.period + '&page=' + st.page, function (d) {
+        swr('/hub/api/logs?period=' + st.period + '&scope=' + st.scope + '&page=' + st.page, function (d) {
           var w = h('div', null);
           w.append(d.rows.length ? h('div', { class: 'group' }, d.rows.map(function (r) {
             return h('div', { class: 'mrow' }, h('div', { class: 'mtxt' }, h('b', { style: 'white-space:normal', text: r.text || r.label }), h('small', { text: r.admin + ' • ' + r.label + ' • ' + r.at })));

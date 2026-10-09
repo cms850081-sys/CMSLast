@@ -17,6 +17,12 @@
   // کادرِ مجاز برای جابه‌جاییِ نقشه — دقیقاً با محدوده‌ی خودِ شبکه‌ی داده یکیه (lat 22..43, lon 34..67)
   // تا جایی که پن می‌کنی همیشه رنگ هست.
   var BOUNDS = [[21.0, 33.0], [44.0, 68.0]];
+  // کادرِ «پوششِ رنگ»: خیلی بزرگ‌تر از شبکه‌ی داده. هرجای نقشه که دیده شود، لایه‌ی رنگی همان‌جا هست؛
+  // بیرون از شبکه مقدارِ نزدیک‌ترین خانه‌ی لبه (clamp) ادامه پیدا می‌کند، پس هیچ لبه/مربعی دیده نمی‌شود.
+  var COVER = [[-5.0, 0.0], [70.0, 110.0]];
+  // محدوده‌ی جابه‌جاییِ نقشه: نزدیکِ داده می‌ماند تا کاربر آن‌قدر دور نرود که فقط «ادامه‌ی لبه» دیده شود.
+  var PAN = [[12.0, 24.0], [53.0, 77.0]];
+  var MERC_MAX = 85.05112878;
   var TOWNS = [
     { n: 'سرپل‌ذهاب', lat: 34.4597, lng: 45.8646, main: true },
     { n: 'کرمانشاه', lat: 34.3142, lng: 47.065 },
@@ -143,23 +149,33 @@
   }
 
   /* ─── لایه‌ی رنگی: یک تصویرِ ثابت ───────────────────────── */
+  function mercY(lat) { var r = clamp(lat, -MERC_MAX, MERC_MAX) * Math.PI / 180; return Math.log(Math.tan(Math.PI / 4 + r / 2)); }
+  function mercLat(y) { return (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI; }
   function fieldImage(g) {
-    // چندنمونه‌گیریِ دوخطیِ مستقیم — دقیقاً همون فرمولِ bil() که برای کارتِ اطلاعات استفاده می‌شه،
-    // پس نقشه و عددی که با کلیک روی یک نقطه می‌بینی همیشه هم‌خوان‌اند. این برخلافِ رسمِ قبلی
-    // (رنگِ تخت برای هر خونه + بزرگ‌نماییِ خودکارِ canvas) یه گرادیانِ صافِ واقعی می‌سازه، شبیه نقشه‌ی هواشناسی.
+    // تصویر روی کادرِ COVER ساخته می‌شود (نه فقط خودِ شبکه) و ردیف‌ها در فضای مرکاتور نمونه‌برداری می‌شوند،
+    // چون Leaflet تصویر را در فضای مرکاتور کش می‌دهد؛ بدون این، با کادرِ بزرگ رنگ‌ها از جای واقعی‌شان جابه‌جا می‌شدند.
+    // خارج از شبکه، مختصاتِ نمونه به لبه‌ی شبکه چسبانده می‌شود (ادامه‌ی لبه) تا کلِ کادر رنگی باشد.
     var F = FIELDS[field], lut = lutFor(field), arr = g[F.key], cols = g.cols, rows = g.rows;
-    var RES = 16; // پیکسل به‌ازایِ هر خانه‌ی شبکه؛ کوچیک‌تر از قبل تا بافتِ رویِ GPU سبک‌تر پن بشه
-    var W = (cols - 1) * RES + 1, H = (rows - 1) * RES + 1;
+    var step = g.step, lonMin = COVER[0][1], lonMax = COVER[1][1];
+    var PXD = 8;                                            // پیکسل به‌ازای هر درجه (نرمی را مرورگر با درون‌یابیِ تصویر می‌دهد)
+    var W = Math.round((lonMax - lonMin) * PXD);
+    var yTop = mercY(COVER[1][0]), yBot = mercY(COVER[0][0]);
+    var H = Math.round(W * (yTop - yBot) / ((lonMax - lonMin) * Math.PI / 180));
     var cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     var ctx = cv.getContext('2d');
     var img = ctx.createImageData(W, H), d = img.data;
-    var painted = 0;
-    for (var m = 0; m < arr.length; m++) if (arr[m] != null) painted++;
+    var painted = 0, m;
+    for (m = 0; m < arr.length; m++) if (arr[m] != null) painted++;
+    var maxGy = rows - 1, maxGx = cols - 1;
+    // ستون‌ها یک‌بار محاسبه می‌شوند
+    var gxs = new Float32Array(W);
+    for (var px0 = 0; px0 < W; px0++) gxs[px0] = clamp(((lonMin + (px0 + 0.5) / PXD) - g.lon0) / step, 0, maxGx);
     for (var py = 0; py < H; py++) {
-      var gy = py / RES, i0 = gy >= rows - 1 ? rows - 2 : Math.floor(gy), fy = gy - i0;
+      var lat = mercLat(yTop - (py + 0.5) / H * (yTop - yBot));
+      var gy = clamp((g.lat0 - lat) / step, 0, maxGy), i0 = gy >= maxGy ? maxGy - 1 : Math.floor(gy), fy = gy - i0;
       for (var px = 0; px < W; px++) {
-        var gx = px / RES, j0 = gx >= cols - 1 ? cols - 2 : Math.floor(gx), fx = gx - j0;
+        var gx = gxs[px], j0 = gx >= maxGx ? maxGx - 1 : Math.floor(gx), fx = gx - j0;
         var k = i0 * cols + j0, o = (py * W + px) * 4;
         var a = arr[k], b = arr[k + 1], c = arr[k + cols], e = arr[k + cols + 1];
         if (a == null || b == null || c == null || e == null) { d[o + 3] = 0; continue; }
@@ -183,10 +199,10 @@
     }
     var img = fieldImage(grid);
     if (!overlay) {
-      overlay = Lf.imageOverlay(img.url, gridBounds(grid), { interactive: false, opacity: 1 }).addTo(map);
+      overlay = Lf.imageOverlay(img.url, COVER, { interactive: false, opacity: 1 }).addTo(map);
     } else {
       overlay.setUrl(img.url);
-      overlay.setBounds(gridBounds(grid));
+      overlay.setBounds(COVER);
     }
     updateLegend(img.painted);
   }
@@ -307,12 +323,12 @@
   function initMap() {
     map = Lf.map(mapEl, {
       zoomControl: false, attributionControl: true,
-      minZoom: VIEW.zoom, maxZoom: 5,
-      maxBounds: BOUNDS, maxBoundsViscosity: 0.8,
+      minZoom: VIEW.zoom, maxZoom: 6,
+      maxBounds: PAN, maxBoundsViscosity: 1.0,
       fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false, worldCopyJump: false
     }).setView(VIEW.center, VIEW.zoom);
     Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 5, minZoom: VIEW.zoom, updateWhenIdle: true, keepBuffer: 2,
+      subdomains: 'abc', maxZoom: 6, minZoom: VIEW.zoom, updateWhenIdle: true, keepBuffer: 2,
       attribution: '© OpenStreetMap'
     }).addTo(map);
     hlLayer = Lf.layerGroup().addTo(map);

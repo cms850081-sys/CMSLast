@@ -293,16 +293,21 @@
     /* روندها */
     if (hasT && B.trend && B.trend.days.length) frag.append(secTitle('روند ۷ روز اخیر', h('small', { text: 'نتیجه‌های ثبت‌شده' })), trendCard(B.trend));
 
-    /* برترین‌ها */
+    /* برترین‌ها — بر پایه‌ی قانونِ اصلیِ رتبه‌بندی (امتیاز ← ویژه/برتر در برابری ← اخطار ← تعداد بازی ← سختیِ حریف)؛
+       همان فهرستِ تبِ «نفرات برتر» و ربات */
     if (B.top && B.top.length) {
-      frag.append(secTitle('برترین‌ها', h('button', { type: 'button', text: 'همه', onclick: function () { go('players', { f: 'all', sort: 'elo' }); } })),
-        h('div', { class: 'group' }, B.top.slice(0, 3).map(function (p, i) {
+      frag.append(secTitle('برترین‌ها', h('button', { type: 'button', text: 'همه', onclick: function () { go('players', { f: 'top' }); } })),
+        h('div', { class: 'group' }, B.top.map(function (p, i) {
+          var tag = p.special ? 'ویژه' : p.elite ? 'برتر' : '';
+          var subParts = [];
+          if (p.cls) subParts.push(p.cls);
+          if (tag) subParts.push(tag);
+          subParts.push(p.games ? num(p.score) + ' امتیاز · ' + num(p.games) + ' بازی' : 'هنوز بازی نکرده');
           return row({
-            lead: h('div', { style: 'position:relative' }, avatar(p.id, p.name, 'sm')),
+            lead: h('span', { class: 'rank num' + (i < 3 ? ' top' : ''), text: p.pos || (i + 1) }),
             title: p.name,
-            sub: p.cls || (p.elite ? 'بازیکن برتر' : ''),
-            end: p.elo != null ? h('span', { class: 'elo num' }, num(p.elo)) : (p.wins != null ? h('span', { class: 'num' }, p.wins + ' برد') : null),
-            tap: function () { openPlayer(p.id, p); }
+            sub: subParts.join(' · '),
+            tap: function () { openPlayer(p.id, { name: p.name, cls: p.cls, elite: p.elite, special: p.special, games: p.games }); }
           });
         })));
     }
@@ -436,7 +441,7 @@
     });
   }
   function topSub(r) {
-    return r.games ? (r.cls ? r.cls + ' · ' : '') + 'امتیاز ' + nn(r.score) + ' · ' + nn(r.games) + ' بازی'
+    return r.games ? (r.cls ? r.cls + ' · ' : '') + 'امتیاز ' + num(r.score) + ' · ' + num(r.games) + ' بازی'
       : (r.cls ? r.cls + ' · ' : '') + (r.elite ? 'برتر · ' : r.special ? 'ویژه · ' : '') + 'هنوز بازی نکرده';
   }
   function topRow(r) {
@@ -517,8 +522,8 @@
     api('/hub/api/player/' + id).then(function (d) {
       var kids = [];
       if (d.pos) kids.push(secTitle('جایگاه'), h('div', { class: 'group' },
-        kv('در کلاس ' + (d.pos.class_name || ''), nn(d.pos.class_pos) + ' از ' + nn(d.pos.class_total)),
-        kv('در کل', nn(d.pos.overall_pos) + ' از ' + nn(d.pos.overall_total))));
+        kv('در کلاس ' + (d.pos.class_name || ''), num(d.pos.class_pos) + ' از ' + num(d.pos.class_total)),
+        kv('در کل', num(d.pos.overall_pos) + ' از ' + num(d.pos.overall_total))));
       if (d.elo) {
         kids.push(secTitle('رتبه‌بندی'), h('div', { class: 'group' },
           kv('رتبه بین بازیکنان فعال', nn(d.rank)), kv('بالاترین امتیاز', nn(d.elo.peak))));
@@ -841,24 +846,122 @@
     if (feels != null) c.push('حس ' + feels + '°');
     return c.join(' · ');
   }
+  /* ─── صحنه‌ی متحرکِ کارتِ آب‌وهوا ───────────────────────────────────────
+     بسته به وضعیتِ هوا یکی از صحنه‌ها پشتِ متنِ کارت پخش می‌شود:
+     storm (رعدوبرق) · rain · drizzle · snow · cold (سرمای خشک) · hot (گرمای شدید) · clear (آفتابی)
+     night (شبِ صاف و ستاره) · cloud · fog · dust (گردوغبار) · wind (باد/طوفان).
+     فقط transform/opacity انیمیت می‌شود (بدونِ blur/filter) و تعدادِ المان‌ها کم است تا روی گوشیِ ضعیف هم روان بماند؛
+     وقتی کارت دیده نمی‌شود، صفحه در پس‌زمینه است یا reduced-motion فعال است، انیمیشن می‌ایستد. */
+  function wxmScene(d) {
+    var n = d.now, t = n.temp == null ? 20 : n.temp, feels = n.feels == null ? t : n.feels;
+    var wind = n.wind || 0, gust = n.gust || 0, dust = !!(d.air && d.air.dust >= 100);
+    var clearish = n.kind === 'clear' || n.kind === 'partly';
+    if (n.kind === 'storm') return 'storm';
+    if (n.kind === 'snow') return 'snow';
+    if (n.kind === 'rain') return 'rain';
+    if (n.kind === 'drizzle') return 'drizzle';
+    if (dust) return 'dust';
+    if (n.kind === 'fog') return 'fog';
+    if (wind >= 45 || gust >= 65) return 'wind';
+    if (clearish && n.is_day && feels >= 33) return 'hot';
+    if (clearish && t <= 3) return 'cold';
+    if (n.kind === 'cloud') return 'cloud';
+    if (!n.is_day) return clearish ? 'night' : 'cloud';
+    return clearish ? 'clear' : 'cloud';
+  }
+  function wxmFx(scene, d) {
+    var box = h('span', { class: 'wxm-fx', 'data-s': scene, 'aria-hidden': 'true' });
+    function r(a, b) { return a + Math.random() * (b - a); }
+    function add(cls, css) { box.append(h('i', { class: cls, style: css })); }
+    var i, wind = d && d.now ? (d.now.wind || 0) : 0;
+    if (scene === 'rain' || scene === 'storm' || scene === 'drizzle') {
+      var cnt = scene === 'storm' ? 30 : scene === 'rain' ? 24 : 14;
+      add('cl dark', 'left:-10%;width:60%;--d:26s;--dl:-4s');
+      add('cl dark', 'left:35%;width:70%;--d:34s;--dl:-18s');
+      for (i = 0; i < cnt; i++) {
+        add('dr', 'left:' + r(-5, 105).toFixed(1) + '%;animation-duration:' + (scene === 'drizzle' ? r(1.1, 1.8) : r(0.55, 1.0)).toFixed(2) +
+          's;animation-delay:-' + r(0, 1.8).toFixed(2) + 's;opacity:' + r(0.35, 0.85).toFixed(2) + ';height:' + (scene === 'drizzle' ? r(8, 12) : r(12, 20)).toFixed(0) + 'px');
+      }
+      for (i = 0; i < 4; i++) add('sp', 'left:' + r(5, 95).toFixed(0) + '%;animation-delay:-' + r(0, 1.2).toFixed(2) + 's');
+      if (scene === 'storm') { add('flash', ''); box.append(raw('<svg class="bolt" viewBox="0 0 40 80"><path d="M24 0 6 44h13L12 80 36 30H22z"/></svg>')); }
+    } else if (scene === 'snow') {
+      add('cl', 'left:-10%;width:70%;--d:40s;--dl:-8s');
+      for (i = 0; i < 20; i++) {
+        var z = r(2, 5);
+        add('fl', 'left:' + r(0, 100).toFixed(1) + '%;width:' + z.toFixed(1) + 'px;height:' + z.toFixed(1) + 'px;animation-duration:' + r(4, 8).toFixed(1) +
+          's;animation-delay:-' + r(0, 8).toFixed(1) + 's;opacity:' + r(0.55, 1).toFixed(2));
+      }
+    } else if (scene === 'cold') {
+      add('frost', '');
+      for (i = 0; i < 16; i++) add('tw ice', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(6, 90).toFixed(0) + '%;animation-delay:-' + r(0, 3).toFixed(2) + 's;animation-duration:' + r(1.8, 3.4).toFixed(2) + 's');
+      add('mist', 'animation-duration:16s'); add('mist m2', 'animation-duration:23s');
+    } else if (scene === 'hot') {
+      add('sunhalo', ''); add('rays', '');
+      add('hz', 'top:22%;animation-duration:3.6s'); add('hz', 'top:48%;animation-duration:4.4s;animation-delay:-1.2s'); add('hz', 'top:72%;animation-duration:5s;animation-delay:-2.4s');
+    } else if (scene === 'clear') {
+      add('sunhalo soft', ''); add('rays soft', '');
+      add('cl light', 'left:-20%;width:45%;--d:60s;--dl:-20s');
+    } else if (scene === 'night') {
+      add('moonglow', '');
+      for (i = 0; i < 22; i++) add('tw', 'left:' + r(0, 100).toFixed(1) + '%;top:' + r(4, 92).toFixed(0) + '%;animation-delay:-' + r(0, 4).toFixed(2) + 's;animation-duration:' + r(1.6, 3.8).toFixed(2) + 's');
+      add('shoot', '');
+    } else if (scene === 'cloud') {
+      add('cl', 'left:-30%;width:65%;--d:30s;--dl:-2s'); add('cl', 'left:20%;width:85%;top:30%;--d:44s;--dl:-22s'); add('cl', 'left:-10%;width:55%;top:52%;--d:36s;--dl:-12s');
+    } else if (scene === 'fog') {
+      add('mist', 'animation-duration:18s'); add('mist m2', 'animation-duration:26s'); add('mist m3', 'animation-duration:34s');
+    } else if (scene === 'dust') {
+      add('haze', '');
+      for (i = 0; i < 16; i++) add('ds', 'top:' + r(4, 94).toFixed(0) + '%;width:' + r(40, 100).toFixed(0) + 'px;animation-duration:' + r(1.8, 3.6).toFixed(2) + 's;animation-delay:-' + r(0, 3.6).toFixed(2) + 's');
+    } else if (scene === 'wind') {
+      add('cl dark', 'left:-20%;width:60%;--d:14s;--dl:-3s');
+      for (i = 0; i < 16; i++) add('ws', 'top:' + r(4, 94).toFixed(0) + '%;width:' + r(50, 120).toFixed(0) + 'px;animation-duration:' + clampN(1.9 - wind / 60, 0.7, 1.9).toFixed(2) + 's;animation-delay:-' + r(0, 2).toFixed(2) + 's');
+    }
+    return box;
+  }
+  function clampN(v, a, b) { return v < a ? a : v > b ? b : v; }
+  var wxmIO = null, wxmCards = [];
+  function wxmWatch(el) {
+    if (!('IntersectionObserver' in window)) return;
+    if (!wxmIO) {
+      wxmIO = new IntersectionObserver(function (es) {
+        es.forEach(function (e) { e.target.classList.toggle('paused', !e.isIntersecting); });
+      }, { threshold: 0 });
+      doc.addEventListener('visibilitychange', function () {
+        wxmCards.forEach(function (c) { c.classList.toggle('hidden-doc', doc.hidden); });
+      });
+    }
+    wxmIO.observe(el); wxmCards.push(el);
+  }
   function weatherCard() {
     var el = h('button', { type: 'button', class: 'wxm', 'aria-label': 'آب‌وهوای سرپل‌ذهاب', onclick: function () { hx.tap(); go('weather'); } });
+    var lastScene = '';
     function paintMini(d) {
-      var n = d.now;
+      var n = d.now, scene = wxmScene(d);
       el.style.setProperty('--wt', wxmTint(d));
-      el.replaceChildren(
+      el.dataset.s = scene; el.dataset.day = n.is_day ? '1' : '0';
+      var kids = [
         h('span', { class: 'wxm-ic' }, wxmIcon(WXM_ID[n.kind] ? WXM_ID[n.kind][n.is_day ? 0 : 1] : 'cloud')),
         h('span', { class: 'wxm-t' },
           h('span', { class: 'wxm-l1' }, h('b', { dir: 'ltr', text: (n.temp == null ? '—' : n.temp) + '°' }), h('span', { text: n.label })),
           h('span', { class: 'wxm-l2', text: wxmHint(d) })),
-        h('span', { class: 'wxm-go' }, ic('chev')));
+        h('span', { class: 'wxm-go' }, ic('chev'))
+      ];
+      // اگر صحنه عوض نشده، المان‌های جلوه را دوباره نمی‌سازیم تا انیمیشن از اول شروع نشود
+      var fx = el.querySelector('.wxm-fx');
+      if (fx && lastScene === scene + '|' + Math.round((n.wind || 0) / 10)) { el.replaceChildren.apply(el, [fx].concat(kids)); return; }
+      lastScene = scene + '|' + Math.round((n.wind || 0) / 10);
+      el.replaceChildren.apply(el, [wxmFx(scene, d)].concat(kids));
     }
     var c = LS.get('hub:wx2');
     if (c && c.d && c.d.now) paintMini(c.d);
-    else el.append(h('span', { class: 'wxm-ic' }, wxmIcon('cloud')), h('span', { class: 'wxm-t' }, h('span', { class: 'wxm-l1' }, h('span', { text: 'آب‌وهوای سرپل‌ذهاب' })), h('span', { class: 'wxm-l2', text: 'در حال دریافت…' })));
+    else {
+      el.dataset.s = 'cloud';
+      el.append(wxmFx('cloud', null), h('span', { class: 'wxm-ic' }, wxmIcon('cloud')), h('span', { class: 'wxm-t' }, h('span', { class: 'wxm-l1' }, h('span', { text: 'آب‌وهوای سرپل‌ذهاب' })), h('span', { class: 'wxm-l2', text: 'در حال دریافت…' })));
+    }
     if (!c || !c.at || Date.now() - c.at > 300000) {
       api('/hub/api/weather').then(function (d) { LS.set('hub:wx2', { d: d, at: Date.now() }); paintMini(d); }).catch(function () {});
     }
+    wxmWatch(el);
     return el;
   }
 

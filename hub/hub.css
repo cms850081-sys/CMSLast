@@ -369,8 +369,9 @@ input[type=date].inp{ text-align:right; direction:ltr; }
 @media (prefers-reduced-motion:reduce){ .gate .crest{ animation:none; } }
 
 /* ═══ نوارِ آب‌وهوا در خانه: یک ردیفِ کوتاه و بی‌حرکت ═══ */
-.wxm{ display:flex; align-items:center; gap:12px; width:calc(100% - 32px); margin:0 16px 14px; padding:9px 14px 9px 12px; min-height:60px; border-radius:20px; text-align:start;
-  background:var(--surface); border:1px solid var(--sep); color:var(--text); transition:transform .12s; }
+.wxm{ display:flex; align-items:center; gap:12px; width:calc(100% - 32px); margin:0 16px 14px; padding:9px 14px 9px 12px; min-height:68px; border-radius:20px; text-align:start;
+  background:var(--surface); border:1px solid var(--sep); color:var(--text); transition:transform .12s;
+  position:relative; overflow:hidden; isolation:isolate; }
 .wxm:active{ transform:scale(.98); }
 .wxm-ic{ flex:none; width:48px; height:48px; display:grid; place-items:center; }
 .wxm-svg{ width:48px; height:48px; display:block; overflow:visible; filter:drop-shadow(0 4px 6px rgba(0,0,0,.18)); }
@@ -381,6 +382,91 @@ input[type=date].inp{ text-align:right; direction:ltr; }
 .wxm-l2{ font-size:12px; color:var(--hint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .wxm-go{ flex:none; color:var(--hint); display:grid; place-items:center; }
 .wxm-go .ic{ width:16px; height:16px; transform:scaleX(-1); }
+
+
+/* ═══ کارتِ آب‌وهوای خانه: صحنه‌ی متحرک بر اساسِ وضعیتِ هوا ═══
+   فقط transform/opacity انیمیت می‌شود؛ بدونِ blur/filter. data-s = نامِ صحنه (storm|rain|drizzle|snow|cold|hot|clear|night|cloud|fog|dust|wind) */
+.wxm[data-s]{ color:#fff; border-color:rgba(255,255,255,.16); text-shadow:0 1px 2px rgba(0,0,0,.35); }
+.wxm[data-s] .wxm-l2{ color:rgba(255,255,255,.84); }
+.wxm[data-s] .wxm-go{ color:rgba(255,255,255,.8); }
+.wxm[data-s="storm"]{ background:linear-gradient(135deg,#1a1830 0%,#2a2350 55%,#3a2f63 100%); }
+.wxm[data-s="rain"]{ background:linear-gradient(135deg,#243449 0%,#3a516b 60%,#4b6683 100%); }
+.wxm[data-s="drizzle"]{ background:linear-gradient(135deg,#34475c 0%,#587089 60%,#7189a0 100%); }
+.wxm[data-s="snow"]{ background:linear-gradient(135deg,#55708f 0%,#84a1bf 60%,#adc6dd 100%); }
+.wxm[data-s="cold"]{ background:linear-gradient(135deg,#17406e 0%,#2b78b0 55%,#6fbcf5 100%); }
+.wxm[data-s="hot"]{ background:linear-gradient(135deg,#c2410c 0%,#f76707 50%,#ffa94d 100%); }
+.wxm[data-s="clear"]{ background:linear-gradient(135deg,#1c6fc0 0%,#4dabf7 60%,#8ccfff 100%); }
+.wxm[data-s="night"]{ background:linear-gradient(135deg,#070b1f 0%,#101a3d 55%,#1d2b5c 100%); }
+.wxm[data-s="cloud"]{ background:linear-gradient(135deg,#4b6580 0%,#7b92a8 60%,#9fb0c0 100%); }
+.wxm[data-s="fog"]{ background:linear-gradient(135deg,#59646f 0%,#848f9a 60%,#aab3bb 100%); }
+.wxm[data-s="dust"]{ background:linear-gradient(135deg,#7a4a1f 0%,#b0753a 55%,#d6a566 100%); }
+.wxm[data-s="wind"]{ background:linear-gradient(135deg,#2f4b66 0%,#4f7799 55%,#7aa3c4 100%); }
+.wxm > *:not(.wxm-fx){ position:relative; z-index:1; }
+.wxm-fx{ position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; border-radius:inherit; }
+.wxm-fx i, .wxm-fx svg{ position:absolute; display:block; will-change:transform,opacity; }
+.wxm.paused .wxm-fx i, .wxm.paused .wxm-fx svg, .wxm.hidden-doc .wxm-fx i, .wxm.hidden-doc .wxm-fx svg{ animation-play-state:paused; }
+
+/* ابر */
+.wxm-fx .cl{ top:-20%; height:75%; border-radius:50%; background:radial-gradient(ellipse at 50% 55%,rgba(255,255,255,.36),rgba(255,255,255,0) 68%); animation:wxm-drift var(--d,30s) ease-in-out var(--dl,0s) infinite alternate; }
+.wxm-fx .cl.dark{ background:radial-gradient(ellipse at 50% 55%,rgba(14,18,34,.62),rgba(14,18,34,0) 70%); }
+.wxm-fx .cl.light{ background:radial-gradient(ellipse at 50% 55%,rgba(255,255,255,.5),rgba(255,255,255,0) 68%); }
+@keyframes wxm-drift{ from{ transform:translate3d(-12%,0,0); } to{ transform:translate3d(105%,2px,0); } }
+
+/* باران / نم‌نم + برخورد قطره‌ها */
+.wxm-fx .dr{ top:0; width:1.5px; height:14px; border-radius:2px; background:linear-gradient(to bottom,rgba(200,225,255,0),rgba(225,240,255,.95)); animation:wxm-fall .8s linear infinite; }
+@keyframes wxm-fall{ from{ transform:translate3d(0,-26px,0) rotate(14deg); } to{ transform:translate3d(-16px,100px,0) rotate(14deg); } }
+.wxm-fx .sp{ bottom:3px; width:9px; height:3px; margin-left:-4px; border-radius:50%; border:1px solid rgba(225,240,255,.7); opacity:0; animation:wxm-splash 1.2s ease-out infinite; }
+@keyframes wxm-splash{ 0%{ transform:scale(.3); opacity:.85; } 100%{ transform:scale(1.7); opacity:0; } }
+
+/* رعدوبرق */
+.wxm-fx .flash{ inset:0; background:rgba(205,222,255,.9); opacity:0; animation:wxm-flash 6s linear infinite; }
+.wxm-fx .bolt{ top:-2px; left:30%; height:96%; width:auto; fill:#fff8b8; stroke:#ffd84a; stroke-width:1; opacity:0; animation:wxm-bolt 6s linear infinite; }
+@keyframes wxm-flash{ 0%,83%,100%{ opacity:0; } 84%{ opacity:.6; } 86%{ opacity:.08; } 88%{ opacity:.42; } 92%{ opacity:0; } }
+@keyframes wxm-bolt{ 0%,83%,100%{ opacity:0; } 84%{ opacity:1; } 86%{ opacity:.15; } 88%{ opacity:1; } 92%{ opacity:0; } }
+
+/* برف */
+.wxm-fx .fl{ top:0; border-radius:50%; background:#fff; animation:wxm-snow linear infinite; }
+@keyframes wxm-snow{ 0%{ transform:translate3d(0,-10px,0); } 50%{ transform:translate3d(10px,36px,0); } 100%{ transform:translate3d(-6px,92px,0); } }
+
+/* سرما: یخ‌زدگی و جرقه‌های یخی */
+.wxm-fx .frost{ inset:0; background:radial-gradient(120% 90% at 100% 0,rgba(190,235,255,.4),transparent 60%),radial-gradient(90% 80% at 0 100%,rgba(150,210,255,.32),transparent 60%); animation:wxm-breathe 5s ease-in-out infinite alternate; }
+@keyframes wxm-breathe{ from{ opacity:.55; } to{ opacity:1; } }
+.wxm-fx .tw{ width:2px; height:2px; border-radius:50%; background:#fff; animation:wxm-twinkle 2.6s ease-in-out infinite; }
+.wxm-fx .tw.ice{ width:3px; height:3px; box-shadow:0 0 5px 1px rgba(200,235,255,.85); }
+@keyframes wxm-twinkle{ 0%,100%{ opacity:.12; transform:scale(.6); } 50%{ opacity:1; transform:scale(1.35); } }
+
+/* گرما: هاله و پرتوهای خورشید + موجِ سرابِ گرما */
+.wxm-fx .sunhalo{ inset-inline-start:-36px; top:-50px; width:160px; height:160px; border-radius:50%; background:radial-gradient(circle,rgba(255,228,120,.8),rgba(255,160,40,.28) 45%,transparent 70%); animation:wxm-pulse 3s ease-in-out infinite; }
+.wxm-fx .sunhalo.soft{ background:radial-gradient(circle,rgba(255,240,170,.6),rgba(255,200,80,.2) 45%,transparent 70%); animation-duration:5s; }
+@keyframes wxm-pulse{ 0%,100%{ transform:scale(1); opacity:.85; } 50%{ transform:scale(1.14); opacity:1; } }
+.wxm-fx .rays{ inset-inline-start:-66px; top:-80px; width:216px; height:216px; border-radius:50%; background:repeating-conic-gradient(rgba(255,238,160,.34) 0 5deg,transparent 5deg 15deg);
+  -webkit-mask-image:radial-gradient(circle,#000 22%,transparent 68%); mask-image:radial-gradient(circle,#000 22%,transparent 68%); animation:wxm-spin 26s linear infinite; }
+.wxm-fx .rays.soft{ opacity:.6; animation-duration:46s; }
+@keyframes wxm-spin{ to{ transform:rotate(360deg); } }
+.wxm-fx .hz{ left:-5%; width:110%; height:10px; border-radius:50%; background:repeating-linear-gradient(90deg,rgba(255,255,255,0) 0 14px,rgba(255,240,205,.32) 14px 28px,rgba(255,255,255,0) 28px 42px); animation:wxm-haze 4s ease-in-out infinite; }
+@keyframes wxm-haze{ 0%,100%{ transform:translate3d(-3%,0,0) scaleY(1); opacity:.3; } 50%{ transform:translate3d(3%,-4px,0) scaleY(2.4); opacity:.8; } }
+
+/* شب: ستاره‌ها، هاله‌ی ماه و شهاب */
+.wxm-fx .moonglow{ inset-inline-start:-24px; top:-36px; width:140px; height:140px; border-radius:50%; background:radial-gradient(circle,rgba(205,215,255,.38),transparent 65%); animation:wxm-breathe 6s ease-in-out infinite alternate; }
+.wxm-fx .shoot{ top:14%; left:78%; width:56px; height:1.5px; background:linear-gradient(90deg,rgba(255,255,255,0),#fff); opacity:0; transform:rotate(-20deg); animation:wxm-shoot 8s linear infinite; }
+@keyframes wxm-shoot{ 0%,90%{ opacity:0; transform:translate3d(0,0,0) rotate(-20deg); } 91%{ opacity:1; } 100%{ opacity:0; transform:translate3d(-150px,54px,0) rotate(-20deg); } }
+
+/* مه */
+.wxm-fx .mist{ left:-30%; width:160%; height:58%; bottom:-10%; border-radius:50%; background:linear-gradient(90deg,transparent,rgba(238,242,247,.36),transparent); animation:wxm-mist 18s ease-in-out infinite alternate; }
+.wxm-fx .mist.m2{ bottom:auto; top:-6%; height:52%; opacity:.8; animation-direction:alternate-reverse; }
+.wxm-fx .mist.m3{ bottom:auto; top:24%; height:46%; opacity:.6; }
+@keyframes wxm-mist{ from{ transform:translate3d(-12%,0,0); } to{ transform:translate3d(12%,-6px,0); } }
+
+/* گردوغبار و باد/طوفان: خط‌های افقیِ تند */
+.wxm-fx .haze{ inset:0; background:linear-gradient(180deg,rgba(214,160,92,.24),rgba(150,100,50,.34)); animation:wxm-breathe 6s ease-in-out infinite alternate; }
+.wxm-fx .ds{ left:-22%; height:2px; border-radius:2px; background:linear-gradient(90deg,rgba(245,205,145,0),rgba(245,205,145,.7)); animation:wxm-streak 2.4s linear infinite; }
+.wxm-fx .ws{ left:-22%; height:1.5px; border-radius:2px; background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.65)); animation:wxm-streak 1.4s linear infinite; }
+@keyframes wxm-streak{ from{ transform:translate3d(0,0,0); } to{ transform:translate3d(135vw,6px,0); } }
+
+@media (prefers-reduced-motion:reduce){
+  .wxm-fx i, .wxm-fx svg{ animation:none !important; }
+  .wxm-fx .dr, .wxm-fx .fl, .wxm-fx .ds, .wxm-fx .ws, .wxm-fx .shoot, .wxm-fx .flash, .wxm-fx .bolt, .wxm-fx .sp{ display:none; }
+}
 
 /* ورودِ «سامانه‌ها» در خانه */
 .sysm{ display:flex; align-items:center; gap:12px; width:calc(100% - 32px); margin:0 16px 14px; padding:10px 14px 10px 12px; min-height:56px; border-radius:20px; text-align:start; background:var(--surface); border:1px solid var(--sep); }
