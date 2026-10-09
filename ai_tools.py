@@ -27,6 +27,7 @@ import database as db
 import ai_memory
 import ai_tools_ext
 import ai_tools_oversight
+import ai_persona
 import workhours
 import comms
 import ai_scheduler
@@ -100,6 +101,7 @@ ACTION_TOOL_NAMES = ACTION_TOOL_NAMES | ai_tools_ext.ACTION_TOOL_NAMES_EXT
 SCHEDULABLE_TOOL_NAMES = SCHEDULABLE_TOOL_NAMES | ai_tools_ext.SCHEDULABLE_TOOL_NAMES_EXT
 ACTION_TOOL_NAMES = ACTION_TOOL_NAMES | ai_tools_oversight.ACTION_TOOL_NAMES_OV
 SCHEDULABLE_TOOL_NAMES = SCHEDULABLE_TOOL_NAMES | ai_tools_oversight.SCHEDULABLE_TOOL_NAMES_OV
+ACTION_TOOL_NAMES = ACTION_TOOL_NAMES | ai_persona.ACTION_TOOL_NAMES_PS
 
 # ────────────────────────────────────────────────────────────────
 # سقفِ تعداد عملیات در هر بار صدازدنِ batch_execute. این محدودیتِ «کار
@@ -215,6 +217,7 @@ AI_PERMISSION_CATEGORIES = [
 
 AI_PERMISSION_CATEGORIES = AI_PERMISSION_CATEGORIES + ai_tools_ext.CATEGORIES_EXT
 AI_PERMISSION_CATEGORIES = AI_PERMISSION_CATEGORIES + ai_tools_oversight.CATEGORIES_OV
+AI_PERMISSION_CATEGORIES = AI_PERMISSION_CATEGORIES + ai_persona.CATEGORIES_PS
 
 CATEGORY_LABELS = {key: label for key, label, _tools in AI_PERMISSION_CATEGORIES}
 
@@ -795,6 +798,8 @@ TOOL_DECLARATIONS = TOOL_DECLARATIONS + ai_tools_ext.TOOL_DECLARATIONS_EXT
 TOOL_PERMISSIONS.update(ai_tools_ext.TOOL_PERMISSIONS_EXT)
 TOOL_DECLARATIONS = TOOL_DECLARATIONS + ai_tools_oversight.TOOL_DECLARATIONS_OV
 TOOL_PERMISSIONS.update(ai_tools_oversight.TOOL_PERMISSIONS_OV)
+TOOL_DECLARATIONS = TOOL_DECLARATIONS + ai_persona.TOOL_DECLARATIONS_PS
+TOOL_PERMISSIONS.update(ai_persona.TOOL_PERMISSIONS_PS)
 
 
 # ────────────────────────────────────────────────────────────────
@@ -1525,6 +1530,10 @@ async def _dispatch_impl(name: str, args: dict, caller_id: int, caller_role: str
                     + "\n".join(lines))
 
         # ── ابزارهای ماژول ai_tools_ext.py ──
+        ps_result = await ai_persona.dispatch_ps(name, args, caller_id, caller_role, ctx)
+        if ps_result is not None:
+            return ps_result
+
         ov_result = await ai_tools_oversight.dispatch_ov(name, args, caller_id, caller_role, ctx)
         if ov_result is not None:
             return ov_result

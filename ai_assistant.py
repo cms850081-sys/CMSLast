@@ -28,6 +28,7 @@ from helpers import safe_edit_message_text, get_user_role, pishva_display, admin
 from config import PISHVA_ID, ROLE_PISHVA, ROLE_TOURNAMENT_MANAGER, ROLE_SECURITY_MANAGER
 import ai_tools
 import ai_tools_oversight
+import ai_persona
 import ai_memory
 import knowledge_base
 
@@ -212,6 +213,8 @@ def kb_ai_reply():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 چت جدید", callback_data="ai_menu"),
          InlineKeyboardButton("🚪 خروج از چت", callback_data="ai_exit")],
+        [InlineKeyboardButton("⚙️ تنظیمات", callback_data="aip_home"),
+         InlineKeyboardButton("❓ چرا این جواب؟", callback_data="ai_why")],
     ])
 
 
@@ -563,7 +566,7 @@ async def ai_assistant_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = (
         "🤖 رهگشا فعال شد. هرچی بخوای بگو — می‌تونم کارهات رو انجام بدم، "
         "گزارش بدم یا فقط باهات حرف بزنم."
-    )
+    ) + await ai_persona.open_hint(uid)
     try:
         await safe_edit_message_text(query, text, reply_markup=kb_ai_reply())
     except BadRequest:
@@ -627,6 +630,7 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         session_id = await db.ai_create_session(uid, role)
         ctx.user_data["ai_session_id"] = session_id
 
+    text = await ai_persona.expand_shortcut(uid, text)
     ai_memory.reset_memo_flags(ctx)
     memory_intent = role == ROLE_PISHVA and _looks_like_memory_save(text)
 
@@ -642,6 +646,11 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     visibility_levels = ["all", "pishva"] if role == ROLE_PISHVA else ["all"]
     memory_rows = await ai_memory.recent(visibility_levels, limit=8)
     system_prompt = _system_prompt(role, display_name, memory_rows, user_text=text)
+    _prefs = await ai_persona.get_prefs(uid)
+    _persona_block, _mem_used = await ai_persona.build_block_ex(uid, role, _prefs)
+    system_prompt += _persona_block
+    _eff = await ai_persona.effective(_prefs)
+    used_tools = []
     contents = [{"role": "user", "parts": [{"text": system_prompt}]},
                 {"role": "model", "parts": [{"text": "باشه، آماده‌ام کمک کنم."}]}] + history
 
@@ -676,7 +685,16 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             if fn_call:
                 fname = fn_call["name"]
                 fargs = fn_call.get("args", {})
+                _gate = await ai_persona.confirm_gate(ctx, uid, fname, fargs)
+                if _gate:
+                    _g_text, _g_kb = _gate
+                    history.append({"role": "model", "parts": [{"text": _g_text}]})
+                    ctx.user_data["ai_history"] = history[-(MAX_HISTORY_TURNS * 2):]
+                    await db.ai_add_message(session_id, "ai", _g_text)
+                    await update.message.reply_text(_g_text, reply_markup=_g_kb)
+                    return
                 result_text = await ai_tools.dispatch(fname, fargs, uid, role, ctx)
+                used_tools.append((fname, str(fargs), str(result_text)))
                 await db.ai_add_message(session_id, "tool", f"🔧 {fname}({fargs}) → {result_text}")
                 if fname in ai_tools.ACTION_TOOL_NAMES:
                     executed_actions.append((fname, fargs, result_text))
@@ -701,11 +719,18 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             history.append({"role": "model", "parts": [{"text": reply_text}]})
             ctx.user_data["ai_history"] = history[-(MAX_HISTORY_TURNS * 2):]
             shown_text = reply_text + await _tail(ctx, text, uid, memory_intent)
+            _hint = await ai_persona.learn_hint(ctx, uid, text)
+            if _hint:
+                shown_text += _hint[0]
+                ctx.user_data["_ai_pending_buttons"] = list(ctx.user_data.get("_ai_pending_buttons") or []) + _hint[1]
+            ai_persona.record_why(ctx, used_tools, _eff["mode"], _mem_used)
             await db.ai_add_message(session_id, "ai", shown_text)
             sess = await db.ai_get_session(session_id)
             if sess and not sess["title"]:
                 await db.ai_set_session_title(session_id, text)
             await update.message.reply_text(shown_text, reply_markup=_merge_pending_buttons(ctx))
+            if _eff["voice"] == "1":
+                await ai_persona.send_voice_reply(update.message, reply_text)
             return
 
         fallback = "⚠️ این درخواست خیلی پیچیده شد؛ لطفاً واضح‌تر یا مرحله‌به‌مرحله بگو."

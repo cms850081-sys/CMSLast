@@ -10,6 +10,7 @@ from telegram.ext import (
 
 import database as db
 from ai_assistant import ai_assistant_message, ai_assistant_open
+import ai_persona
 from ai_history import (
     ai_exit, ai_menu, ai_menu_close, ai_new_start, ai_hist_list, ai_hist_open,
     ai_admlog_menu, ai_admlog_pick, ai_admlog_range, ai_admlog_view,
@@ -303,6 +304,12 @@ async def post_init(application: Application) -> None:
         logger.info("Morning brief job restored.")
     except Exception as e:
         logger.warning(f"Could not restore morning brief: {e}")
+
+    # Persona: flush held Rahgosha messages outside users' delivery windows
+    try:
+        ai_persona.start(application)
+    except Exception as e:
+        logger.warning(f"Could not start persona flusher: {e}")
 
     # Restore AI-assistant reminders / scheduled actions (survives Railway restarts)
     try:
@@ -1381,6 +1388,13 @@ def build_application():
     app.add_handler(CallbackQueryHandler(ai_admtg_menu, pattern="^ai_admtg_menu$"))
     app.add_handler(CallbackQueryHandler(ai_admtg_pick, pattern="^ai_admtg_pick_"))
     app.add_handler(CallbackQueryHandler(ai_admtg_set, pattern="^ai_admtg_set_"))
+    # تنظیمات شخصیِ رهگشا (aip_*)
+    app.add_handler(CallbackQueryHandler(ai_persona.cb_confirm, pattern="^aip_cf_"))
+    app.add_handler(CallbackQueryHandler(ai_persona.cb_learn, pattern="^aip_learn_"))
+    app.add_handler(CallbackQueryHandler(ai_persona.cb_settings, pattern="^aip_(?!cf_|learn_)"))
+    app.add_handler(CallbackQueryHandler(ai_persona.cb_why, pattern="^ai_why$"))
+    # دریافت متنِ تنظیمات؛ قبل از هندلرهای کلمه‌ی کلیدی (group=-2) تا متن به‌اشتباه دستور حساب نشه
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_persona.text_input), group=-3)
     # بعد از همه‌ی هندلرهای دیگر (کلمات کلیدی، مکالمه‌ها) بررسی می‌شود
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, ai_assistant_message),

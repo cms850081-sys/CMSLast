@@ -25,6 +25,7 @@ job_queue.run_once(when=target) داده می‌شه — یعنی دقت زیر�
 موقع خاموش بودن ربات لحظه‌ش گذشته بود، بلافاصله (نه بی‌سروصدا گم‌شده)
 اجرا می‌شه.
 """
+import ai_persona
 import json
 import logging
 from datetime import datetime, timedelta
@@ -260,7 +261,7 @@ async def reminder_fire_job(context):
     await _set_status(job_id, "done")
     text = box("⏰ یادآوری") + f"\n\n{row['message']}"
     try:
-        await context.bot.send_message(row["caller_id"], text)
+        await ai_persona.deliver(context.bot, row["caller_id"], text)
     except Exception:
         logger.exception(f"Could not deliver reminder #{job_id}")
 
@@ -291,7 +292,7 @@ async def action_fire_job(context):
     label = row["description"] or row["tool_name"]
     text = box("⏰ اقدام زمان‌بندی‌شده اجرا شد") + f"\n\n🛠 {label}\n📋 نتیجه: {result}"
     try:
-        await context.bot.send_message(row["caller_id"], text)
+        await ai_persona.deliver(context.bot, row["caller_id"], text)
     except Exception:
         logger.exception(f"Could not deliver scheduled-action result #{job_id}")
 

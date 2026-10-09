@@ -53,6 +53,7 @@ async def ai_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🆕 شروع چت جدید", callback_data="ai_new_start")],
         [InlineKeyboardButton("🕘 تاریخچه چت‌ها", callback_data="ai_hist_list")],
+        [InlineKeyboardButton("⚙️ تنظیمات رهگشا", callback_data="aip_home")],
         [InlineKeyboardButton("🚪 خروج از چت", callback_data="ai_exit")],
         [InlineKeyboardButton("🔙 بستن این منو", callback_data="ai_menu_close")],
     ])
