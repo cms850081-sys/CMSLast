@@ -40,6 +40,8 @@ async def ai_manage_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data["ai_manage_back"] = "back_main"
     elif query.data == "ai_manage_menu":
         ctx.user_data["ai_manage_back"] = "menu_pishva"
+    elif query.data == "ai_manage_menu_hub":
+        ctx.user_data["ai_manage_back"] = "ai_more_home"
     back_target = ctx.user_data.get("ai_manage_back", "menu_pishva")
     ai_online = await db.get_setting("ai_online", "1")
     await safe_edit_message_text(query,

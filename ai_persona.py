@@ -797,7 +797,7 @@ async def _home(q, ctx, uid, role):
         [_B("🧠 حافظه‌ی من", "aip_mem"), _B("⚡ میانبرها", "aip_sc")],
         [_B("🧾 قالب گزارش", "aip_txt_report_template"), _B("📝 پرامپت اختصاصی", "aip_txt_persona_text")],
         [_B("💾 پروفایل‌ها", "aip_prof"), _B("👁 پیش‌نمایش", "aip_preview")],
-        [_B("♻️ بازنشانی", "aip_reset"), _B("🔙 بستن", "aip_close")],
+        [_B("♻️ بازنشانی", "aip_reset"), _B("🔙 بیشتر", "ai_more_home")],
     ]
     await safe_edit_message_text(q, text, reply_markup=InlineKeyboardMarkup(rows), parse_mode=None)
 

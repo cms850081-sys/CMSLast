@@ -11,6 +11,7 @@ from telegram.ext import (
 import database as db
 from ai_assistant import ai_assistant_message, ai_assistant_open
 import ai_persona
+import ai_more
 from ai_history import (
     ai_exit, ai_menu, ai_menu_close, ai_new_start, ai_hist_list, ai_hist_open,
     ai_admlog_menu, ai_admlog_pick, ai_admlog_range, ai_admlog_view,
@@ -1382,6 +1383,9 @@ def build_application():
     app.add_handler(CallbackQueryHandler(ai_manage_menu, pattern="^ai_manage_menu$"))
     app.add_handler(CallbackQueryHandler(ai_manage_menu, pattern="^ai_manage_menu_main$"))
     app.add_handler(CallbackQueryHandler(ai_manage_menu, pattern="^ai_manage_menu_return$"))
+    app.add_handler(CallbackQueryHandler(ai_manage_menu, pattern="^ai_manage_menu_hub$"))
+    app.add_handler(CallbackQueryHandler(ai_more.cb_more, pattern="^ai_more_home$"))
+    app.add_handler(CallbackQueryHandler(ai_more.cb_aim, pattern="^aim_"))
     app.add_handler(CallbackQueryHandler(ai_manage_toggle_online, pattern="^ai_manage_toggle_online$"))
     app.add_handler(CallbackQueryHandler(ai_perms_menu, pattern="^ai_perms_menu$"))
     app.add_handler(CallbackQueryHandler(ai_perms_toggle, pattern="^aiperm_toggle_"))

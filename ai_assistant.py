@@ -211,10 +211,8 @@ def _looks_like_weather_time(text: str) -> bool:
 def kb_ai_reply():
     """زیر هر پیام دستیار، همیشه دکمه‌ی خروج و چت جدید/تاریخچه باشد."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 چت جدید", callback_data="ai_menu"),
+        [InlineKeyboardButton("➕ بیشتر", callback_data="ai_menu"),
          InlineKeyboardButton("🚪 خروج از چت", callback_data="ai_exit")],
-        [InlineKeyboardButton("⚙️ تنظیمات", callback_data="aip_home"),
-         InlineKeyboardButton("❓ چرا این جواب؟", callback_data="ai_why")],
     ])
 
 

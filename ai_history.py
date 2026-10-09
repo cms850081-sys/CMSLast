@@ -48,16 +48,15 @@ async def ai_exit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def ai_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """«➕ بیشتر» — منوی جامع رهگشا (ai_more.py)."""
+    import ai_more
     query = update.callback_query
+    role = await get_user_role(query.from_user.id)
+    if not role:
+        await query.answer("⛔", show_alert=True)
+        return
     await query.answer()
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🆕 شروع چت جدید", callback_data="ai_new_start")],
-        [InlineKeyboardButton("🕘 تاریخچه چت‌ها", callback_data="ai_hist_list")],
-        [InlineKeyboardButton("⚙️ تنظیمات رهگشا", callback_data="aip_home")],
-        [InlineKeyboardButton("🚪 خروج از چت", callback_data="ai_exit")],
-        [InlineKeyboardButton("🔙 بستن این منو", callback_data="ai_menu_close")],
-    ])
-    await query.message.reply_text("🤖 منوی رهگشا — چه کاری انجام بدم؟", reply_markup=kb)
+    await ai_more.show_hub(query, ctx, new_message=True)
 
 
 async def ai_menu_close(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
