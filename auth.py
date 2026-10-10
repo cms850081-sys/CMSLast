@@ -222,6 +222,26 @@ async def get_weather_line(force: bool = False) -> str:
     cached = _weather_cache
     if not force and cached is not None and (now - cached[1]) < _WEATHER_CACHE_TTL:
         return cached[0]
+    # منبعِ واحد: داده‌ی hub_weather (بارشِ فعلی + ناپایداری). اگر نشد، مسیرِ قدیمیِ پایین.
+    try:
+        import hub_weather
+        w = await hub_weather._get_weather()
+        n, nc = w["now"], w.get("nowcast") or {}
+        if n.get("temp") is not None:
+            code, is_day = n.get("code"), n.get("is_day", 1)
+            mood_pool = (_WEATHER_MOOD_NIGHT.get(code) if not is_day else None) or _WEATHER_MOOD.get(code, ["نامشخص"])
+            mood = random.choice(mood_pool)
+            line = f"{_weather_emoji(code, is_day)} سرپل‌ذهاب {'امروز' if is_day else 'امشب'} {mood} به‌نظر می‌رسه! (`{n['temp']:.0f}°C`)"
+            if n.get("raining"):
+                line += " ☔ الان بارون می‌باره"
+            elif nc.get("level") in ("likely", "possible"):
+                line += " 🌦 احتمالِ رگبارِ کوتاه هست"
+            if (n.get("wind") or 0) >= 35:
+                line += " 💨 بادش هم شدیده"
+            _weather_cache = (line, now)
+            return line
+    except Exception as e:
+        logger.warning("weather: hub_weather path failed, falling back: %r", e)
     if httpx is None:
         logger.warning("weather: httpx نصب نیست؛ خطِ آب‌وهوا هرگز نمایش داده نمی‌شود")
         return ""

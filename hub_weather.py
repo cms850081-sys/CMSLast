@@ -29,6 +29,12 @@ TEHRAN = timezone(timedelta(hours=3, minutes=30))
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 AIR_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 CACHE_TTL = 600            # ۱۰ دقیقه
+# چندمدلی: open-meteo مدل‌های مستقل (ECMWF/ICON/GFS/GEM) را جدا برمی‌گرداند؛ «توافقِ مدل‌ها» و CAPE
+# (ناپایداریِ جوّ) رگبارهای محلی را که بهترین‌مدل نمی‌بیند آشکار می‌کند.
+ENSEMBLE_MODELS = "ecmwf_ifs025,icon_global,gfs_global,gem_global"
+RAIN_MM = 0.1              # حداقلِ بارش در ساعت که «بارش» حساب شود
+CAPE_WARN = 500            # J/kg: ناپایداریِ متوسط → احتمالِ رگبارِ محلی
+CAPE_HIGH = 1000           # J/kg: ناپایداریِ زیاد → رگبار/رعدوبرقِ محتمل
 CACHE_STALE_MAX = 6 * 3600
 AI_TTL = 1800              # ۳۰ دقیقه
 AI_COOLDOWN = 12           # ثانیه، برای هر کاربر
@@ -89,20 +95,31 @@ async def _fetch_raw():
     lat, lon = auth.SARPOL_LAT, auth.SARPOL_LON
     fparams = {
         "latitude": lat, "longitude": lon, "timezone": "Asia/Tehran", "forecast_days": 6,
-        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,is_day,precipitation,weather_code,"
+        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,is_day,precipitation,rain,showers,weather_code,"
                    "cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
-        "hourly": "temperature_2m,precipitation_probability,weather_code,is_day",
+        "hourly": "temperature_2m,precipitation_probability,precipitation,showers,cape,weather_code,is_day",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,"
                  "precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max",
     }
     aparams = {"latitude": lat, "longitude": lon, "timezone": "Asia/Tehran",
                "current": "us_aqi,pm10,pm2_5,dust,ozone"}
+    mparams = {"latitude": lat, "longitude": lon, "timezone": "Asia/Tehran", "forecast_days": 2,
+               "models": ENSEMBLE_MODELS, "hourly": "precipitation,showers,cape"}
     async with httpx.AsyncClient(timeout=8.0) as c:
-        f, a = await asyncio.gather(c.get(FORECAST_URL, params=fparams), c.get(AIR_URL, params=aparams),
-                                    return_exceptions=True)
+        f, a, m = await asyncio.gather(c.get(FORECAST_URL, params=fparams), c.get(AIR_URL, params=aparams),
+                                       c.get(FORECAST_URL, params=mparams), return_exceptions=True)
     if isinstance(f, Exception):
         raise f
     f.raise_for_status()
+    multi = None
+    if not isinstance(m, Exception):
+        try:
+            m.raise_for_status()
+            multi = m.json().get("hourly") or None
+        except Exception as e:  # چندمدلی اختیاری‌ست؛ بدونِ آن هم پنل کار می‌کند
+            logger.warning("weather: multi-model failed: %r", e)
+    else:
+        logger.warning("weather: multi-model failed: %r", m)
     air = None
     if not isinstance(a, Exception):
         try:
@@ -112,7 +129,9 @@ async def _fetch_raw():
             logger.warning("weather: air quality failed: %r", e)
     else:
         logger.warning("weather: air quality failed: %r", a)
-    return f.json(), air
+    fj = f.json()
+    fj["_multi"] = multi
+    return fj, air
 
 
 def _build(fj, air):
@@ -128,13 +147,54 @@ def _build(fj, air):
         "gust": _num(cur.get("wind_gusts_10m")),
     }
     hr = fj.get("hourly") or {}
+    times = hr.get("time") or []
+    multi = fj.get("_multi") or {}
+    mtimes = multi.get("time") or []
+    mkeys_p = [k for k in multi if k.startswith("precipitation_")]
+    mkeys_c = [k for k in multi if k.startswith("cape_")]
+
+    def col(k, i):
+        arr = hr.get(k) or []
+        return arr[i] if i < len(arr) else None
+
+    def mcol(k, t):
+        try:
+            arr = multi.get(k) or []
+            return arr[mtimes.index(t)]
+        except (ValueError, IndexError):
+            return None
+
+    # «ساعتِ جاری» به وقتِ تهران؛ لیست از همین ساعت شروع می‌شود (قبلاً از ۰۰:۰۰ امروز شروع می‌شد
+    # و «۱۲ ساعتِ آینده» در عصر عملاً صبحِ امروز را نگاه می‌کرد).
+    now_key = datetime.now(TEHRAN).strftime("%Y-%m-%dT%H:00")
+    start = 0
+    for i, t in enumerate(times):
+        if str(t) >= now_key:
+            start = i
+            break
     hours = []
-    for i, t in enumerate((hr.get("time") or [])[:24]):
-        c = (hr.get("weather_code") or [None] * 99)[i]
+    for i in range(start, min(start + 24, len(times))):
+        t = times[i]
+        c = col("weather_code", i)
+        pop = _num(col("precipitation_probability", i)) or 0
+        mm_best = float(col("precipitation", i) or 0) + 0.0
+        mm_models = [float(v) for v in (mcol(k, t) for k in mkeys_p) if v is not None]
+        capes = [float(v) for v in ([col("cape", i)] + [mcol(k, t) for k in mkeys_c]) if v is not None]
+        wet = sum(1 for v in mm_models + [mm_best] if v >= RAIN_MM)
+        total = len(mm_models) + 1
+        cape = max(capes) if capes else 0
+        mm = max(mm_models + [mm_best])
+        # ریسکِ نهایی: بیشینه‌ی احتمالِ مدلِ اصلی، «توافقِ مدل‌ها» و ناپایداری (رگبارِ محلی)
+        agree = round(100 * wet / total) if total else 0
+        risk = max(pop, agree)
+        if cape >= CAPE_HIGH:
+            risk = max(risk, 45)
+        elif cape >= CAPE_WARN:
+            risk = max(risk, 30)
         hours.append({
-            "h": _hhmm(t), "temp": _num((hr.get("temperature_2m") or [None] * 99)[i]),
-            "pop": _num((hr.get("precipitation_probability") or [None] * 99)[i]) or 0,
-            "code": c, "kind": _wmo(c)[1], "day": int((hr.get("is_day") or [1] * 99)[i] or 0),
+            "h": _hhmm(t), "temp": _num(col("temperature_2m", i)),
+            "pop": min(100, risk), "pop_model": pop, "agree": agree, "mm": round(mm, 1),
+            "cape": _num(cape), "code": c, "kind": _wmo(c)[1], "day": int(col("is_day", i) or 0),
         })
     d = fj.get("daily") or {}
     days = []
@@ -160,8 +220,11 @@ def _build(fj, air):
         moon = auth.moon_phase_emoji()
     except Exception:
         moon = "🌙"
+    now["raining"] = bool((_num(cur.get("rain"), 1) or 0) > 0 or (_num(cur.get("showers"), 1) or 0) > 0
+                          or (now["precip"] or 0) > 0 or kind in ("rain", "drizzle", "storm"))
     out = {"ok": True, "city": "سرپل‌ذهاب", "now": now, "hours": hours, "days": days, "air": air_out, "moon": moon,
            "updated": datetime.now(TEHRAN).strftime("%Y-%m-%d %H:%M")}
+    out["nowcast"] = _nowcast(out)
     out["advice"] = _advice(out)
     out["hint"] = _hint(out, out["advice"])
     out["headline"] = _headline(out)
@@ -210,6 +273,23 @@ def _wear(w):
     return {"k": "wear", "ic": lv[0], "outfit": lv[0], "level": "ok", "title": lv[1], "text": lead + lv[2], "short": lv[3]}
 
 
+def _nowcast(w):
+    """کوتاه‌مدت (۳ ساعتِ آینده): آیا بارش/رگبارِ محلی محتمل است؟ بر پایه‌ی مدل‌ها، نه رادار."""
+    hs = (w.get("hours") or [])[:3]
+    mp = max([h["pop"] for h in hs] or [0])
+    mm = max([h.get("mm") or 0 for h in hs] or [0])
+    cape = max([h.get("cape") or 0 for h in hs] or [0])
+    if w["now"].get("raining"):
+        level, text = "now", "الان بارش هست یا مدل‌ها بارشِ جاری نشان می‌دهند."
+    elif mp >= 60 or mm >= 1:
+        level, text = "likely", f"در ۳ ساعتِ آینده بارش محتمل است (تا {mp}٪)."
+    elif mp >= 30 or cape >= CAPE_WARN:
+        level, text = "possible", "جوّ ناپایدار است؛ رگبارِ کوتاهِ محلی ممکن است بیاید حتی اگر پیش‌بینیِ رسمی بارش نشان نمی‌دهد."
+    else:
+        level, text = "none", "تا ۳ ساعتِ آینده بارشِ مهمی دیده نمی‌شود."
+    return {"level": level, "pop": mp, "mm": round(mm, 1), "cape": cape, "text": text}
+
+
 def _advice(w):
     n = w["now"]
     days = w["days"] or [{}]
@@ -219,6 +299,7 @@ def _advice(w):
     air = w.get("air")
     feels = n["feels"] if n["feels"] is not None else n["temp"]
     mp = max([h["pop"] for h in w["hours"][:12]] or [0])
+    nc = w.get("nowcast") or {}
     gust = n["gust"] or 0
     items = []
 
@@ -229,6 +310,12 @@ def _advice(w):
     elif kind == "snow":
         items.append({"k": "rain", "ic": "umbrella", "level": "warn", "title": "برف", "short": "برف می‌بارد",
                       "text": "برف می‌بارد؛ کفِ زمین لغزنده‌ست، آهسته راه برو."})
+    elif n.get("raining"):
+        items.append({"k": "rain", "ic": "umbrella", "level": "bad", "title": "چتر", "short": "بارش هست",
+                      "text": "الان بارش هست؛ چتر یا بارانی همراهت باشد."})
+    elif nc.get("level") == "possible" and mp < 60:
+        items.append({"k": "rain", "ic": "umbrella", "level": "warn", "title": "چتر", "short": "رگبارِ محلی ممکنه",
+                      "text": "جوّ ناپایداره و رگبارِ ناگهانی ممکنه؛ یه چترِ کوچک همراه داشته باش."})
     elif mp >= 60:
         items.append({"k": "rain", "ic": "umbrella", "level": "bad", "title": "چتر", "short": "چتر ببر",
                       "text": f"احتمالِ بارش تا {mp}٪؛ چتر یا بارانی ببر."})
@@ -295,7 +382,13 @@ def _headline(w):
     if n["temp"] is None:
         return "اطلاعاتِ هوا در دسترس نیست."
     mp = max([h["pop"] for h in w["hours"][:12]] or [0])
-    rain = "بارشی در راه نیست." if mp < 30 else f"احتمالِ بارش {mp}٪ هست."
+    nc = w.get("nowcast") or {}
+    if n.get("raining"):
+        rain = "الان بارش هست."
+    elif nc.get("level") == "possible":
+        rain = "رگبارِ محلی ممکنه."
+    else:
+        rain = "بارشی در راه نیست." if mp < 30 else f"احتمالِ بارش {mp}٪ هست."
     return f"الان {n['temp']}° و {n['label']}؛ {rain}"
 
 
@@ -323,6 +416,24 @@ async def _get_weather():
             if _cache["data"] and now - _cache["at"] < CACHE_STALE_MAX:
                 return dict(_cache["data"], stale=True)
             raise
+
+
+def report_lines(w):
+    """خطوطِ متنیِ کامل برای رهگشا (و هر مصرف‌کننده‌ی متنیِ دیگر) — همه از همین یک منبع."""
+    n, nc = w["now"], w.get("nowcast") or {}
+    out = [f"- الان: {n['temp']}°C (حسِ {n['feels']}°)، {n['label']}، رطوبت {n['hum']}٪، "
+           f"باد {n['wind']} و وزش تا {n['gust']} km/h"
+           + (" — همین الان بارش هست" if n.get("raining") else "")]
+    out.append(f"- کوتاه‌مدت (۳ ساعت): {nc.get('text', '')} [احتمال {nc.get('pop', 0)}٪، بارشِ بیشینه {nc.get('mm', 0)}mm، ناپایداری CAPE={nc.get('cape', 0)}]")
+    wet = [h for h in w["hours"][:12] if h["pop"] >= 30 or (h.get("mm") or 0) >= 0.5]
+    out.append("- ۱۲ ساعتِ آینده: " + ("؛ ".join(f"ساعت {h['h']} احتمال {h['pop']}٪" for h in wet[:6]) if wet else "بارشِ قابل‌توجهی دیده نمی‌شود"))
+    for i, lab in enumerate(("امروز", "فردا", "پس‌فردا")):
+        if i < len(w["days"]):
+            d = w["days"][i]
+            out.append(f"- {lab}: {d['tmin']} تا {d['tmax']}°C، {d['label']}، احتمال بارش {d['pop']}٪ ({d['rain']}mm)")
+    out.append("- توجه: پیش‌بینیِ بارش مدلی است (رادار نیست)؛ رگبارِ کوچکِ محلی را ممکن است دیر یا اصلاً نشان ندهد. "
+               "اگر کاربر گفت همین الان بارون می‌آید، حرفِ او را بپذیر و با پیش‌بینی بحث نکن.")
+    return out
 
 
 def _json(data, status=200):
@@ -362,6 +473,8 @@ def _ai_prompt(w):
         f"امروز: {t.get('tmin')} تا {t.get('tmax')}°، احتمالِ بارش {t.get('pop')}٪، UV {t.get('uv')}، غروب {t.get('sunset')}.\n"
         f"کیفیتِ هوا: AQI {air.get('aqi')} ({air.get('label')})، گردوغبار {air.get('dust')}.\n"
         f"پنج روزِ بعد: {days}.\n"
+        f"کوتاه‌مدت (۳ ساعت): {(w.get('nowcast') or {}).get('text', '')}\n"
+        "• اگر کوتاه‌مدت گفت رگبارِ محلی ممکن است، حتماً در خطِ دوم یادآوری کن که پیش‌بینیِ رگبار قطعی نیست.\n"
         f"توصیه‌های محاسبه‌شده: {adv}"
     )
 
@@ -379,7 +492,7 @@ async def api_weather_ai(request):
         w = await _get_weather()
     except Exception:
         return _json({"ok": False, "error": "weather_unavailable", "message": "الان دریافتِ آب‌وهوا ممکن نشد."}, 503)
-    key = ("v2", w["updated"][:15], w["now"]["temp"], w["now"]["code"])  # تقریباً هر ۱۰ دقیقه
+    key = ("v3", w["updated"][:15], w["now"]["temp"], w["now"]["code"], (w.get("nowcast") or {}).get("level"))  # تقریباً هر ۱۰ دقیقه
     if _ai_cache["key"] == key and _ai_cache["text"] and now - _ai_cache["at"] < AI_TTL:
         return _json({"ok": True, "text": _ai_cache["text"], "cached": True})
     try:

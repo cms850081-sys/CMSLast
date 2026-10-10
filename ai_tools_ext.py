@@ -1038,29 +1038,23 @@ async def _weather_and_time():
         out.append("(ماژول آب‌وهوا در دسترس نیست)")
         return "\n".join(out)
     try:
-        data = await _fetch_weather_raw(auth_mod)
-        cw = (data or {}).get("current_weather") or {}
-        if cw.get("temperature") is not None:
-            code = cw.get("weathercode")
-            mood = (auth_mod._WEATHER_MOOD.get(code) or ["نامشخص"])[0]
-            out.append(f"- الان: {cw['temperature']:.0f}°C، {mood}، باد {cw.get('windspeed', '؟')} km/h، "
-                       f"{'روز' if cw.get('is_day', 1) else 'شب'}")
-            d = data.get("daily") or {}
-            for i, lab in enumerate(("امروز", "فردا", "پس‌فردا")):
-                try:
-                    dc = d["weathercode"][i]
-                    out.append(f"- {lab}: {d['temperature_2m_min'][i]:.0f} تا {d['temperature_2m_max'][i]:.0f}°C، "
-                               f"{(auth_mod._WEATHER_MOOD.get(dc) or ['نامشخص'])[0]}، احتمال بارش {d['precipitation_probability_max'][i]}٪")
-                except Exception:
-                    break
+        import hub_weather  # منبعِ واحد: همان داده‌ی پنلِ هاب (بارشِ فعلی + ساعتی + چندمدلی)
+        w = await hub_weather._get_weather()
+        out.extend(hub_weather.report_lines(w))
+        if w.get("stale"):
+            out.append("(داده چند دقیقه قدیمی است؛ اتصال به سرویس هوا موقتاً مشکل دارد)")
     except Exception as e:
-        logger.warning("weather raw fetch failed: %r", e)
-    try:
-        line = await auth_mod.get_weather_line()
-        if line:
-            out.append(f"- جمله‌ای که پنل خوش‌آمدگویی همین الان نشون می‌ده: {line}")
-    except Exception:
-        pass
+        logger.warning("weather via hub_weather failed: %r", e)
+        try:
+            data = await _fetch_weather_raw(auth_mod)
+            cw = (data or {}).get("current_weather") or {}
+            if cw.get("temperature") is not None:
+                code = cw.get("weathercode")
+                mood = (auth_mod._WEATHER_MOOD.get(code) or ["نامشخص"])[0]
+                out.append(f"- الان: {cw['temperature']:.0f}°C، {mood}، باد {cw.get('windspeed', '؟')} km/h")
+                out.append("- بارشِ لحظه‌ای/ساعتی در دسترس نیست؛ درباره‌ی بارشِ همین الان قطعی حرف نزن.")
+        except Exception as e2:
+            logger.warning("weather raw fetch failed: %r", e2)
     if len(out) and out[-1].startswith("\n🌦️"):
         out.append("(الان دریافت آب‌وهوا ممکن نشد)")
     return "\n".join(out)
