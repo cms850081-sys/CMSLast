@@ -122,6 +122,12 @@ SIMPLE_KEYWORDS = {
     # ─── پنل امنیتی APS (فقط مدیر ارشد) ───
     "APS": "aps_panel",
     "aps": "aps_panel",
+    # ─── چندسرور (فقط مدیر ارشد): پنلِ سرورها ───
+    "سرور": "servers_panel",
+    "سرورها": "servers_panel",
+    "دنیا": "servers_panel",
+    "ور": "servers_panel",
+    "جهان": "servers_panel",
 }
 
 # این کلمات مستقیماً به workhours_conv (در bot.py) به‌عنوان entry_point
@@ -134,8 +140,11 @@ PISHVA_ONLY_ACTIONS = {
     "security", "status", "backup", "requests", "logs", "reminders", "settings",
     "pishva_panel", "online_admins", "ai_manage_panel", "admin_manage_panel",
     "workhours_menu", "workhours_start", "workhours_end", "reply_admin_panel",
-    "aps_panel",
+    "aps_panel", "servers_panel",
 }
+
+# کارهایی که مدیر مجموعه (فقط در سرورِ خودش) از میانِ کارهای «فقط مدیر ارشد» مجاز است
+OWNER_ALLOWED_ACTIONS = {"workhours_menu", "requests"}
 
 
 # ─── محافظت از مالکیت پنل ────────────────────────────────────
@@ -580,8 +589,21 @@ async def handle_keyword_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
     if not (is_pishva or is_admin):
         return
 
+    import servers as _servers
+    _is_owner = bool(is_admin and _servers.is_owner(uid))
+    if _is_owner and action == "admin_manage_panel":
+        from telegram import InlineKeyboardButton as _IKB, InlineKeyboardMarkup as _IKM
+        await update.message.reply_text("👥 مدیریت مدیران مجموعه:", reply_markup=_IKM([[_IKB("👥 باز کردن", callback_data="own_mgrs")]]))
+        raise ApplicationHandlerStop()
     if action and action in PISHVA_ONLY_ACTIONS and not is_pishva:
-        await update.message.reply_text("⛔ این دستور فقط برای مدیر ارشد است.")
+        if _is_owner and action in OWNER_ALLOWED_ACTIONS:
+            is_pishva = True   # مدیر مجموعه در سرورِ خودش برای همین کارها هم‌ترازِ مدیر ارشد است
+        else:
+            await update.message.reply_text("⛔ این دستور فقط برای مدیر ارشد است.")
+            raise ApplicationHandlerStop()
+    if action == "servers_panel":
+        from servers_panel import open_panel
+        await open_panel(update, ctx)
         raise ApplicationHandlerStop()
 
     # ─── بستن پنل (کلمه‌ی «بستن» یا «خروج») ───

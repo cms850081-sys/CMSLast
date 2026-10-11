@@ -20,6 +20,7 @@ from telegram import Update
 from telegram.ext import TypeHandler
 
 import database as db
+import srvctx
 from config import PISHVA_ID
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ def push(admin_id, action_type, description, target_id=None):
     """غیرمسدودکننده؛ زمانِ رویداد همین‌جا گرفته می‌شود تا ترتیب درست بماند."""
     try:
         _ensure_worker()
-        _Q.put_nowait((admin_id, action_type, _clip(description, 1500), target_id, db._now_tehran_iso()))
+        _Q.put_nowait((admin_id, action_type, _clip(description, 1500), target_id, db._now_tehran_iso(), None, srvctx.current()))
     except Exception:
         logger.exception("audit.push failed")
 
@@ -75,21 +76,27 @@ async def _worker():
             await asyncio.sleep(0.05)            # کمی صبر تا رویدادهای هم‌زمان در یک بسته بیایند
             while len(batch) < _BATCH and not _Q.empty():
                 batch.append(_Q.get_nowait())
-            rows = []
+            # چندسرور: هر ردیف با شناسه‌ی سرورِ خودش در صف آمده؛ دسته‌ها جدا برای هر سرور نوشته می‌شوند
+            by_server = {}
             for admin_id, typ, desc, tid, at, *rest in batch:
-                if admin_id > 0 and typ.startswith("trail_") and rest and rest[0] == "check":
-                    if not await _is_logged_actor(admin_id):
-                        continue
-                rows.append((admin_id, typ, desc, tid, at))
-            for attempt in range(_MAX_RETRY):
-                try:
-                    await db.log_actions_bulk(rows)
-                    break
-                except Exception:
-                    if attempt == _MAX_RETRY - 1:
-                        logger.exception("audit: دسته‌ی لاگ ذخیره نشد (%d ردیف)", len(rows))
-                    else:
-                        await asyncio.sleep(0.5 * (attempt + 1))
+                chk = rest[0] if rest else None
+                sid = rest[1] if len(rest) > 1 else srvctx.MAIN_ID
+                if admin_id > 0 and typ.startswith("trail_") and chk == "check":
+                    with srvctx.use(sid):
+                        if not await _is_logged_actor(admin_id):
+                            continue
+                by_server.setdefault(sid, []).append((admin_id, typ, desc, tid, at))
+            for sid, rows in by_server.items():
+                for attempt in range(_MAX_RETRY):
+                    try:
+                        with srvctx.use(sid):
+                            await db.log_actions_bulk(rows)
+                        break
+                    except Exception:
+                        if attempt == _MAX_RETRY - 1:
+                            logger.exception("audit: دسته‌ی لاگ ذخیره نشد (%d ردیف، سرور %s)", len(rows), sid)
+                        else:
+                            await asyncio.sleep(0.5 * (attempt + 1))
         except Exception:
             logger.exception("audit worker")
         finally:
@@ -110,7 +117,7 @@ async def flush(timeout=8.0):
 def _push_checked(uid, typ, desc):
     try:
         _ensure_worker()
-        _Q.put_nowait((uid, typ, _clip(desc, 1500), None, db._now_tehran_iso(), "check"))
+        _Q.put_nowait((uid, typ, _clip(desc, 1500), None, db._now_tehran_iso(), "check", srvctx.current()))
     except Exception:
         logger.exception("audit.push failed")
 

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import database as db
 import keyboards as kb
 from config import PISHVA_ID
+from servers import boss_chat as _boss_chat
 from helpers import safe_edit_message_text
 
 REMINDER_TYPES = {
@@ -153,7 +154,7 @@ async def run_reminder_checks(application):
         if text:
             markup = kb.kb_reminder_unfinished_matches() if rtype == "match" else None
             try:
-                await application.bot.send_message(PISHVA_ID, text, reply_markup=markup)
+                await application.bot.send_message(_boss_chat(), text, reply_markup=markup)
             except Exception:
                 pass
             if group_id and group_on == "1":
@@ -170,7 +171,9 @@ async def run_reminder_checks(application):
 
 
 async def reminder_job(context):
-    await run_reminder_checks(context.application)
+    # چندسرور: یادآورها برای هر سرورِ فعال، در زمینه‌ی دیتابیسِ خودش
+    import servers
+    await servers.for_each_active(run_reminder_checks, context.application)
 
 
 # ─── پنل مدیر ارشد ────────────────────────────────────────────────

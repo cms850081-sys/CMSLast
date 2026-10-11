@@ -4,10 +4,19 @@ from config import BOT_USERNAME
 
 # ─── Auth ─────────────────────────────────────────────────────
 def kb_role_select():
+    # چندسرور: در سرور اصلی «رییس کل» و «مدیر مجموعه (ثبت مدرسه)» هم هست؛
+    # در یک مجموعه فقط دو نقشِ قابل‌استخدام (مدیر ارشد آن‌جا وجود ندارد).
+    import srvctx
+    if srvctx.current() != srvctx.MAIN_ID:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("🏆 مدیر مسابقات", callback_data="role_tournament", style="primary"),
+             InlineKeyboardButton("🛡️ مدیر امنیتی", callback_data="role_security", style="primary")],
+        ])
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("👑 رییس کل", callback_data="role_pishva", style="primary"),
         InlineKeyboardButton("🏆 مدیر مسابقات", callback_data="role_tournament", style="primary")],
         [InlineKeyboardButton("🛡️ مدیر امنیتی", callback_data="role_security", style="primary")],
+        [InlineKeyboardButton("🏫 مدیر مجموعه (ثبت مدرسه)", callback_data="role_owner", style="primary")],
     ])
 
 def kb_back(target="main"):
@@ -40,12 +49,33 @@ def kb_pishva_main():
         InlineKeyboardButton("📋 وظایف", callback_data="menu_tasks")],
         [InlineKeyboardButton("📊 داشبورد مدیر ارشد", callback_data="dashboard_pishva"),
         InlineKeyboardButton("❓ راهنما", callback_data="menu_help")],
-        [InlineKeyboardButton("🗄️ وضعیت دیتابیس", callback_data="pishva_dbstatus")],
+        [InlineKeyboardButton("🗄️ وضعیت دیتابیس", callback_data="pishva_dbstatus"),
+        InlineKeyboardButton("🌐 سرورها", callback_data="srv_home")],
         [InlineKeyboardButton("♟️ شطرنج زنده", callback_data="chess_menu"),
         InlineKeyboardButton("📅 تقویم", callback_data="menu_calendar")],
         [InlineKeyboardButton("🤖 رهگشا", callback_data="ai_assistant_open"),
         InlineKeyboardButton("🧑‍💻 مدیریت دستیار", callback_data="ai_manage_menu_main")],
         [InlineKeyboardButton("💡 انتقادات و پیشنهادات", callback_data="menu_feedback")],
+    ])
+
+# ─── منوی مدیر مجموعه (چندسرور) ──────────────────────────────
+def kb_owner_main():
+    """هم‌ترازِ مدیر مسابقات + استخدام/مدیریتِ مدیران، ساعت کاری و ارتباط با مدیر ارشد.
+    پنل مدیر ارشد، انتقادات و پیشنهادات، تنظیمات و کنترل‌ها عمداً نیستند."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("♟️ مدیریت مسابقات", callback_data="menu_matches"),
+        InlineKeyboardButton("👤 مدیریت بازیکنان", callback_data="menu_players")],
+        [InlineKeyboardButton("👥 مدیریت مدیران", callback_data="own_mgrs"),
+        InlineKeyboardButton("📊 داشبورد مجموعه", callback_data="own_dash")],
+        [InlineKeyboardButton("📡 مخابرات", callback_data="menu_comms"),
+        InlineKeyboardButton("📋 وظایف", callback_data="menu_tasks")],
+        [InlineKeyboardButton("🕐 ساعت کاری", callback_data="pishva_workhours"),
+        InlineKeyboardButton("📅 تقویم", callback_data="menu_calendar")],
+        [InlineKeyboardButton("❓ راهنما", callback_data="menu_help"),
+        InlineKeyboardButton("♟️ شطرنج زنده", callback_data="chess_menu")],
+        [InlineKeyboardButton("🤖 رهگشا", callback_data="ai_assistant_open"),
+        InlineKeyboardButton("🔗 دعوت مدیر", callback_data="own_invite")],
+        [InlineKeyboardButton("☎️ ارتباط با مدیر ارشد", callback_data="own_contact")],
     ])
 
 # ─── منوی مدیر مسابقات ────────────────────────────────────────
@@ -1119,6 +1149,10 @@ def kb_admin_undo_hourmenu(tid, date_str, is_today):
 
 # ─── مخابرات ──────────────────────────────────────────────────
 def kb_comms_pishva():
+    # چندسرور: مدیر مجموعه در مخابراتش دکمه‌ی «ارتباط با مدیر ارشد» هم دارد.
+    import srvctx
+    _contact = ([[InlineKeyboardButton("☎️ ارتباط با مدیر ارشد", callback_data="own_contact", style="primary")]]
+                if srvctx.current() != srvctx.MAIN_ID else [])
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("💬 پیام به ادمین", callback_data="comms_msg_admin", style="primary"),
         InlineKeyboardButton("📢 ارسال بیانیه", callback_data="comms_announce", style="success")],
@@ -1129,6 +1163,7 @@ def kb_comms_pishva():
         [InlineKeyboardButton("📰 ارسال خبر", callback_data="comms_news", style="success"),
         InlineKeyboardButton("📊 گزارشات", callback_data="comms_reports", style="primary")],
         [InlineKeyboardButton("📜 تاریخچه بیانیات", callback_data="comms_ann_history", style="primary")],
+        *_contact,
         [InlineKeyboardButton("🔙 بازگشت", callback_data="back_main", style="danger")],
     ])
 

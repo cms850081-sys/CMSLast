@@ -9,6 +9,7 @@ from telegram.ext import ApplicationHandlerStop
 import database as db
 import keyboards as kb
 from helpers import safe_edit_message_text, box
+from servers import is_boss as _boss, boss_chat as _boss_chat
 from config import PISHVA_ID, STATUS_APS
 
 
@@ -35,7 +36,7 @@ async def _track_activity(update: Update, admin=None):
     if user is None:
         return
     uid = user.id
-    if uid == PISHVA_ID:
+    if _boss(uid):
         return  # مدیر ارشد نیازی به رهگیری نداره
 
     try:
@@ -101,7 +102,7 @@ async def block_gate(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if user is None:
         return
     uid = user.id
-    if uid == PISHVA_ID:
+    if _boss(uid):
         blocked, admin, status = await db.get_blocked_user(uid), None, None
     else:
         blocked, admin, status = await asyncio.gather(
@@ -143,7 +144,7 @@ async def aps_gate(update: Update, ctx: ContextTypes.DEFAULT_TYPE, user=None, ad
     خودش می‌گیردشون."""
     if user is None:
         user = update.effective_user
-    if user is None or user.id == PISHVA_ID:
+    if user is None or _boss(user.id):
         return
 
     if status is None:
@@ -213,7 +214,7 @@ async def build_security_panel_text() -> str:
 
 async def security_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد به این بخش دسترسی دارد.", show_alert=True)
         return
     await query.answer()
@@ -260,7 +261,7 @@ async def security_queue_item(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def request_to_queue(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """از روی نوتیفیکیشن درخواست دسترسی: شخص را به صف انتظار می‌فرستد."""
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -270,7 +271,7 @@ async def request_to_queue(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.answer("این درخواست قبلاً پردازش شده.", show_alert=True)
         return
     await db.set_request_status(req_id, "queued")
-    await db.log_action(PISHVA_ID, "queue_request", f"صف انتظار: {r['full_name']}", r["telegram_id"])
+    await db.log_action(_boss_chat(), "queue_request", f"صف انتظار: {r['full_name']}", r["telegram_id"])
     try:
         await ctx.bot.send_message(chat_id=r["telegram_id"], text=QUEUE_MESSAGE, parse_mode="Markdown")
     except Exception:
@@ -281,7 +282,7 @@ async def request_to_queue(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def queue_approve(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -293,7 +294,7 @@ async def queue_approve(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await db.set_request_status(req_id, "approved")
     await db.create_admin(r["telegram_id"], r["username"], r["full_name"], r["role"])
     await db.close_other_open_requests(r["telegram_id"], req_id)
-    await db.log_action(PISHVA_ID, "approve_from_queue", f"تأیید از صف انتظار: {r['full_name']}", r["telegram_id"])
+    await db.log_action(_boss_chat(), "approve_from_queue", f"تأیید از صف انتظار: {r['full_name']}", r["telegram_id"])
     role_map = {"tournament_manager": "🏆 مدیر مسابقات", "security_manager": "🛡️ مدیر امنیتی"}
     role_label = role_map.get(r["role"], r["role"])
     try:
@@ -309,7 +310,7 @@ async def queue_approve(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def queue_release(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -317,7 +318,7 @@ async def queue_release(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     r = await db.get_access_request(req_id)
     if r:
         await db.set_request_status(req_id, "rejected")
-        await db.log_action(PISHVA_ID, "release_from_queue", f"خروج از صف: {r['full_name']}", r["telegram_id"])
+        await db.log_action(_boss_chat(), "release_from_queue", f"خروج از صف: {r['full_name']}", r["telegram_id"])
         try:
             await ctx.bot.send_message(
                 chat_id=r["telegram_id"],
@@ -330,7 +331,7 @@ async def queue_release(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def queue_block_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -349,7 +350,7 @@ async def queue_block_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def request_block_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """از روی نوتیفیکیشن درخواست دسترسی."""
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -368,7 +369,7 @@ async def request_block_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ─── بلاک دائم ────────────────────────────────────────────────
 async def block_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -388,8 +389,8 @@ async def block_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         username = b["username"] if b else ""
         full_name = b["full_name"] if b else str(telegram_id)
 
-    await db.block_user(telegram_id, username or "", full_name or "", "بلاک توسط مدیر ارشد", PISHVA_ID)
-    await db.log_action(PISHVA_ID, "block_user", f"بلاک: {full_name} ({telegram_id})", telegram_id)
+    await db.block_user(telegram_id, username or "", full_name or "", "بلاک توسط مدیر ارشد", _boss_chat())
+    await db.log_action(_boss_chat(), "block_user", f"بلاک: {full_name} ({telegram_id})", telegram_id)
     try:
         await ctx.bot.send_message(chat_id=telegram_id, text=BLOCK_MESSAGE, parse_mode="Markdown")
     except Exception:
@@ -432,7 +433,7 @@ async def security_blocked_item(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def unblock_action(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -440,7 +441,7 @@ async def unblock_action(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     b = await db.get_blocked_user(tid)
     name = b["full_name"] if b else str(tid)
     await db.unblock_user(tid)
-    await db.log_action(PISHVA_ID, "unblock_user", f"آنبلاک: {name} ({tid})", tid)
+    await db.log_action(_boss_chat(), "unblock_user", f"آنبلاک: {name} ({tid})", tid)
     try:
         await ctx.bot.send_message(chat_id=tid, text="✅ دسترسی شما به ربات مجدداً فعال شد.")
     except Exception:
@@ -558,7 +559,7 @@ async def check_stranger_flood(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
     )
     await db.set_request_status(req_id, "queued")
     await db.log_action(
-        PISHVA_ID, "auto_queue_flood",
+        _boss_chat(), "auto_queue_flood",
         f"صف انتظار خودکار (ضدِ فلود): {full_name or uid} — بیش از {max_n} تلاش در {win_min} دقیقه",
         uid,
     )
@@ -588,7 +589,7 @@ def _flood_menu_text(enabled: bool, max_n: int, win_min: int) -> str:
 
 async def security_flood_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -611,13 +612,13 @@ async def _render_flood_menu(query):
 
 async def security_flood_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     new_state = not await get_flood_enabled()
     await db.set_setting(FLOOD_ENABLED_KEY, "1" if new_state else "0")
     ctx.bot_data.pop("aps_flood_tracker", None)  # شمارشِ قدیمی بعد از روشن/خاموش کردن معتبر نیست
-    await db.log_action(PISHVA_ID, "flood_toggle", f"ضدِ فلود {'روشن' if new_state else 'خاموش'} شد")
+    await db.log_action(_boss_chat(), "flood_toggle", f"ضدِ فلود {'روشن' if new_state else 'خاموش'} شد")
     await query.answer("🟢 ضدِ فلود روشن شد" if new_state else "🔴 ضدِ فلود خاموش شد", show_alert=True)
     await _render_flood_menu(query)
 
@@ -625,7 +626,7 @@ async def security_flood_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def security_flood_step(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """دکمه‌های ➖/➕ : flood_max_{dec5|dec|inc|inc5} و flood_win_{dec|inc}"""
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     parts = query.data.split("_")  # flood, max|win, action
@@ -652,7 +653,7 @@ async def security_flood_step(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def security_flood_reset(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await db.set_setting(FLOOD_MAX_KEY, FLOOD_MAX_DEFAULT)
@@ -669,7 +670,7 @@ async def security_flood_noop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # (قدیمی) هندلرهای گزینه‌های ثابت — برای پیام‌های قدیمیِ هنوز بازِ چتِ مدیر ارشد نگه داشته شده‌اند.
 async def security_flood_set_max(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     n = min(FLOOD_MAX_MAX, max(FLOOD_MAX_MIN, int(query.data.split("_")[-1])))
@@ -680,7 +681,7 @@ async def security_flood_set_max(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
 
 async def security_flood_set_window(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     n = max(1, int(query.data.split("_")[-1]))

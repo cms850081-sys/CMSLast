@@ -23,6 +23,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 import database as db
 import hub_caps
 import match_scan_service as svc
+from servers import is_boss as _boss, boss_chat as _boss_chat
 from config import PISHVA_ID, ST_SCAN_PHOTO, ST_SCAN_REVIEW, ST_SCAN_SEARCH, ST_SCAN_DATE
 from helpers import (check_status_gate, date_label_fa, days_ago_gregorian, now_shamsi,
                      parse_admin_undo_date, safe_edit_message_text, today_gregorian)
@@ -36,7 +37,7 @@ _E = html.escape
 
 # ───────────────────────── دسترسی ─────────────────────────
 async def _can_scan(uid: int) -> bool:
-    if uid == PISHVA_ID:
+    if _boss(uid):
         return True
     admin = await db.get_admin(uid)
     if not admin or not admin["is_active"]:
@@ -47,13 +48,13 @@ async def _can_scan(uid: int) -> bool:
 
 async def _needs_approval(uid: int) -> bool:
     """True = ثبتِ نهایی فقط درخواست می‌سازد. مدیر ارشد همیشه مستقیم؛ بقیه طبقِ تنظیمِ همان مدیر/تنظیمِ کلی."""
-    if uid == PISHVA_ID:
+    if _boss(uid):
         return False
     return await hub_caps.scan_needs_approval(False, await db.get_admin(uid))
 
 
 async def _admin_name(uid: int) -> str:
-    if uid == PISHVA_ID:
+    if _boss(uid):
         return "مدیر ارشد"
     a = await db.get_admin(uid)
     return (a["display_name"] or a["full_name"] or str(uid)) if a else str(uid)
@@ -230,7 +231,7 @@ async def scan_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         tail = ("\n\nچند لحظه بعد همین عکس را دوباره بفرستید یا لغو کنید." if infra
                 else "\n\nعکسِ دیگری بفرستید یا لغو کنید.")
         text = f"❌ {e.message}{tail}"
-        if uid == PISHVA_ID and getattr(e, "detail", ""):
+        if _boss(uid) and getattr(e, "detail", ""):
             text += f"\n\n🔧 جزئیاتِ فنی (فقط برای شما):\n{e.detail[:600]}"
         await wait.edit_text(text, reply_markup=_cancel_kb())
         return ST_SCAN_PHOTO
@@ -590,8 +591,8 @@ async def scan_commit(update, ctx):
         return ConversationHandler.END
     created, failed = await svc.commit_items(payload, md, tid, uid)
     if created:
-        await db.log_action(uid, "scan_commit", f"ثبت با عکس: {created} مسابقه" + ("" if uid == PISHVA_ID else " (مستقیم)"))
-        if uid != PISHVA_ID:
+        await db.log_action(uid, "scan_commit", f"ثبت با عکس: {created} مسابقه" + ("" if _boss(uid) else " (مستقیم)"))
+        if not _boss(uid):
             await notify_pishva_direct_commit(ctx.bot, await _admin_name(uid), created)
     text = f"✅ <b>{created} مسابقه ثبت شد.</b>"
     if failed:
@@ -649,14 +650,14 @@ async def notify_pishva_new_request(bot, req_id: int, who: str):
         req = await db.get_scan_request(req_id)
         if not req:
             return
-        await bot.send_message(chat_id=PISHVA_ID, text=await _request_text(req, who),
+        await bot.send_message(chat_id=_boss_chat(), text=await _request_text(req, who),
                                reply_markup=_request_kb(req_id), parse_mode="HTML")
     except Exception:
         logger.warning("notify_pishva_new_request failed", exc_info=True)
 
 
 async def _pishva_only(q) -> bool:
-    if q.from_user.id != PISHVA_ID:
+    if not _boss(q.from_user.id):
         await q.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return False
     return True
@@ -744,7 +745,7 @@ async def notify_pishva_direct_commit(bot, who: str, created: int):
     if bot is None or not created:
         return
     try:
-        await bot.send_message(chat_id=PISHVA_ID,
+        await bot.send_message(chat_id=_boss_chat(),
                                text=f"📷 {who} با «ثبت با عکس» {created} مسابقه را مستقیم ثبت کرد.")
     except Exception:
         logger.warning("notify_pishva_direct_commit failed", exc_info=True)
@@ -781,7 +782,7 @@ async def scanperm_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         nxt = {None: "direct", "direct": "approval", "approval": None}[hub_caps.scan_mode_override(perms)]
         await db.set_admin_permission(tid, "scan_mode", nxt)
         txt = {"direct": "مستقیم ⚡", "approval": "با تأییدِ من 🔐", None: "تنظیمِ کلی"}[nxt]
-    await db.log_action(PISHVA_ID, "admin_permission", f"ثبت با عکس ({'دسترسی' if what == 'access' else 'حالت'}): {txt}", tid)
+    await db.log_action(_boss_chat(), "admin_permission", f"ثبت با عکس ({'دسترسی' if what == 'access' else 'حالت'}): {txt}", tid)
     await q.answer(txt)
     admin2 = await db.get_admin(tid)
     name = admin2["display_name"] or admin2["full_name"]

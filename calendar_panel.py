@@ -13,6 +13,7 @@ from telegram.ext import ConversationHandler
 
 import database as db
 import keyboards as kb
+from servers import is_boss as _boss, boss_chat as _boss_chat
 from config import PISHVA_ID, ST_CALENDAR_TITLE
 from helpers import safe_edit_message_text, box, TEHRAN_TZ
 
@@ -20,7 +21,7 @@ from helpers import safe_edit_message_text, box, TEHRAN_TZ
 async def _can_edit_calendar(uid: int) -> bool:
     """مدیر ارشد همیشه دسترسی داره؛ سایر مدیرها فقط اگه مدیر ارشد از پنل
     دسترسی‌های مدیر، مجوز 'calendar_edit' رو براشون فعال کرده باشه."""
-    if uid == PISHVA_ID:
+    if _boss(uid):
         return True
     admin = await db.get_admin(uid)
     if not admin or not admin["is_active"]:

@@ -164,4 +164,11 @@ BAR_LENGTH = 15
     ST_SCAN_REVIEW,
     ST_SCAN_SEARCH,
     ST_SCAN_DATE,
-) = range(90)
+    # ثبت‌نامِ مدیر مجموعه (چندسرور)
+    ST_OWNER_FULLNAME,
+    ST_OWNER_USERNAME,
+    ST_OWNER_SCHOOL,
+    ST_OWNER_DATE,
+    ST_OWNER_PHONE,
+    ST_OWNER_GRADE,
+) = range(96)

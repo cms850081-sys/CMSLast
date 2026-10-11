@@ -17,6 +17,7 @@ from telegram.ext import ContextTypes
 
 import database as db
 from chess_ai import AI_LEVELS, ai_display_name
+from servers import is_boss as _boss, boss_chat as _boss_chat
 from config import CHESS_AI_ID, PISHVA_ID, WEBAPP_URL, BOT_USERNAME
 from game_server import expire_game_if_timed_out, maybe_play_ai_move, new_game_token
 from helpers import safe_edit_message_text, box, pishva_display
@@ -88,7 +89,7 @@ async def _chess_block_reason(uid: int) -> str:
     فقط برای باز کردنِ منوی شطرنج. حالا هر سه هم‌زمان با asyncio.gather
     خونده می‌شن؛ اولویتِ پیام‌ها (قفلِ کلی > خاموشیِ دستی > بی‌دسترسی) دقیقاً
     مثل قبل حفظ شده، فقط زمانِ صبر کمتر شده."""
-    if uid == PISHVA_ID:
+    if _boss(uid):
         if await db.is_chess_locked_by_status():
             return (
                 f"{box('♟️ شطرنج زنده غیرفعال است')}\n\n"
@@ -122,7 +123,7 @@ async def _chess_block_reason(uid: int) -> str:
 
 
 async def _display_name(user_id: int, bot=None) -> str:
-    if user_id == PISHVA_ID:
+    if _boss(user_id):
         return await pishva_display()
     tg_name = await _telegram_profile_name(bot, user_id)
     if tg_name:
@@ -138,9 +139,9 @@ async def _eligible_opponents(requester_id: int):
     FIX: pishva_display() و get_active_admins() به هم وابسته نیستن؛ قبلاً
     پشتِ‌سرِهم صدا زده می‌شدن، حالا هم‌زمان."""
     opponents = []
-    if requester_id != PISHVA_ID:
+    if not _boss(requester_id):
         pname, admins = await asyncio.gather(pishva_display(), db.get_active_admins())
-        opponents.append((PISHVA_ID, pname))
+        opponents.append((_boss_chat(), pname))
     else:
         admins = await db.get_active_admins()
     for a in admins:
@@ -196,7 +197,7 @@ async def _chess_menu_content(uid: int, chat_type: str = "private", bot=None):
     rows.append([InlineKeyboardButton("📋 بازی‌های فعال", callback_data="chess_active_games")])
     rows.append([InlineKeyboardButton("📜 لیست بازی‌ها", callback_data="chess_history")])
     for opp_id, name in opponents:
-        label = ("👑 " if opp_id == PISHVA_ID else "🎖️ ") + name
+        label = ("👑 " if _boss(opp_id) else "🎖️ ") + name
         rows.append([InlineKeyboardButton(label, callback_data=f"chess_req_{opp_id}")])
 
     if other_games and (WEBAPP_URL or is_group):
@@ -591,8 +592,8 @@ async def _announce_game_to_others(ctx, player1_id, player2_id, white_name, blac
     """به بقیه‌ی مدیران (و پیشوا، در صورتی که خودش بازیکن نباشد) خبر می‌دهد که
     یک بازی شطرنج زنده در جریان است و امکان تماشا و ارسال پیام را می‌دهد."""
     notify_ids = set()
-    if player1_id != PISHVA_ID and player2_id != PISHVA_ID:
-        notify_ids.add(PISHVA_ID)
+    if not _boss(player1_id) and not _boss(player2_id):
+        notify_ids.add(_boss_chat())
     admins = await db.get_active_admins()
     for a in admins:
         tid = a["telegram_id"]

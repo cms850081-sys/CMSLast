@@ -19,6 +19,7 @@ from telegram.ext import ContextTypes
 
 import database as db
 import keyboards as kb
+from servers import is_boss as _boss, boss_chat as _boss_chat
 from config import PISHVA_ID
 from helpers import box, now_shamsi, today_gregorian, notify_pishva, safe_edit_message_text
 
@@ -105,7 +106,7 @@ async def record_destructive_action(bot, admin_id: int, action_type: str):
     صدا زده می‌شه. اگه تعداد این اقدام‌ها توی بازه‌ی زمانیِ تنظیم‌شده از
     آستانه بیشتر بشه، فوری به مدیر ارشد هشدار می‌ده (یا در صورتِ فعال بودنِ
     تصمیم‌گیریِ خودکار، بلافاصله اقدامِ تنظیم‌شده رو خودش انجام می‌ده)."""
-    if admin_id == PISHVA_ID or action_type not in DESTRUCTIVE_ACTIONS:
+    if _boss(admin_id) or action_type not in DESTRUCTIVE_ACTIONS:
         return
 
     enabled, threshold, window_min = await get_effective_settings(admin_id)
@@ -162,7 +163,7 @@ async def _run_auto_action(bot, admin_id: int, admin_name: str, action: str,
     done_lines = []
     if action in (AUTO_ACTION_DISABLE_NOTIFY, AUTO_ACTION_DISABLE_UNDO_NOTIFY):
         await db.kick_admin(admin_id)
-        await db.log_action(PISHVA_ID, "kick_admin",
+        await db.log_action(_boss_chat(), "kick_admin",
                              f"خاموشی خودکار بابت فعالیت مشکوک: {admin_name}", admin_id)
         done_lines.append("🔇 دسترسیِ این ادمین به‌صورت خودکار قطع شد.")
         try:
@@ -173,7 +174,7 @@ async def _run_auto_action(bot, admin_id: int, admin_name: str, action: str,
 
     if action in (AUTO_ACTION_DISABLE_UNDO_NOTIFY, AUTO_ACTION_UNDO_NOTIFY):
         reverted, skipped = await db.undo_admin_actions(admin_id, date_str)
-        await db.log_action(PISHVA_ID, "undo_admin_actions",
+        await db.log_action(_boss_chat(), "undo_admin_actions",
                              f"خنثی‌سازیِ خودکارِ اقدامات {admin_name} در {date_str}: {len(reverted)} مورد")
         done_lines.append(f"↩️ `{len(reverted)}` اقدام به‌صورت خودکار خنثی شد "
                            f"(`{len(skipped)}` مورد قابلِ بازگشتِ خودکار نبود).")
@@ -203,7 +204,7 @@ def _parse_alert_data(data: str):
 
 async def suspicious_undo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -213,7 +214,7 @@ async def suspicious_undo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     admin = await db.get_admin(admin_id)
     admin_name = (admin["display_name"] or admin["full_name"]) if admin else str(admin_id)
     reverted, skipped = await db.undo_admin_actions(admin_id, date_str)
-    await db.log_action(PISHVA_ID, "undo_admin_actions",
+    await db.log_action(_boss_chat(), "undo_admin_actions",
                          f"خنثی‌سازی اقدامات {admin_name} در {date_str}: {len(reverted)} مورد")
     old_text = query.message.text or ""
     text = (
@@ -227,7 +228,7 @@ async def suspicious_undo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def suspicious_disable(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer()
@@ -237,7 +238,7 @@ async def suspicious_disable(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     admin = await db.get_admin(admin_id)
     admin_name = (admin["display_name"] or admin["full_name"]) if admin else str(admin_id)
     await db.kick_admin(admin_id)
-    await db.log_action(PISHVA_ID, "kick_admin",
+    await db.log_action(_boss_chat(), "kick_admin",
                          f"خاموشی خودکار بابت فعالیت مشکوک: {admin_name}", admin_id)
     try:
         await ctx.bot.send_message(
@@ -256,7 +257,7 @@ async def suspicious_disable(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def suspicious_dismiss(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     await query.answer("✅ ثبت شد.")

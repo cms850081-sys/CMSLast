@@ -1117,7 +1117,8 @@ async def start_game_server(bot=None):
         set_bot(bot)
     # پیش‌فرضِ aiohttp ۱MB است؛ «ثبت نتیجه با عکس» (base64) در هاب تا چند MB می‌فرستد
     from audit import audit_middleware
-    app = web.Application(client_max_size=8 * 1024 * 1024, middlewares=[audit_middleware])
+    from routing import server_middleware   # چندسرور: سرورِ هر درخواست از روی initData
+    app = web.Application(client_max_size=8 * 1024 * 1024, middlewares=[server_middleware, audit_middleware])
     app.add_routes(routes)
     try:
         from admin_panel import register_panel_routes

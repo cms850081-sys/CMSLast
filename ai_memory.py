@@ -17,6 +17,7 @@ ai_memory.py — حافظه‌ی بلندمدتِ دستیار هوشمند (ن�
     'pishva' → یادداشت‌های خصوصی‌تر که فقط توی چتِ مدیر ارشد به‌عنوان زمینه میاد
 """
 import asyncio
+from srvctx import PerServerValue as _PSV, PerServer as _PS
 import logging
 import time
 
@@ -29,11 +30,11 @@ logger = logging.getLogger(__name__)
 TABLE = "ai_notes"
 _LEGACY_FLAG = "ai_notes_legacy_imported"
 
-_ready = False
+_ready = _PSV(False)  # به‌ازای هر سرور
 _lock = None  # موقع ایمپورت ساخته نمی‌شه تا به event loop خاصی گره نخوره
 
 _CACHE_TTL = 30  # ثانیه — فقط برای خوندنِ «آخرین یادداشت‌ها» موقع ساختنِ پرامپت
-_cache: dict = {}
+_cache = _PS()  # یادداشت‌های اخیر: به‌ازای هر سرور
 
 MAX_CONTENT_LEN = 4000
 MAX_SUBJECT_LEN = 120
@@ -141,12 +142,12 @@ async def _import_legacy() -> None:
 
 async def _ensure() -> None:
     global _ready, _lock
-    if _ready:
+    if _ready.get():
         return
     if _lock is None:
         _lock = asyncio.Lock()
     async with _lock:
-        if _ready:
+        if _ready.get():
             return
         async with turso_db.connect(DB_PATH) as conn:
             await conn.execute(
@@ -161,7 +162,7 @@ async def _ensure() -> None:
                 )"""
             )
             await conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{TABLE}_vis ON {TABLE}(visibility, id)")
-        _ready = True
+        _ready.set(True)
         try:
             await _import_legacy()
         except Exception:

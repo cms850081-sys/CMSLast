@@ -9,13 +9,14 @@ import html
 import logging
 
 logger = logging.getLogger(__name__)
+from servers import is_boss as _boss, boss_chat as _boss_chat
 from config import (PISHVA_ID, ST_SEND_MSG_SELECT_ADMIN, ST_SEND_MSG_TEXT,
     ST_ANNOUNCEMENT_TEXT, ST_ANNOUNCEMENT_FILE, ST_NEWS_TEXT)
 
 # ─── Send message to admin (Pishva) ──────────────────────────
 async def comms_msg_admin_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()
@@ -139,7 +140,7 @@ async def comms_sent_history(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = query.from_user.id
     msgs = await db.get_sent_messages_for(uid)
     if not msgs:
-        back_to = "comms_pishva" if uid == PISHVA_ID else "comms_admin"
+        back_to = "comms_pishva" if _boss(uid) else "comms_admin"
         await safe_edit_message_text(query, "📭 هیچ پیامی ارسال نکرده‌اید.", reply_markup=kb.kb_back(back_to))
         return
     admins = {a["telegram_id"]: (a["display_name"] or a["full_name"]) for a in await db.get_all_admins()}
@@ -153,7 +154,7 @@ async def comms_sent_history(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 callback_data=f"sent_msg_view_{m['id']}"
             )
         ])
-    back_to = "comms_pishva" if uid == PISHVA_ID else "comms_admin"
+    back_to = "comms_pishva" if _boss(uid) else "comms_admin"
     rows.append([InlineKeyboardButton("🔙 بازگشت", callback_data=back_to)])
     await safe_edit_message_text(query, 
         f"{box('📤 پیام‌های ارسالی')}\n\n📌 یک پیام را انتخاب کنید:",
@@ -212,7 +213,7 @@ async def sent_msg_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def comms_all_msgs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()
@@ -233,7 +234,7 @@ async def comms_all_msgs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ─── Announcements ────────────────────────────────────────────
 async def comms_announce_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()
@@ -357,7 +358,7 @@ async def ann_view(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.answer("بیانیه یافت نشد.", show_alert=True)
         return
     rows = []
-    if query.from_user.id == PISHVA_ID:
+    if _boss(query.from_user.id):
         rows.append([InlineKeyboardButton("🗑️ حذف بیانیه", callback_data=f"ann_delete_{ann_id}")])
     rows.append([InlineKeyboardButton("🔙 بازگشت", callback_data="comms_ann_history")])
     await safe_edit_message_text(query, 
@@ -369,7 +370,7 @@ async def ann_view(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def ann_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()
@@ -380,7 +381,7 @@ async def ann_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ─── News ─────────────────────────────────────────────────────
 async def comms_news_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()
@@ -431,7 +432,7 @@ async def comms_notifs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def comms_reports(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()

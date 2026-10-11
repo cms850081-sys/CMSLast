@@ -5,7 +5,7 @@ from datetime import timedelta
 from telegram import Update, BotCommand, BotCommandScopeChat
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ConversationHandler, filters, ContextTypes
+    MessageHandler, ConversationHandler, filters, ContextTypes, TypeHandler
 )
 
 import database as db
@@ -53,8 +53,16 @@ from config import (
 from auth import (
     cmd_start, on_role_select, on_pishva_password, on_admin_username,
     on_admin_fullname, on_access_request_msg, on_approve_request, on_reject_request,
-    role_change_menu, role_change_apply
+    role_change_menu, role_change_apply,
+    on_owner_fullname, on_owner_username, on_owner_school, on_owner_date, on_owner_phone, on_owner_grade,
 )
+import servers
+import srvctx
+import routing
+import owner_panel
+import servers_panel
+from config import (ST_OWNER_FULLNAME, ST_OWNER_USERNAME, ST_OWNER_SCHOOL,
+                    ST_OWNER_DATE, ST_OWNER_PHONE, ST_OWNER_GRADE)
 from navigation import (
     back_main, menu_tournament, menu_players, menu_matches, menu_pishva, pishva_panel_page,
     menu_comms, menu_help, menu_admins, menu_tasks, menu_feedback,
@@ -221,6 +229,23 @@ async def post_init(application: Application) -> None:
     await db.init_db()
     logger.info("Database initialized.")
 
+    # ─── چندسرور: رجیستری، کلاینتِ دیتابیسِ هر مجموعه، و مهاجرتِ اسکیمای آن‌ها ───
+    try:
+        await servers.load()
+        for _sid in servers.active_ids():
+            if _sid == srvctx.MAIN_ID:
+                continue
+            with srvctx.use(_sid):
+                try:
+                    await db.init_db()
+                    from elo import ensure_elo_table as _eet
+                    await _eet()
+                except Exception:
+                    logger.exception("init سرور %s ناموفق", _sid)
+        logger.info("Servers ready: %s", servers.active_ids())
+    except Exception:
+        logger.exception("servers.load failed")
+
     try:
         from elo import ensure_elo_table
         await ensure_elo_table()
@@ -356,10 +381,13 @@ async def post_init(application: Application) -> None:
     # یک پینگِ سبک + پر‌کردنِ دوباره‌ی کلیدهای پرکاربرد، تا کلیکِ بعدی همیشه سریع باشد.
     try:
         async def _db_keepalive_job(_ctx):
-            try:
-                import hub_caps
+            import hub_caps
+
+            async def _one():
                 await db.keepalive_ping()
                 await hub_caps.prewarm_auth_settings()
+            try:
+                await servers.for_each_active(_one)
             except Exception:
                 logger.debug("db keepalive failed", exc_info=True)
         application.job_queue.run_repeating(
@@ -576,6 +604,9 @@ def build_application():
     # 🚨 هندلر سراسری خطا — باید همیشه ثبت بشه تا خطاها گم نشن
     app.add_error_handler(global_error_handler)
 
+    # 🌐 روترِ چندسرور — اولین هندلرِ همه‌ی آپدیت‌ها (سرورِ جاریِ این آپدیت را تعیین می‌کند)
+    app.add_handler(TypeHandler(Update, routing.route_update), group=-100)
+
     # 🔎 ردیابیِ کاملِ اقدامات مدیران (گروه -5؛ قبل از هر چیز، بدونِ اثر روی پردازش)
     import audit as _audit
     _audit.register(app)
@@ -610,6 +641,13 @@ def build_application():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, on_access_request_msg),
                 CommandHandler("skip", on_access_request_msg),
             ],
+            # ثبت‌نامِ مدیر مجموعه (چندسرور)
+            ST_OWNER_FULLNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_owner_fullname)],
+            ST_OWNER_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_owner_username)],
+            ST_OWNER_SCHOOL: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_owner_school)],
+            ST_OWNER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_owner_date)],
+            ST_OWNER_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_owner_phone)],
+            ST_OWNER_GRADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, on_owner_grade)],
         },
         fallbacks=[CommandHandler("start", cmd_start)],
         **CONV_KWARGS
@@ -1031,6 +1069,10 @@ def build_application():
         app.add_handler(conv)
     for _h in morning_brief.build_handlers():
         app.add_handler(_h)
+
+    # 🌐 پنلِ مدیر مجموعه + پنلِ سرورهای مدیر ارشد (callbackهای own_ / srv_ / sreq_)
+    owner_panel.register(app)
+    servers_panel.register(app)
 
     # ══════════════════════════════════════════
     # SLASH COMMANDS

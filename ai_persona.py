@@ -132,12 +132,13 @@ TRAINER_LIGHT_DAYS = 28
 # ════════════════════════════════════════════════════════════════
 # ذخیره‌سازی
 # ════════════════════════════════════════════════════════════════
-_ready = False
+from srvctx import PerServerValue as _PSV, PerServer as _PS
+_ready = _PSV(False)  # به‌ازای هر سرور
 
 
 async def _ensure_tables():
     global _ready
-    if _ready:
+    if _ready.get():
         return
     async with turso_db.connect(DB_PATH) as conn:
         await conn.execute(
@@ -150,7 +151,7 @@ async def _ensure_tables():
             "CREATE TABLE IF NOT EXISTS rahgosha_held ("
             "id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, text TEXT, created_at TEXT)")
         await conn.commit()
-    _ready = True
+    _ready.set(True)
 
 
 def _now() -> datetime:

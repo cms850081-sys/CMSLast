@@ -57,12 +57,13 @@ _last_day_click = 0.0
 # ═════════════════════════════════════════════════════════════════
 # دیتابیس: قانون‌های رهگشا
 # ═════════════════════════════════════════════════════════════════
-_table_ready = False
+from srvctx import PerServerValue as _PSV, PerServer as _PS
+_table_ready = _PSV(False)  # به‌ازای هر سرور
 
 
 async def _ensure_tables():
     global _table_ready
-    if _table_ready:
+    if _table_ready.get():
         return
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("""
@@ -74,7 +75,7 @@ async def _ensure_tables():
             )
         """)
         await conn.commit()
-    _table_ready = True
+    _table_ready.set(True)
 
 
 async def _rows(sql: str, params=()):

@@ -28,6 +28,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 import database as db
 import keyboards as kb
 from helpers import safe_edit_message_text, box, now_shamsi, broadcast_to_admins, notify_pishva, TEHRAN_TZ
+from servers import is_boss as _boss, boss_chat as _boss_chat
 from config import PISHVA_ID, ST_WORKHOURS_AUTOEND_MINUTES, ST_WORKHOURS_REMINDER_MINUTES
 import precise_scheduler as sched
 
@@ -80,7 +81,7 @@ async def _do_start(bot, job_queue, autoend_minutes: int = None):
         f"سیستم آماده دریافت فرمان. 🛰️"
     )
     await broadcast_to_admins(bot, notif)
-    await db.log_action(PISHVA_ID, "workhour_start", f"آغاز ساعت کاری: {ts}" + (f" (پایان خودکار {autoend_minutes} دقیقه)" if autoend_minutes else ""))
+    await db.log_action(_boss_chat(), "workhour_start", f"آغاز ساعت کاری: {ts}" + (f" (پایان خودکار {autoend_minutes} دقیقه)" if autoend_minutes else ""))
     return ts, extra
 
 
@@ -110,7 +111,7 @@ async def _do_end(bot, job_queue, reason: str = "manual"):
             f"ممنون از زحمات شما! 🏆"
         )
     await broadcast_to_admins(bot, notif)
-    await db.log_action(PISHVA_ID, "workhour_end", f"پایان ساعت کاری ({reason}): {ts}")
+    await db.log_action(_boss_chat(), "workhour_end", f"پایان ساعت کاری ({reason}): {ts}")
     return ts
 
 
@@ -164,7 +165,7 @@ async def _render_status_extra() -> str:
 
 async def pishva_workhours(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()
@@ -185,7 +186,7 @@ async def workhour_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """نقطهٔ ورودی شروع ساعت کاری — هم از دکمه wh_start، هم از /open."""
     is_command = update.message is not None
     user_id = update.effective_user.id
-    if user_id != PISHVA_ID:
+    if not _boss(user_id):
         if not is_command:
             await update.callback_query.answer("⛔", show_alert=True)
         return ConversationHandler.END
@@ -234,7 +235,7 @@ async def workhour_end(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """نقطهٔ ورودی پایان دستی ساعت کاری — هم از دکمه wh_end، هم از /close."""
     is_command = update.message is not None
     user_id = update.effective_user.id
-    if user_id != PISHVA_ID:
+    if not _boss(user_id):
         if not is_command:
             await update.callback_query.answer("⛔", show_alert=True)
         return
@@ -254,7 +255,7 @@ async def workhour_end(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def workhours_autoend_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()
@@ -267,7 +268,7 @@ async def workhours_autoend_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYP
 
 async def workhours_reminder_toggle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return
     await query.answer()
@@ -278,7 +279,7 @@ async def workhours_reminder_toggle(update: Update, ctx: ContextTypes.DEFAULT_TY
 
 async def workhours_reminder_minutes_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔", show_alert=True)
         return ConversationHandler.END
     await query.answer()

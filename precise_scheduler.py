@@ -37,12 +37,33 @@ from config import DB_PATH
 
 logger = logging.getLogger(__name__)
 
-_TABLE_READY = False
+import srvctx
+
+
+def _jn(name: str) -> str:
+    """نامِ یکتای جاب در JobQueue: سرور اصلی = همان نام؛ سرور N = «نام@sN» (جاب‌های دو مجموعه هرگز قاطی نشوند)."""
+    sid = srvctx.current()
+    return name if sid == srvctx.MAIN_ID else f"{name}@s{sid}"
+
+
+def _wrap_cb(callback, sid: int):
+    """جاب‌ها بیرون از آپدیتِ تلگرام اجرا می‌شوند؛ پس سرورِ زمان‌بندی‌کننده را صراحتاً در اجرا برقرار می‌کنیم."""
+    if sid == srvctx.MAIN_ID:
+        return callback
+
+    async def _in_server(context):
+        with srvctx.use(sid):
+            return await callback(context)
+    _in_server.__name__ = getattr(callback, "__name__", "job") + f"_s{sid}"
+    return _in_server
+
+from srvctx import PerServerValue as _PSV, PerServer as _PS
+_TABLE_READY = _PSV(False)  # به‌ازای هر سرور
 
 
 async def _ensure_table():
     global _TABLE_READY
-    if _TABLE_READY:
+    if _TABLE_READY.get():
         return
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("""
@@ -53,7 +74,7 @@ async def _ensure_table():
             )
         """)
         await conn.commit()
-    _TABLE_READY = True
+    _TABLE_READY.set(True)
 
 
 async def save_target(name: str, target_at: datetime, payload: dict = None):
@@ -92,9 +113,10 @@ def schedule_exact(job_queue, callback, target_at: datetime, name: str, data: di
     if job_queue is None:
         logger.warning(f"job_queue در دسترس نیست؛ رویداد «{name}» زمان‌بندی نشد.")
         return
-    for job in job_queue.get_jobs_by_name(name):
+    jn = _jn(name)
+    for job in job_queue.get_jobs_by_name(jn):
         job.schedule_removal()
-    job_queue.run_once(callback, when=target_at, name=name, data=data or {})
+    job_queue.run_once(_wrap_cb(callback, srvctx.current()), when=target_at, name=jn, data=data or {})
 
 
 async def schedule_persistent(job_queue, callback, target_at: datetime, name: str, data: dict = None):
@@ -106,14 +128,13 @@ async def schedule_persistent(job_queue, callback, target_at: datetime, name: st
 async def cancel_persistent(job_queue, name: str):
     """رویداد رو هم از جاب‌کیو و هم از دیتابیس پاک می‌کنه."""
     if job_queue is not None:
-        for job in job_queue.get_jobs_by_name(name):
+        for job in job_queue.get_jobs_by_name(_jn(name)):
             job.schedule_removal()
     await clear_target(name)
 
 
-async def restore_pending(job_queue, callback, name: str):
-    """موقع post_init صدا زده می‌شه: اگه این رویداد قبل از قطع‌شدن ربات
-    زمان‌بندی شده بود، بدون هیچ انحرافی دوباره سرجاش می‌شینه."""
+async def restore_pending_here(job_queue, callback, name: str):
+    """مثلِ restore_pending ولی فقط برای «سرورِ جاری» (داخلِ زمینه‌ی همان سرور صدا زده شود)."""
     target_at, data = await load_target(name)
     if target_at is None:
         return
@@ -121,4 +142,21 @@ async def restore_pending(job_queue, callback, name: str):
     fire_at = target_at if target_at > now else now
     schedule_exact(job_queue, callback, fire_at, name, data)
     if fire_at != target_at:
-        logger.info(f"رویداد «{name}» موقع خاموش بودن ربات سررسید شده بود؛ فوری اجرا می‌شه.")
+        logger.info(f"رویداد «{name}» (سرور {srvctx.current()}) موقع خاموش بودن ربات سررسید شده بود؛ فوری اجرا می‌شه.")
+
+
+async def restore_pending(job_queue, callback, name: str):
+    """موقع post_init صدا زده می‌شه: اگه این رویداد قبل از قطع‌شدن ربات
+    زمان‌بندی شده بود، بدون هیچ انحرافی دوباره سرجاش می‌شینه.
+    چندسرور: برای «همه‌ی سرورهای فعال» انجام می‌شود (هرکدام در زمینه‌ی خودش)."""
+    try:
+        import servers
+        sids = servers.active_ids()
+    except Exception:
+        sids = [srvctx.MAIN_ID]
+    for sid in sids:
+        with srvctx.use(sid):
+            try:
+                await restore_pending_here(job_queue, callback, name)
+            except Exception:
+                logger.exception("restore_pending(%s) روی سرور %s ناموفق", name, sid)

@@ -93,12 +93,13 @@ def get_elo_bar(rating: float) -> str:
 # این جدول‌ها همیشه از قبل وجود دارن و این کار عملاً هیچ‌کاری نمی‌کنه.
 # الان فقط یک‌بار در طولِ اجرای پردازه چک/ساخته می‌شه (و همون یک‌بار هم با
 # batch در یک رفت‌وبرگشت، نه دوتا).
-_elo_tables_ready = False
+from srvctx import PerServerValue as _PSV, PerServer as _PS
+_elo_tables_ready = _PSV(False)  # به‌ازای هر سرور
 
 
 async def ensure_elo_table():
     global _elo_tables_ready
-    if _elo_tables_ready:
+    if _elo_tables_ready.get():
         return
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.batch():
@@ -128,7 +129,7 @@ async def ensure_elo_table():
                     recorded_at TEXT
                 )
             """)
-    _elo_tables_ready = True
+    _elo_tables_ready.set(True)
 
 
 async def get_player_elo(player_id: int) -> dict:

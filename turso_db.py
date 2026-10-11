@@ -170,7 +170,27 @@ def _to_exec_result(result: dict) -> _ExecResult:
     return _ExecResult(cols, rows, last_insert_rowid)
 
 
-def _get_client():
+# ─── چندسرور: هر سرور (۲..۶) کلاینتِ Turso و دیتابیسِ کاملاً جدای خودش را دارد ───
+# سرور ۱ (اصلی) همان کلاینتِ قبلی با TURSO_URL/TURSO_AUTH_TOKEN است.
+# اگر سرورِ جاری غیرِ اصلی باشد و کلاینتش ثبت نشده باشد، «هرگز» به دیتابیسِ اصلی برنمی‌گردیم
+# (جداسازیِ مطلق: ترجیحِ خطا به نشتِ داده).
+_server_clients = {}
+
+
+def register_server_client(sid: int, url: str, token: str):
+    """کلاینتِ دیتابیسِ یک سرور را (دوباره) می‌سازد؛ servers.py موقعِ بارگذاری/ساختِ سرور صدا می‌زند."""
+    _server_clients[int(sid)] = _TursoHttpClient(url, token)
+
+
+def drop_server_client(sid: int):
+    _server_clients.pop(int(sid), None)
+
+
+def has_server_client(sid: int) -> bool:
+    return int(sid) in _server_clients
+
+
+def _main_client():
     global _client
     if _client is None:
         url = os.getenv("TURSO_URL")
@@ -182,6 +202,17 @@ def _get_client():
             )
         _client = _TursoHttpClient(url, token)
     return _client
+
+
+def _get_client():
+    import srvctx
+    sid = srvctx.current()
+    if sid == srvctx.MAIN_ID:
+        return _main_client()
+    c = _server_clients.get(sid)
+    if c is None:
+        raise RuntimeError(f"دیتابیسِ سرور {sid} بارگذاری نشده است (جداسازی: به دیتابیسِ اصلی وصل نمی‌شویم).")
+    return c
 
 
 class Row:

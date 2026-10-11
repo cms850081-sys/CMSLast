@@ -47,12 +47,13 @@ JOB_PREFIX = "ai_sched_"
 KIND_REMINDER = "reminder"
 KIND_ACTION = "action"
 
-_TABLE_READY = False
+from srvctx import PerServerValue as _PSV, PerServer as _PS
+_TABLE_READY = _PSV(False)  # به‌ازای هر سرور
 
 
 async def _ensure_table():
     global _TABLE_READY
-    if _TABLE_READY:
+    if _TABLE_READY.get():
         return
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute("""
@@ -71,7 +72,7 @@ async def _ensure_table():
             )
         """)
         await conn.commit()
-    _TABLE_READY = True
+    _TABLE_READY.set(True)
 
 
 def _fmt_dt(dt: datetime) -> str:
@@ -304,14 +305,25 @@ async def action_fire_job(context):
 async def restore_all(application):
     """موقع post_init صدا زده می‌شه: هر یادآور/اقدامی که هنوز pending مونده
     (چه سررسیدش گذشته باشه چه نه)، دقیقاً سر لحظه‌ی ذخیره‌شده دوباره
-    زمان‌بندی می‌شه — بدون کوچک‌ترین انحراف."""
-    await _ensure_table()
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        async with conn.execute("SELECT id, kind FROM ai_scheduled_jobs WHERE status='pending'") as cur:
-            rows = await cur.fetchall()
-    for r in rows:
-        callback = reminder_fire_job if r["kind"] == KIND_REMINDER else action_fire_job
-        await sched.restore_pending(application.job_queue, callback, f"{JOB_PREFIX}{r['id']}")
-    if rows:
-        logger.info(f"AI scheduler: {len(rows)} pending reminder/action(s) restored.")
+    زمان‌بندی می‌شه — بدون کوچک‌ترین انحراف. (چندسرور: برای هر سرورِ فعال جدا.)"""
+    import srvctx
+    try:
+        import servers
+        sids = servers.active_ids()
+    except Exception:
+        sids = [srvctx.MAIN_ID]
+    for sid in sids:
+        with srvctx.use(sid):
+            try:
+                await _ensure_table()
+                async with aiosqlite.connect(DB_PATH) as conn:
+                    conn.row_factory = aiosqlite.Row
+                    async with conn.execute("SELECT id, kind FROM ai_scheduled_jobs WHERE status='pending'") as cur:
+                        rows = await cur.fetchall()
+                for r in rows:
+                    callback = reminder_fire_job if r["kind"] == KIND_REMINDER else action_fire_job
+                    await sched.restore_pending_here(application.job_queue, callback, f"{JOB_PREFIX}{r['id']}")
+                if rows:
+                    logger.info(f"AI scheduler (سرور {sid}): {len(rows)} pending reminder/action(s) restored.")
+            except Exception:
+                logger.exception("ai_scheduler.restore_all روی سرور %s ناموفق", sid)

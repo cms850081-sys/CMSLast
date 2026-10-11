@@ -13,6 +13,11 @@ from telegram.ext import ContextTypes, ConversationHandler
 import database as db
 import keyboards as kb
 from helpers import safe_edit_message_text, now_shamsi, box, separator, pishva_display, notify_pishva
+from servers import is_boss as _boss, boss_chat as _boss_chat
+import servers
+import srvctx
+from config import (ST_OWNER_FULLNAME, ST_OWNER_USERNAME, ST_OWNER_SCHOOL,
+                    ST_OWNER_DATE, ST_OWNER_PHONE, ST_OWNER_GRADE)
 from config import (PISHVA_ID, PISHVA_PASSWORD, ROLE_PISHVA,
                      ROLE_TOURNAMENT_MANAGER, ROLE_SECURITY_MANAGER,
                      ST_ROLE_SELECT, ST_PISHVA_PASSWORD, ST_ADMIN_USERNAME,
@@ -359,6 +364,34 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     uid = update.effective_user.id
     is_pishva = (uid == PISHVA_ID)
+
+    # ─── چندسرور: لینکِ دعوتِ استخدام  https://t.me/<bot>?start=join_<code> ───
+    # فرد وارد «سرورِ همان مجموعه» می‌شود (عضویتِ موقت 'pending' در رجیستری) و مسیرِ عادیِ ثبت‌نامِ مدیر
+    # (انتخاب نقش ← یوزرنیم ← نام ← پیام) را آن‌جا طی می‌کند؛ درخواستش به مدیر مجموعه می‌رسد.
+    _args0 = ctx.args if ctx.args else []
+    if _args0 and _args0[0].startswith("join_") and not is_pishva:
+        _jsid = servers.sid_by_invite(_args0[0][5:])
+        if not _jsid or not servers.feature_on(_jsid, "hire"):
+            await update.message.reply_text("❌ این لینکِ دعوت معتبر نیست یا غیرفعال شده است.")
+            return ConversationHandler.END
+        _cur_sid = servers.member_server(uid)
+        if _cur_sid != _jsid:
+            with srvctx.use(srvctx.MAIN_ID):
+                _main_admin = await db.get_admin(uid)
+            if _cur_sid != srvctx.MAIN_ID or (_main_admin and _main_admin["is_active"]):
+                await update.message.reply_text("⛔ شما هم‌اکنون عضوِ یک سرورِ دیگر هستید (هر نفر فقط یک سرور).")
+                return ConversationHandler.END
+            await servers.set_member(uid, _jsid, "pending")
+        srvctx.set_current(_jsid)
+        _gm = servers.gate_message(_jsid)
+        if _gm:
+            await update.message.reply_text(_gm)
+            return ConversationHandler.END
+        try:
+            ctx.args = []   # ادامه‌ی مسیر مثل /startِ ساده (بدون دیپ‌لینک)
+        except Exception:
+            pass
+
     admin = None if is_pishva else await db.get_admin(uid)
     is_admin = bool(admin and admin["is_active"])
     _perf_logger.warning("⏱️ DIAG /start: تا اینجا (بعد از db.get_admin) %.2f ثانیه از شروعِ اجرای هندلر گذشته", time.monotonic() - _t0)
@@ -554,7 +587,8 @@ async def show_pishva_welcome(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_admin_welcome(update: Update, ctx: ContextTypes.DEFAULT_TYPE, admin):
-    role_label = "🏆 مدیر مسابقات" if admin["role"] == ROLE_TOURNAMENT_MANAGER else "🛡️ مدیر امنیتی"
+    _is_owner = servers.is_owner(admin["telegram_id"])
+    role_label = "🏫 مدیر مجموعه" if _is_owner else ("🏆 مدیر مسابقات" if admin["role"] == ROLE_TOURNAMENT_MANAGER else "🛡️ مدیر امنیتی")
     _aname = admin["display_name"] or admin["full_name"]
     greeting = time_greeting(_aname)
 
@@ -593,7 +627,8 @@ async def show_admin_welcome(update: Update, ctx: ContextTypes.DEFAULT_TYPE, adm
         if weather:
             text += "\n" + weather
 
-    markup = kb.kb_tournament_manager_main() if admin["role"] == ROLE_TOURNAMENT_MANAGER else kb.kb_security_manager_main()
+    markup = (kb.kb_owner_main() if _is_owner else
+              kb.kb_tournament_manager_main() if admin["role"] == ROLE_TOURNAMENT_MANAGER else kb.kb_security_manager_main())
     if update.message:
         sent = await update.message.reply_text(text, reply_markup=markup, parse_mode="Markdown")
         from keyword_commands import register_panel_owner
@@ -609,8 +644,16 @@ async def on_role_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    if data == "role_owner":
+        if srvctx.current() != srvctx.MAIN_ID:
+            await safe_edit_message_text(query, "❌ این گزینه در این سرور وجود ندارد.")
+            return ConversationHandler.END
+        return await on_owner_start(update, ctx)
     if data == "role_pishva":
         uid = query.from_user.id
+        if srvctx.current() != srvctx.MAIN_ID:
+            await safe_edit_message_text(query, "❌ این حساب مجاز نیست.")
+            return ConversationHandler.END
         if uid == PISHVA_ID:
             return await show_pishva_welcome(update, ctx)
         await safe_edit_message_text(query, "🔐 رمز مدیر ارشد را وارد کنید:")
@@ -624,6 +667,99 @@ async def on_role_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
     return ST_ADMIN_USERNAME
+
+
+# ─── ثبت‌نامِ «مدیر مجموعه» (فقط از سرور اصلی) ──────────────────
+# نام و نام‌خانوادگی ← آیدی با @ ← نام مدرسه/مکانِ فعالیت ← تاریخِ موردنیازِ سرویس ← تلفن ← مقطع+رشته
+# سپس درخواست برای مدیر ارشد می‌رود (همان ضدفلود/بلاک/صفِ APS که پیش از انتخابِ نقش اجرا شده، این‌جا هم برقرار است).
+async def on_owner_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    uid = query.from_user.id
+    if servers.member_server(uid) != srvctx.MAIN_ID:
+        await safe_edit_message_text(query, "⛔ شما هم‌اکنون عضوِ یک سرور هستید (هر نفر فقط یک سرور).")
+        return ConversationHandler.END
+    if await servers.pending_request_of(uid):
+        await safe_edit_message_text(query, "📥 درخواستِ ثبتِ مجموعه‌ی قبلی شما هنوز در انتظارِ بررسی است.")
+        return ConversationHandler.END
+    if servers.next_free_id() is None:
+        await safe_edit_message_text(query, "⛔ ظرفیتِ ثبتِ مجموعه‌ی جدید فعلاً پر است.")
+        return ConversationHandler.END
+    ctx.user_data["own_reg"] = {}
+    await safe_edit_message_text(query, "🏫 *ثبتِ مدیر مجموعه*\n\n✍️ نام و نام‌خانوادگی خود را وارد کنید:", parse_mode="Markdown")
+    return ST_OWNER_FULLNAME
+
+
+async def on_owner_fullname(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    t = (update.message.text or "").strip()
+    if len(t) < 3:
+        await update.message.reply_text("❌ نام و نام‌خانوادگی را کامل وارد کنید:")
+        return ST_OWNER_FULLNAME
+    ctx.user_data.setdefault("own_reg", {})["full_name"] = t[:80]
+    await update.message.reply_text("👤 آیدیِ تلگرام خود را وارد کنید:\n(با @ شروع شود)")
+    return ST_OWNER_USERNAME
+
+
+async def on_owner_username(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    t = (update.message.text or "").strip()
+    if not t.startswith("@") or not any(c.isalpha() for c in t[1:]):
+        await update.message.reply_text("❌ آیدی باید با @ شروع شود و حاوی حروف باشد.\nدوباره وارد کنید:")
+        return ST_OWNER_USERNAME
+    ctx.user_data["own_reg"]["username"] = t[:40]
+    await update.message.reply_text("🏫 نامِ مدرسه / مکانِ فعالیت را وارد کنید:")
+    return ST_OWNER_SCHOOL
+
+
+async def on_owner_school(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    t = (update.message.text or "").strip()
+    if len(t) < 2:
+        await update.message.reply_text("❌ نامِ مدرسه/مکان را وارد کنید:")
+        return ST_OWNER_SCHOOL
+    ctx.user_data["own_reg"]["school"] = t[:80]
+    await update.message.reply_text("📅 تاریخِ موردنیازِ سرویس را وارد کنید:\n(مثلاً ۱۴۰۵/۰۸/۰۱)")
+    return ST_OWNER_DATE
+
+
+async def on_owner_date(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    t = (update.message.text or "").strip()
+    if len(t) < 4:
+        await update.message.reply_text("❌ تاریخ را وارد کنید:")
+        return ST_OWNER_DATE
+    ctx.user_data["own_reg"]["need_date"] = t[:40]
+    await update.message.reply_text("📞 شماره‌ی تلفنِ تماس را وارد کنید:")
+    return ST_OWNER_PHONE
+
+
+async def on_owner_phone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    t = (update.message.text or "").strip()
+    digits = "".join(c for c in t if c.isdigit() or c in "۰۱۲۳۴۵۶۷۸۹")
+    if len(digits) < 7:
+        await update.message.reply_text("❌ شماره‌ی تلفن معتبر وارد کنید:")
+        return ST_OWNER_PHONE
+    ctx.user_data["own_reg"]["phone"] = t[:30]
+    await update.message.reply_text("🎓 مقطعِ تحصیلی و رشته را وارد کنید:\n(مثلاً: یازدهم، ریاضی)")
+    return ST_OWNER_GRADE
+
+
+async def on_owner_grade(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    t = (update.message.text or "").strip()
+    if len(t) < 2:
+        await update.message.reply_text("❌ مقطع و رشته را وارد کنید:")
+        return ST_OWNER_GRADE
+    d = ctx.user_data.pop("own_reg", {})
+    uid = update.effective_user.id
+    if await servers.pending_request_of(uid):
+        await update.message.reply_text("📥 درخواستِ قبلی شما هنوز در انتظارِ بررسی است.")
+        return ConversationHandler.END
+    rid = await servers.create_request(uid, d.get("username", ""), d.get("full_name", ""), d.get("school", ""),
+                                       d.get("need_date", ""), d.get("phone", ""), t[:60])
+    from servers_panel import request_text, request_kb
+    req = await servers.get_request(rid)
+    try:
+        await ctx.bot.send_message(PISHVA_ID, request_text(req), parse_mode="HTML", reply_markup=request_kb(rid))
+    except Exception:
+        logger.exception("owner request notify")
+    await update.message.reply_text("✅ درخواستِ شما ارسال شد.\nپس از بررسیِ مدیر ارشد، نتیجه به شما اطلاع داده می‌شود.")
+    return ConversationHandler.END
 
 
 async def on_pishva_password(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -678,7 +814,7 @@ async def on_access_request_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def on_approve_request(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     req_id = int(query.data.split("_")[-1])
@@ -704,7 +840,7 @@ async def on_approve_request(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def on_reject_request(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if query.from_user.id != PISHVA_ID:
+    if not _boss(query.from_user.id):
         await query.answer("⛔ فقط مدیر ارشد.", show_alert=True)
         return
     req_id = int(query.data.split("_")[-1])
@@ -713,6 +849,8 @@ async def on_reject_request(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.answer("قبلاً پردازش شده.", show_alert=True)
         return
     await db.update_access_request(req_id, "rejected")
+    if srvctx.current() != srvctx.MAIN_ID and servers.member_state(req["telegram_id"]) == "pending":
+        await servers.remove_member(req["telegram_id"])   # دیگر به سرورِ این مجموعه وصل نیست
     try:
         await ctx.bot.send_message(
             chat_id=req["telegram_id"],
@@ -742,8 +880,8 @@ def _other_role(role: str) -> str:
 async def role_change_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = query.from_user.id
-    if uid == PISHVA_ID:
-        await query.answer("👑 مدیر ارشد نقشِ قابل‌تغییر ندارد.", show_alert=True)
+    if uid == PISHVA_ID or servers.is_owner(uid):
+        await query.answer("👑 این نقش قابل‌تغییر نیست.", show_alert=True)
         return
     admin = await db.get_admin(uid)
     if not (admin and admin["is_active"]):

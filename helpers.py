@@ -466,7 +466,9 @@ async def broadcast_to_admins(bot, text: str, exclude_id: int = None, reply_mark
             logger.warning(f"Group broadcast failed: {e}")
 
 async def notify_pishva(bot, text: str, reply_markup=None):
-    await send_notification(bot, PISHVA_ID, text, reply_markup)
+    # چندسرور: در سرور اصلی = مدیر ارشد؛ در یک مجموعه = مدیر مجموعه‌ی همان سرور (هیچ نشتی بین سرورها)
+    import servers
+    await send_notification(bot, servers.boss_chat(), text, reply_markup)
 
 # ─── System Status Gate ──────────────────────────────────────
 async def check_status_gate(query, action_name: str = "") -> bool:
@@ -477,7 +479,8 @@ async def check_status_gate(query, action_name: str = "") -> bool:
     بمونه با این‌که نتیجه‌ش براش فرقی نداشت. حالا: مدیر ارشد فوری رد می‌شه،
     و بقیه‌ی تنظیمات هم‌زمان (نه پشتِ‌سرِهم) خونده می‌شن."""
     user_id = query.from_user.id
-    if user_id == PISHVA_ID:
+    import servers
+    if user_id == PISHVA_ID or servers.is_owner(user_id):   # مدیر مجموعه ساعتِ کاریِ سرورش را خودش کنترل می‌کند
         return False
 
     status, bot_active, update_mode, working_hours = await asyncio.gather(

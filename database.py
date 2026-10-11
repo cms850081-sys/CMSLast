@@ -1,4 +1,5 @@
 import turso_db as aiosqlite
+from srvctx import PerServer as _PerServer  # کش‌ها به‌ازای هر سرور جدا (چندسرور)
 import asyncio
 import json
 import logging
@@ -67,8 +68,8 @@ _SETTING_CACHE_TTL = 45  # ثانیه
 # الان کشِ مربوطه رو فوری invalidate می‌کنه، طولانی‌تر کردنِ TTL امنه: تغییرِ
 # واقعی همون لحظه دیده می‌شه، فقط چیزی که تغییر نکرده مجبور نیست هر ۴ ثانیه
 # یک‌بار دوباره از شبکه خونده بشه.
-_setting_cache = {}   # key -> (value, expires_at_monotonic)
-_admin_cache = {}     # telegram_id -> (row, expires_at_monotonic)
+_setting_cache = _PerServer()   # key -> (value, expires_at_monotonic)
+_admin_cache = _PerServer()     # telegram_id -> (row, expires_at_monotonic)
 
 # ─── کش لیستِ ادمین‌ها + بازیکنانِ ادامه‌دهنده ──────────────────────
 # FIX (کندیِ منوی شطرنج / ثبت مسابقه / پنل مدیر ارشد): get_all_admins و
@@ -80,8 +81,8 @@ _admin_cache = {}     # telegram_id -> (row, expires_at_monotonic)
 # ولی اینجا حل نشده بود. get_continuing_players (لیستِ بازیکنانِ مجاز برای
 # ثبتِ مسابقه‌ی جدید) هم همین مشکل رو داشت. راه‌حل: همون الگوی TTL کوتاه،
 # invalidate‌شونده روی هر نوشتنِ واقعی.
-_admin_list_cache = {}       # "all" | "active" -> (rows, expires_at_monotonic)
-_continuing_players_cache = {}  # "list" -> (rows, expires_at_monotonic)
+_admin_list_cache = _PerServer()       # "all" | "active" -> (rows, expires_at_monotonic)
+_continuing_players_cache = _PerServer()  # "list" -> (rows, expires_at_monotonic)
 
 # ─── کش لیست‌های بازیکنان/کلاس‌ها/تورنومنت‌ها/مسابقات ────────────────
 # FIX (کندیِ منوی بازیکن‌ها / منوی شطرنج / پنل پیشوا): همون مشکلِ بالا،
@@ -91,10 +92,10 @@ _continuing_players_cache = {}  # "list" -> (rows, expires_at_monotonic)
 # موردِ پنل پیشوا حتی ۵ تا از این‌ها پشتِ‌سرِهم (نه موازی) توی یک صفحه.
 # همون الگوی TTL کوتاه + invalidate روی نوشتنِ واقعی.
 _LIST_CACHE_TTL = 15  # ثانیه — کوتاه‌تر از کشِ تنظیمات چون این جدول‌ها بیشتر عوض می‌شن
-_players_cache = {}      # "all" | "active" -> (rows, expires_at_monotonic)
-_classes_cache = {}      # "all" -> (rows, expires_at_monotonic)
-_tournaments_cache = {}  # "all" -> (rows, expires_at_monotonic)
-_matches_cache = {}      # period -> (rows, expires_at_monotonic)
+_players_cache = _PerServer()      # "all" | "active" -> (rows, expires_at_monotonic)
+_classes_cache = _PerServer()      # "all" -> (rows, expires_at_monotonic)
+_tournaments_cache = _PerServer()  # "all" -> (rows, expires_at_monotonic)
+_matches_cache = _PerServer()      # period -> (rows, expires_at_monotonic)
 
 # ─── کش «بلاک بودن کاربر» ───────────────────────────────────────────
 # block_gate روی *هر تک آپدیت* (هر پیام، هر دکمه، از هر نفر) قبل از هر
@@ -102,13 +103,13 @@ _matches_cache = {}      # period -> (rows, expires_at_monotonic)
 # حتی از get_admin/get_setting هم داغ‌تره — پرتکرارترین کوئری کل رباته
 # و تا امروز اصلاً کش نمی‌شد. چند ثانیه تاخیر توی دیدنِ یک بلاکِ تازه
 # (که خودِ ادمین همون لحظه انجامش داده و نتیجه رو می‌بینه) قابل‌قبوله.
-_blocked_cache = {}   # telegram_id -> (row_or_None, expires_at_monotonic)
+_blocked_cache = _PerServer()   # telegram_id -> (row_or_None, expires_at_monotonic)
 
 # ─── کش «بلاک بودن دستگاه» پنل مدیر مدرسه ───────────────────────────
 # همون دلیلِ _blocked_cache بالا: این چک روی *هر بارگذاریِ صفحه* و هر
 # درخواستِ API پنل مدیر مدرسه اجرا می‌شه، پس نباید هر بار یک رفت‌وبرگشتِ
 # شبکه‌ای تازه به Turso باشه.
-_principal_blocked_cache = {}   # device_id -> (bool, expires_at_monotonic)
+_principal_blocked_cache = _PerServer()   # device_id -> (bool, expires_at_monotonic)
 
 # مجموعه‌ای برای نگه‌داشتنِ رفرنسِ تسک‌های پس‌زمینه (fire-and-forget)
 # تا گاربیج‌کالکتور وسط کار نابودشون نکنه («Task was destroyed but it
@@ -161,6 +162,15 @@ def _invalidate_admin_cache(telegram_id=None):
     # هر تغییرِ ادمینی (عضو جدید/اخراج/برگشت/پرمیشن/نقش/اخطار) روی محتوای
     # لیست‌ها هم اثر می‌ذاره، پس هر دو لیست هم همین‌جا پاک می‌شن.
     _admin_list_cache.clear()
+
+
+def _servers_hook(name, *args):
+    """قلاب به servers.py (import تنبل، چون servers خودش turso_db/config را import می‌کند)."""
+    try:
+        import servers
+        getattr(servers, name)(*args)
+    except Exception:
+        logger.debug("servers hook %s failed", name, exc_info=True)
 
 
 def _hub_menu_sync(telegram_id):
@@ -826,6 +836,7 @@ async def create_admin(telegram_id, username, full_name, role):
         await db.commit()
     _invalidate_admin_cache(telegram_id)
     _hub_menu_sync(telegram_id)
+    _servers_hook("on_admin_created", telegram_id)   # چندسرور: عضویتِ سرور در رجیستری
 
 
 async def update_admin_activity(telegram_id):
@@ -1134,6 +1145,7 @@ async def kick_admin(telegram_id: int):
         await db.commit()
     _invalidate_admin_cache(telegram_id)
     _hub_menu_sync(telegram_id)
+    _servers_hook("on_admin_removed", telegram_id)   # چندسرور: خروج از رجیستری
 
 
 async def revive_admin(telegram_id: int):

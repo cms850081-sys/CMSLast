@@ -504,10 +504,13 @@ async def sync_menu_buttons(bot):
 
     chat_ids = [PISHVA_ID]
     try:
-        admins = await db.get_active_admins()
-        for a in admins:
-            if a["role"] in HUB_ALLOWED_ROLES and a["telegram_id"] and await db.can_use_hub(a["telegram_id"]):
-                chat_ids.append(a["telegram_id"])
+        import servers as _servers, srvctx as _srvctx
+        for _sid in _servers.active_ids():          # چندسرور: مدیرانِ فعالِ هر مجموعه هم (دیتابیسِ خودشان)
+            with _srvctx.use(_sid):
+                admins = await db.get_active_admins()
+                for a in admins:
+                    if a["role"] in HUB_ALLOWED_ROLES and a["telegram_id"] and await db.can_use_hub(a["telegram_id"]):
+                        chat_ids.append(a["telegram_id"])
     except Exception:
         logger.exception("Could not load active admins for hub menu-button sync.")
 

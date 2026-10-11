@@ -249,6 +249,27 @@ async def _can_use_ai(uid: int, role: str) -> bool:
     return perms.get("ai_access", True)
 
 
+async def _server_addon() -> str:
+    """در یک مجموعه (غیرِ سرورِ اصلی): نامِ مجموعه + محدودیتِ دانش + پرامپتِ کلیِ مدیر ارشد + پرامپتِ اختصاصیِ همان سرور."""
+    import servers, srvctx
+    sid = srvctx.current()
+    if sid == srvctx.MAIN_ID:
+        return ""
+    s = servers.get(sid) or {}
+    txt = (f"\n\nمجموعه‌ی فعلی: «{s.get('name', '')}» (سرور {sid}). فقط درباره‌ی همین مجموعه اطلاع داری؛ "
+           "از مجموعه‌ها یا سرورهای دیگر هیچ اطلاعاتی نداری و حدس هم نمی‌زنی.")
+    g = servers.meta("ai_global_prompt")
+    if g:
+        txt += f"\n\nقوانینِ کلیِ تعیین‌شده توسط مدیر ارشد برای همه‌ی مجموعه‌ها:\n{g}"
+    try:
+        p = await db.get_setting("ai_server_prompt", "")
+    except Exception:
+        p = ""
+    if p:
+        txt += f"\n\nقوانین/شیوه‌ی اختصاصیِ این مجموعه:\n{p}"
+    return txt
+
+
 def _system_prompt(role: str, display_name: str = "", memory_rows=None, user_text: str = "") -> str:
     role_label = ROLE_LABELS.get(role, role)
     allowed = [n for n, roles in ai_tools.TOOL_PERMISSIONS.items() if role in roles]
@@ -644,6 +665,7 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     visibility_levels = ["all", "pishva"] if role == ROLE_PISHVA else ["all"]
     memory_rows = await ai_memory.recent(visibility_levels, limit=8)
     system_prompt = _system_prompt(role, display_name, memory_rows, user_text=text)
+    system_prompt += await _server_addon()   # چندسرور: هویت/پرامپتِ کلی و اختصاصیِ سرورِ جاری
     _prefs = await ai_persona.get_prefs(uid)
     _persona_block, _mem_used = await ai_persona.build_block_ex(uid, role, _prefs)
     system_prompt += _persona_block
