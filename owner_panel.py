@@ -307,6 +307,32 @@ async def own_invite_off(update, ctx):
     await own_invite(update, ctx)
 
 
+# ═════════════════════════ بکاپ ═════════════════════════
+async def own_backup(update, ctx):
+    q = update.callback_query
+    if not await _guard(q):
+        return
+    await q.answer()
+    await safe_edit_message_text(q, "💾 <b>بکاپِ مجموعه</b>\nفرمت؟", parse_mode="HTML",
+                                 reply_markup=InlineKeyboardMarkup([[_btn("📊 Excel", "own_bkx_excel"), _btn("📝 Word", "own_bkx_word")], _back()]))
+
+
+async def own_backup_send(update, ctx):
+    q = update.callback_query
+    if not await _guard(q):
+        return
+    fmt = q.data.rsplit("_", 1)[1]
+    await q.answer("⏳ در حال تهیه…")
+    from backup_utils import send_server_backup
+    try:
+        await send_server_backup(ctx.bot, q.from_user.id, srvctx.current(), "all", fmt)
+        await db.log_action(q.from_user.id, "owner_backup", f"بکاپ مجموعه ({fmt})")
+        await safe_edit_message_text(q, "✅ بکاپ ارسال شد.", reply_markup=InlineKeyboardMarkup([_back()]))
+    except Exception as ex:
+        logger.exception("own_backup")
+        await safe_edit_message_text(q, f"❌ خطا در تهیه‌ی بکاپ: {_e(ex)}", reply_markup=InlineKeyboardMarkup([_back()]), parse_mode="HTML")
+
+
 # ═════════════════════════ ارتباط با مدیر ارشد ═════════════════════════
 async def own_contact(update, ctx):
     q = update.callback_query
@@ -395,6 +421,8 @@ def register(app):
     app.add_handler(cb(own_invite, pattern=r"^own_invite$"))
     app.add_handler(cb(own_invite_new, pattern=r"^own_inv_new$"))
     app.add_handler(cb(own_invite_off, pattern=r"^own_inv_off$"))
+    app.add_handler(cb(own_backup, pattern=r"^own_bk$"))
+    app.add_handler(cb(own_backup_send, pattern=r"^own_bkx_(excel|word)$"))
     app.add_handler(cb(own_contact, pattern=r"^own_contact$"))
     app.add_handler(cb(own_msg, pattern=r"^own_msg$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, own_text), group=-4)

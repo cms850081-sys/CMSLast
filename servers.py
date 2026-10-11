@@ -9,12 +9,12 @@ servers.py — چندسروری (دنیاهای ایزوله) برای CMSLast.
 server_requests). هیچ دیتای عملیاتیِ یک مجموعه در رجیستری نیست.
 
 جداسازی: ContextVarِ srvctx تعیین می‌کند هر درخواست روی کدام دیتابیس اجرا شود (turso_db._get_client).
-اگر دیتابیسِ یک سرور بارگذاری نشده باشد، هیچ‌وقت به دیتابیسِ اصلی برنمی‌گردیم.
+turso_db هر SQL را برای سرورِ جاری به جدول‌های sN_* بازنویسی می‌کند.
 
-دیتابیسِ هر سرور از کجا می‌آید (به ترتیبِ اولویت):
-  ۱) متغیرهای محیطیِ از-پیش-ساخته: SERVER{N}_TURSO_URL و SERVER{N}_TURSO_TOKEN   (N = ۲..۶)
-  ۲) ساختِ خودکار با Turso Platform API:  TURSO_API_TOKEN  +  TURSO_ORG  (+ TURSO_GROUP، پیش‌فرض default)
-حذفِ سرور هرگز دیتابیس را پاک نمی‌کند (فقط علامتِ «حذف‌شده»)، پس همیشه قابلِ بازیابی است.
+همه‌ی سرورها در «یک اکانت و یک دیتابیسِ Turso» هستند (همان TURSO_URL/TURSO_AUTH_TOKENِ فعلی)، در بخش‌های جدا:
+سرور N مجموعه‌ی جدولِ مستقلِ sN_* دارد (s2_players, s2_admins, …) و هیچ جدولی بینِ سرورها مشترک نیست.
+هیچ متغیرِ محیطیِ اضافه‌ای لازم نیست.
+حذفِ سرور هرگز داده را پاک نمی‌کند (فقط علامتِ «حذف‌شده»)، پس همیشه قابلِ بازیابی است.
 """
 import json
 import logging
@@ -58,6 +58,7 @@ FEATURES = [
     ("workhours", "ساعت کاری"),
     ("elo",       "امتیاز Elo و رتبه‌بندی"),
     ("lottery",   "قرعه‌کشی"),
+    ("backup",    "بکاپ"),
 ]
 FEATURE_KEYS = [k for k, _ in FEATURES]
 FEATURE_FA = dict(FEATURES)
@@ -79,6 +80,7 @@ CALLBACK_FEATURE = [
     ("wh_", "workhours"),
     ("elo_", "elo"),
     ("lottery_", "lottery"), ("adv_", "lottery"),
+    ("own_bk", "backup"),
 ]
 
 _MAIN_SCOPE = None  # (برای خوانایی)
@@ -166,9 +168,6 @@ async def load():
                     members[int(r["telegram_id"])] = (int(r["server_id"]), r["state"] or "member")
     _SERVERS.clear(); _SERVERS.update(servers)
     _MEMBERS.clear(); _MEMBERS.update(members)
-    for sid, s in servers.items():
-        if s.get("db_url") and s.get("db_token"):
-            turso_db.register_server_client(sid, s["db_url"], s["db_token"])
     await load_global_features()
     _LOADED = True
     logger.info("servers: %d سرورِ ثبت‌شده، %d عضو", len(servers), len(members))
@@ -206,7 +205,7 @@ def sub_servers(include_deleted: bool = False):
 def active_ids():
     """سرورهایی که کارهای زمان‌بندی‌شده باید برایشان اجرا شوند (اصلی + مجموعه‌های روشن)."""
     return [MAIN_ID] + [sid for sid in sorted(_SERVERS)
-                        if _SERVERS[sid].get("status") == ST_ACTIVE and turso_db.has_server_client(sid)]
+                        if _SERVERS[sid].get("status") == ST_ACTIVE]
 
 
 def owner_tid(sid: int = None):
@@ -405,48 +404,7 @@ def live_count() -> int:
     return len(_SERVERS)
 
 
-# ═════════════════════════ دیتابیسِ هر سرور ═════════════════════════
-def _env_slot(sid: int):
-    url = os.environ.get(f"SERVER{sid}_TURSO_URL", "").strip()
-    tok = os.environ.get(f"SERVER{sid}_TURSO_TOKEN", "").strip()
-    return (url, tok) if url and tok else (None, None)
-
-
-async def provision_db(sid: int, label: str):
-    """(db_name, url, token) برای سرور sid؛ یا خطای فارسیِ روشن."""
-    url, tok = _env_slot(sid)
-    if url:
-        return f"env-slot-{sid}", url, tok
-
-    api = os.environ.get("TURSO_API_TOKEN", "").strip()
-    org = os.environ.get("TURSO_ORG", "").strip()
-    if not (api and org):
-        raise RuntimeError(
-            "برای ساختِ دیتابیسِ سرورِ جدید یکی از این دو باید تنظیم شود:\n"
-            f"۱) در Railway: SERVER{sid}_TURSO_URL و SERVER{sid}_TURSO_TOKEN (دیتابیسِ از-پیش-ساخته)\n"
-            "۲) یا TURSO_API_TOKEN و TURSO_ORG (ساختِ خودکار)")
-    import httpx
-    group = os.environ.get("TURSO_GROUP", "").strip() or "default"
-    name = f"cms-s{sid}-{secrets.token_hex(3)}"
-    headers = {"Authorization": f"Bearer {api}"}
-    async with httpx.AsyncClient(timeout=40.0) as cl:
-        r = await cl.post(f"https://api.turso.tech/v1/organizations/{org}/databases",
-                          json={"name": name, "group": group}, headers=headers)
-        if r.status_code >= 300:
-            raise RuntimeError(f"Turso: ساختِ دیتابیس ناموفق بود ({r.status_code}): {r.text[:200]}")
-        host = (r.json().get("database") or {}).get("Hostname") or (r.json().get("database") or {}).get("hostname")
-        if not host:
-            raise RuntimeError("Turso: آدرسِ دیتابیسِ ساخته‌شده در پاسخ نبود.")
-        t = await cl.post(f"https://api.turso.tech/v1/organizations/{org}/databases/{name}/auth/tokens",
-                          params={"expiration": "never", "authorization": "full-access"}, headers=headers)
-        if t.status_code >= 300:
-            raise RuntimeError(f"Turso: ساختِ توکن ناموفق بود ({t.status_code}): {t.text[:200]}")
-        jwt = t.json().get("jwt")
-        if not jwt:
-            raise RuntimeError("Turso: توکن در پاسخ نبود.")
-    return name, f"libsql://{host}", jwt
-
-
+# ═════════════════════════ ساخت سرور ═════════════════════════
 async def create_server(name: str, school: str, owner_tid_: int, username: str, full_name: str):
     """سرورِ جدید می‌سازد: دیتابیس ← جدول‌ها ← مدیر مجموعه ← ثبت در رجیستری. شناسه‌ی سرور را برمی‌گرداند."""
     import database as db
@@ -458,17 +416,16 @@ async def create_server(name: str, school: str, owner_tid_: int, username: str, 
     if sid is None:
         raise RuntimeError(f"ظرفیتِ سرورها پر است (حداکثر {MAX_SERVERS} سرور، با سرور اصلی).")
 
-    db_name, url, token = await provision_db(sid, name)
-    # ثبتِ اولیه (تا کلاینت ساخته شود) و ساختِ جدول‌ها داخلِ سرورِ جدید
+    # همه‌ی سرورها در همین یک اکانت/دیتابیسِ Turso‌اند؛ هر سرور مجموعه‌ی جدولِ جداگانه‌ی sN_* دارد.
+    db_name = f"s{sid}_*"
     await _exec("INSERT INTO servers(id,name,school,status,owner_tid,db_name,db_url,db_token,features,invite_code,created_at,updated_at)"
                 " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (sid, name.strip()[:60], school, ST_ACTIVE, int(owner_tid_), db_name, url, token, "{}",
+                (sid, name.strip()[:60], school, ST_ACTIVE, int(owner_tid_), db_name, "", "", "{}",
                  secrets.token_urlsafe(9), _now(), _now()))
     _SERVERS[sid] = {"id": sid, "name": name.strip()[:60], "school": school, "status": ST_ACTIVE,
-                     "owner_tid": int(owner_tid_), "db_name": db_name, "db_url": url, "db_token": token,
+                     "owner_tid": int(owner_tid_), "db_name": db_name, "db_url": "", "db_token": "",
                      "features": {}, "invite_code": "", "suspend_reason": "", "suspend_until": "", "note": ""}
     try:
-        turso_db.register_server_client(sid, url, token)
         with srvctx.use(sid):
             await db.init_db()
             await db.set_setting("server_name", name.strip()[:60])
@@ -477,7 +434,6 @@ async def create_server(name: str, school: str, owner_tid_: int, username: str, 
     except Exception:
         # برگشت: سرورِ نیمه‌کاره نماند
         _SERVERS.pop(sid, None)
-        turso_db.drop_server_client(sid)
         await _exec("DELETE FROM servers WHERE id=?", (sid,))
         raise
     await set_member(int(owner_tid_), sid, "member")

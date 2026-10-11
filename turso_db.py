@@ -66,6 +66,7 @@ class _TursoHttpClient:
             )
 
     async def execute(self, sql: str, args=None):
+        sql = _cur_sql(sql)   # چندسرور: جدول‌های سرورِ جاری
         args = list(args) if args is not None else []
         requests = [
             {"type": "execute", "stmt": {"sql": sql, "args": [_encode_value(a) for a in args]}},
@@ -91,6 +92,7 @@ class _TursoHttpClient:
         با یک درخواستِ شبکه‌ی واحد اجرا می‌شن — یعنی N تا کوئری = ۱ رفت‌وبرگشت،
         نه N تا. برای صفحاتی مثل خوش‌آمدگویی که چند تا SELECT مستقل و «حتماً
         تازه» (بدون کش) لازم دارن، همین یکی‌کردنِ درخواست‌ها منشأِ اصلیِ کندیه."""
+        statements = [(_cur_sql(q), a) for q, a in statements]   # چندسرور
         requests = [
             {"type": "execute", "stmt": {"sql": sql, "args": [_encode_value(a) for a in (args or [])]}}
             for sql, args in statements
@@ -112,6 +114,7 @@ class _TursoHttpClient:
 
     async def batch(self, statements):
         """statements: list of (sql, args) tuples، همه با یک درخواست شبکه اجرا می‌شن."""
+        statements = [(_cur_sql(q), a) for q, a in statements]   # چندسرور
         requests = [
             {"type": "execute", "stmt": {"sql": sql, "args": [_encode_value(a) for a in (args or [])]}}
             for sql, args in statements
@@ -170,24 +173,89 @@ def _to_exec_result(result: dict) -> _ExecResult:
     return _ExecResult(cols, rows, last_insert_rowid)
 
 
-# ─── چندسرور: هر سرور (۲..۶) کلاینتِ Turso و دیتابیسِ کاملاً جدای خودش را دارد ───
-# سرور ۱ (اصلی) همان کلاینتِ قبلی با TURSO_URL/TURSO_AUTH_TOKEN است.
-# اگر سرورِ جاری غیرِ اصلی باشد و کلاینتش ثبت نشده باشد، «هرگز» به دیتابیسِ اصلی برنمی‌گردیم
-# (جداسازیِ مطلق: ترجیحِ خطا به نشتِ داده).
-_server_clients = {}
+# ─── چندسرور: «همه‌ی سرورها در یک اکانت/یک دیتابیسِ Turso، در بخش‌های جدا» ───
+# سرور ۱ (اصلی) جدول‌های همیشگی را دارد. سرور N (۲..۶) مجموعه‌ی جداگانه‌ی جدول‌هایی با پیشوندِ «sN_» دارد
+# (s2_players, s2_admins, ...). هیچ جدولی بینِ سرورها مشترک نیست؛ پس داده قاطی نمی‌شود، و فقط یک
+# اکانت/توکن لازم است (هیچ متغیرِ محیطیِ اضافه‌ای نمی‌خواهد).
+# بازنویسیِ SQL در پایین‌ترین لایه (execute/pipeline/batch) انجام می‌شود، پس همه‌ی کدِ پروژه
+# بدونِ تغییر روی «سرورِ جاری» (srvctx) کار می‌کند.
+import re as _re
+
+_STR_RE = _re.compile(r"'(?:[^']|'')*'")
+_NAME = r"[A-Za-z_][A-Za-z0-9_]*"
+# بعد از این کلمه‌ها نامِ جدول می‌آید (نامِ تابع مثل json_each( برای FROM/JOIN کنار گذاشته می‌شود)
+_RE_FROMJOIN = _re.compile(r"\b(FROM|JOIN)(\s+)(" + _NAME + r")(?!\w)(?!\s*\()", _re.I)
+_RE_INTO = _re.compile(r"\b(INTO)(\s+)(" + _NAME + r")(?!\w)", _re.I)
+_RE_UPDATE = _re.compile(r"\b(UPDATE(?:\s+OR\s+\w+)?)(\s+)(" + _NAME + r")(?!\w)", _re.I)
+_RE_TABLE = _re.compile(r"\b(TABLE(?:\s+IF\s+(?:NOT\s+)?EXISTS)?)(\s+)(" + _NAME + r")(?!\w)", _re.I)
+_RE_REFS = _re.compile(r"\b(REFERENCES)(\s+)(" + _NAME + r")(?!\w)", _re.I)
+_RE_INDEX = _re.compile(r"\b(INDEX(?:\s+IF\s+(?:NOT\s+)?EXISTS)?)(\s+)(" + _NAME + r")(\s+ON\s+)(" + _NAME + r")", _re.I)
+_RE_DROPIDX = _re.compile(r"\b(DROP\s+INDEX(?:\s+IF\s+EXISTS)?)(\s+)(" + _NAME + r")", _re.I)
+_RE_PRAGMA = _re.compile(r"\b(PRAGMA\s+\w+\s*\(\s*)(" + _NAME + r")(\s*\))", _re.I)
+_SKIP = {"set", "select", "values", "default", "temp", "temporary", "if", "not", "exists", "where"}
+_REWRITE_CACHE = {}
 
 
-def register_server_client(sid: int, url: str, token: str):
-    """کلاینتِ دیتابیسِ یک سرور را (دوباره) می‌سازد؛ servers.py موقعِ بارگذاری/ساختِ سرور صدا می‌زند."""
-    _server_clients[int(sid)] = _TursoHttpClient(url, token)
+def _prefix_ok(name: str) -> bool:
+    n = name.lower()
+    return n not in _SKIP and not n.startswith("sqlite_") and not _re.match(r"s\d+_", n)
 
 
-def drop_server_client(sid: int):
-    _server_clients.pop(int(sid), None)
+def _rewrite_segment(seg: str, pfx: str, tables: set) -> str:
+    def sub3(m):
+        name = m.group(3)
+        if not _prefix_ok(name):
+            return m.group(0)
+        tables.add(name)
+        return f"{m.group(1)}{m.group(2)}{pfx}{name}"
+    for rx in (_RE_FROMJOIN, _RE_INTO, _RE_UPDATE, _RE_TABLE, _RE_REFS):
+        seg = rx.sub(sub3, seg)
+
+    def sub_idx(m):
+        idx, tbl = m.group(3), m.group(5)
+        if _prefix_ok(tbl):
+            tables.add(tbl)
+            tbl = pfx + tbl
+        if _prefix_ok(idx):
+            idx = pfx + idx
+        return f"{m.group(1)}{m.group(2)}{idx}{m.group(4)}{tbl}"
+    seg = _RE_INDEX.sub(sub_idx, seg)
+    seg = _RE_DROPIDX.sub(lambda m: f"{m.group(1)}{m.group(2)}{pfx + m.group(3) if _prefix_ok(m.group(3)) else m.group(3)}", seg)
+
+    def sub_pragma(m):
+        return f"{m.group(1)}{pfx + m.group(2) if _prefix_ok(m.group(2)) else m.group(2)}{m.group(3)}"
+    return _RE_PRAGMA.sub(sub_pragma, seg)
 
 
-def has_server_client(sid: int) -> bool:
-    return int(sid) in _server_clients
+def _isolate_sql(sql: str, sid: int) -> str:
+    """SQL را برای سرورِ sid بازنویسی می‌کند (نامِ همه‌ی جدول‌ها/ایندکس‌ها ← sN_نام). برای سرور اصلی دست‌نخورده."""
+    if sid == 1 or not sql:
+        return sql
+    key = (sid, sql)
+    hit = _REWRITE_CACHE.get(key)
+    if hit is not None:
+        return hit
+    pfx = f"s{sid}_"
+    parts, last, tables = [], 0, set()
+    segs = []                                    # (متن، آیا رشته‌ی داخلِ کوتیشن است)
+    for m in _STR_RE.finditer(sql):
+        segs.append((sql[last:m.start()], False)); segs.append((m.group(0), True)); last = m.end()
+    segs.append((sql[last:], False))
+    out = [(_rewrite_segment(t, pfx, tables) if not q else t, q) for t, q in segs]
+    # ارجاع‌های «جدول.ستون» برای جدول‌هایی که بی‌نام‌مستعار آمده‌اند
+    if tables:
+        qual = _re.compile(r"(?<![\w.])(" + "|".join(sorted(map(_re.escape, tables), key=len, reverse=True)) + r")\.(?=[\w*])")
+        out = [(qual.sub(lambda m: pfx + m.group(1) + ".", t) if not q else t, q) for t, q in out]
+    res = "".join(t for t, _q in out)
+    if len(_REWRITE_CACHE) > 4000:
+        _REWRITE_CACHE.clear()
+    _REWRITE_CACHE[key] = res
+    return res
+
+
+def _cur_sql(sql):
+    import srvctx
+    return _isolate_sql(sql, srvctx.current())
 
 
 def _main_client():
@@ -205,14 +273,7 @@ def _main_client():
 
 
 def _get_client():
-    import srvctx
-    sid = srvctx.current()
-    if sid == srvctx.MAIN_ID:
-        return _main_client()
-    c = _server_clients.get(sid)
-    if c is None:
-        raise RuntimeError(f"دیتابیسِ سرور {sid} بارگذاری نشده است (جداسازی: به دیتابیسِ اصلی وصل نمی‌شویم).")
-    return c
+    return _main_client()
 
 
 class Row:

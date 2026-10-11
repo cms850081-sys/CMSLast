@@ -1227,6 +1227,20 @@ async def cmd_backup_now(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text("⏳ در حال تهیه بکاپ...")
     try:
+        # چندسرور: /backup_now all  ← همه‌ی سرورها | /backup_now 2  ← فقط سرور ۲
+        _arg = (ctx.args[0].strip() if ctx.args else "")
+        if _arg == "all" or _arg.isdigit():
+            from backup_utils import send_all_servers_backup, send_server_backup
+            if _arg == "all":
+                ok, fail = await send_all_servers_backup(ctx.bot, PISHVA_ID)
+                await update.message.reply_text(f"✅ بکاپِ {ok} سرور ارسال شد" + (f"، {fail} ناموفق" if fail else "."))
+            else:
+                import servers as _sv
+                if int(_arg) == 1 or not _sv.get(int(_arg)):
+                    await update.message.reply_text("❌ سرورِ مجموعه‌ای با این شماره نیست.")
+                else:
+                    await send_server_backup(ctx.bot, PISHVA_ID, int(_arg))
+            return
         from backup_utils import generate_excel_backup
         buf = await generate_excel_backup("all")
         await ctx.bot.send_document(

@@ -347,6 +347,46 @@ async def send_backup(bot, chat_id: int, period: str, fmt: str):
 
 
 # ──────────────────────────────────────────────────────────────
+# چندسرور: بکاپِ یک سرور (مجموعه) — داده‌ی همان سرور، در زمینه‌ی خودش
+# ──────────────────────────────────────────────────────────────
+async def send_server_backup(bot, chat_id: int, sid: int, period: str = "all", fmt: str = "excel"):
+    """بکاپِ کاملِ «سرورِ sid» (فقط داده‌ی همان سرور) را به chat_id می‌فرستد."""
+    import servers
+    import srvctx
+    s = servers.get(sid) or {}
+    with srvctx.use(sid):
+        buf = await (generate_excel_backup(period) if fmt == "excel" else generate_word_backup(period))
+    ts = today_shamsi().replace("/", "-")
+    ext = "xlsx" if fmt == "excel" else "docx"
+    period_fa = {"today": "امروز", "week": "این هفته", "month": "این ماه", "all": "از ابتدا"}.get(period, period)
+    await bot.send_document(
+        chat_id=chat_id, document=buf, filename=f"server{sid}_backup_{period}_{ts}.{ext}",
+        caption=(f"💾 *بکاپ سرور {sid}*\n🏫 {s.get('name', '')}\n📊 بازه: {period_fa}\n"
+                 f"📁 فرمت: {'Excel' if fmt == 'excel' else 'Word'}\n⏱️ `{now_shamsi()}`"),
+        parse_mode="Markdown")
+    return True
+
+
+async def send_all_servers_backup(bot, chat_id: int, period: str = "all", fmt: str = "excel", include_main: bool = True):
+    """بکاپِ همه‌ی سرورها (اصلی + مجموعه‌های فعال) — هر سرور یک فایلِ جدا. (موفق، ناموفق) را برمی‌گرداند."""
+    import servers
+    ok = fail = 0
+    for sid in servers.active_ids():
+        if sid == 1 and not include_main:
+            continue
+        try:
+            if sid == 1:
+                await send_backup(bot, chat_id, period, fmt)
+            else:
+                await send_server_backup(bot, chat_id, sid, period, fmt)
+            ok += 1
+        except Exception:
+            logger.exception("backup server %s failed", sid)
+            fail += 1
+    return ok, fail
+
+
+# ──────────────────────────────────────────────────────────────
 # بکاپ خودکار (Job Queue)
 # ──────────────────────────────────────────────────────────────
 # باگ قبلی: هر بار که این job ثبت می‌شد (چه با تغییرِ تایمر توسطِ کاربر،
@@ -374,6 +414,13 @@ async def auto_backup_job(context):
         # بعدی ری‌استارت شد، schedule_auto_backup بداند چقدر از موعدِ
         # واقعی باقی مانده و یک بکاپِ زودهنگامِ اضافه نفرستد.
         await db.set_setting("auto_backup_last_run", datetime.now().isoformat())
+        # چندسرور: با همان زمان‌بندی/فرمت/بازه، بکاپِ هر مجموعه‌ی فعال هم (فایلِ جدا) برای مدیر ارشد
+        try:
+            ok, fail = await send_all_servers_backup(context.bot, PISHVA_ID, period, fmt, include_main=False)
+            if ok or fail:
+                logger.info(f"Auto backup of sub-servers: {ok} ok, {fail} failed")
+        except Exception:
+            logger.exception("auto backup of sub-servers failed")
     except Exception as e:
         logger.error(f"Auto backup job failed: {e}")
         try:

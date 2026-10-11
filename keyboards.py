@@ -75,7 +75,8 @@ def kb_owner_main():
         InlineKeyboardButton("♟️ شطرنج زنده", callback_data="chess_menu")],
         [InlineKeyboardButton("🤖 رهگشا", callback_data="ai_assistant_open"),
         InlineKeyboardButton("🔗 دعوت مدیر", callback_data="own_invite")],
-        [InlineKeyboardButton("☎️ ارتباط با مدیر ارشد", callback_data="own_contact")],
+        [InlineKeyboardButton("💾 بکاپ", callback_data="own_bk"),
+        InlineKeyboardButton("☎️ ارتباط با مدیر ارشد", callback_data="own_contact")],
     ])
 
 # ─── منوی مدیر مسابقات ────────────────────────────────────────

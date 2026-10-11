@@ -100,6 +100,7 @@ async def home(q, ctx, note=""):
     rows.append([_b("➕ ایجادِ سرور", "srv_new"), _b(f"📥 درخواست‌ها ({pend})", "srv_reqs")])
     rows.append([_b("🎛 قابلیت‌های همه", "srv_gf"), _b("🕐 ساعتِ کاریِ همه", "srv_gw")])
     rows.append([_b("🤖 رهگشا (کلی)", "srv_gai"), _b(f"♻️ بازیابی ({trash})", "srv_trash")])
+    rows.append([_b("💾 بکاپِ همه‌ی سرورها", "srv_bka")])
     rows.append([_b("🔙 بازگشت", "back_main")])
     await _show(q, "\n".join(lines), rows)
 
@@ -137,7 +138,7 @@ async def detail(q, ctx, sid, note=""):
             + f"👑 مدیر مجموعه: <code>{owner}</code>\n"
             f"🕐 ساعت کاری: {wh}\n"
             f"👥 مدیران: <b>{c['admins']}</b> · 👤 بازیکنان: <b>{c['players']}</b> · ♟️ مسابقاتِ امروز: <b>{c['matches']}</b>\n"
-            f"🗄 دیتابیس: <code>{_e(s.get('db_name'))}</code> (جدا و مستقل)")
+            f"🗄 بخشِ داده: <code>{_e(s.get('db_name'))}</code> (جدولِ جدا در همان اکانت)")
     if note:
         text += f"\n\n{note}"
     st = s.get("status")
@@ -152,7 +153,8 @@ async def detail(q, ctx, sid, note=""):
         [_b("📈 آمار فعالیت", f"srv_st_{sid}"), _b("🕐 ساعت کاری", f"srv_w_{sid}")],
         [_b("🎛 قابلیت‌ها", f"srv_f_{sid}"), _b("⚙️ تنظیماتِ ریز", f"srv_cfg_{sid}")],
         [_b("🤖 رهگشا", f"srv_ai_{sid}"), _b("🔗 لینکِ دعوت", f"srv_inv_{sid}")],
-        [_b("✏️ تغییرِ نام", f"srv_rn_{sid}"), _b("🗑 حذف", f"srv_d_{sid}")],
+        [_b("💾 بکاپ", f"srv_bk_{sid}"), _b("✏️ تغییرِ نام", f"srv_rn_{sid}")],
+        [_b("🗑 حذف", f"srv_d_{sid}")],
         [_b("🔙 فهرستِ سرورها", "srv_home")],
     ]
     await _show(q, text, rows)
@@ -540,6 +542,15 @@ async def router(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 except Exception:
                     logger.exception("global workhours %s", sid)
             return await global_workhours(q, f"✅ برای {n} سرور انجام شد.")
+        if d == "srv_bka":
+            await q.answer(); return await _show(q, "💾 <b>بکاپِ همه‌ی سرورها</b>\nهر سرور یک فایلِ جدا می‌فرستد. فرمت؟",
+                                                  [[_b("📊 Excel", "srv_bkaf_excel"), _b("📝 Word", "srv_bkaf_word")], [_b("🔙 بازگشت", "srv_home")]])
+        if d.startswith("srv_bkaf_"):
+            await q.answer("⏳ در حال تهیه…")
+            from backup_utils import send_all_servers_backup
+            ok, fail = await send_all_servers_backup(ctx.bot, PISHVA_ID, "all", d[9:])
+            await db.log_action(PISHVA_ID, "server_backup_all", f"بکاپ همه‌ی سرورها: {ok} موفق، {fail} ناموفق")
+            return await home(q, ctx, f"💾 بکاپِ {ok} سرور ارسال شد" + (f" ({fail} ناموفق)" if fail else "."))
         if d == "srv_gai":
             await q.answer(); return await global_ai(q)
         if d == "srv_gaip":
@@ -670,6 +681,17 @@ async def router(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return await _show(q, f"💬 حالا در رهگشا (دکمه‌ی 🤖 رهگشا در منوی اصلی) هر پرسشی درباره‌ی «{_e(s['name'])}» بپرسید؛ "
                                   "رهگشا درباره‌ی اشخاص، بازیکن‌ها، لاگ‌ها و آمارِ همین سرور اطلاعاتِ کامل دارد.",
                                [[_b("🤖 باز کردنِ رهگشا", "ai_assistant_open"), _b("🔙 بازگشت", f"srv_v_{sid}")]])
+        if op == "bk":
+            await q.answer()
+            return await _show(q, f"💾 <b>بکاپِ {_e(s['name'])}</b>\nفرمت؟",
+                               [[_b("📊 Excel", f"srv_bkx_{sid}_excel"), _b("📝 Word", f"srv_bkx_{sid}_word")],
+                                [_b("🔙 بازگشت", f"srv_v_{sid}")]])
+        if op == "bkx":
+            await q.answer("⏳ در حال تهیه…")
+            from backup_utils import send_server_backup
+            await send_server_backup(ctx.bot, PISHVA_ID, sid, "all", parts[3])
+            await db.log_action(PISHVA_ID, "server_backup", f"بکاپ سرور {sid} ({parts[3]})")
+            return await detail(q, ctx, sid, "💾 بکاپ ارسال شد.")
         if op == "d":
             await q.answer(); return await delete_step(q, sid, 1)
         if op == "d2":
@@ -770,6 +792,7 @@ async def open_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     rows.append([_b("➕ ایجادِ سرور", "srv_new"), _b(f"📥 درخواست‌ها ({pend})", "srv_reqs")])
     rows.append([_b("🎛 قابلیت‌های همه", "srv_gf"), _b("🕐 ساعتِ کاریِ همه", "srv_gw")])
     rows.append([_b("🤖 رهگشا (کلی)", "srv_gai"), _b("♻️ بازیابی", "srv_trash")])
+    rows.append([_b("💾 بکاپِ همه‌ی سرورها", "srv_bka")])
     await update.message.reply_text(
         f"🌐 <b>پنلِ سرورها</b>\n🏫 مجموعه‌ها: <b>{len(subs)}</b> از {servers.MAX_SERVERS - 1} ظرفیت",
         parse_mode="HTML", reply_markup=_kb(rows))
