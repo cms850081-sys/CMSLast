@@ -9,11 +9,24 @@ ContextVar برای هر تسکِ asyncio جداست؛ پس دو کاربر در
 """
 import contextlib
 import contextvars
+import weakref
 
 MAIN_ID = 1
 MAX_SERVERS = 6          # حداکثرِ کل سرورها (۱ اصلی + ۵ مجموعه)
 
 _CUR = contextvars.ContextVar("cms_server_id", default=MAIN_ID)
+_ALL_STATE = weakref.WeakSet()   # همه‌ی PerServer / PerServerValueهای ساخته‌شده
+
+
+def purge_server_state(sid: int) -> int:
+    """همه‌ی وضعیتِ درون‌حافظه‌ی یک سرور (کش‌ها، پرچم‌ها) را از همه‌ی ماژول‌ها پاک می‌کند."""
+    n = 0
+    for obj in list(_ALL_STATE):
+        try:
+            obj.drop_server(sid); n += 1
+        except Exception:
+            pass
+    return n
 
 
 def current() -> int:
@@ -56,6 +69,7 @@ class PerServer:
     def __init__(self, factory=dict):
         self._d = {}
         self._f = factory
+        _ALL_STATE.add(self)
 
     def _cur(self):
         sid = _CUR.get()
@@ -107,6 +121,10 @@ class PerServerValue:
     def __init__(self, default=None):
         self._d = {}
         self._default = default
+        _ALL_STATE.add(self)
+
+    def drop_server(self, sid: int) -> None:
+        self._d.pop(int(sid), None)
 
     def get(self):
         return self._d.get(_CUR.get(), self._default)

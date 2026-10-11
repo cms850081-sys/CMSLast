@@ -253,9 +253,26 @@ def _isolate_sql(sql: str, sid: int) -> str:
     return res
 
 
+_BLOCKED_SIDS = set()
+
+
+def block_server(sid: int):
+    """هر SQLی برای این سرور رد می‌شود (حین/بعد از پاک‌سازیِ نهایی)، تا هیچ تسکِ معوقی جدول را دوباره نسازد."""
+    _BLOCKED_SIDS.add(int(sid))
+    for k in [k for k in _REWRITE_CACHE if k[0] == int(sid)]:
+        _REWRITE_CACHE.pop(k, None)
+
+
+def unblock_server(sid: int):
+    _BLOCKED_SIDS.discard(int(sid))
+
+
 def _cur_sql(sql):
     import srvctx
-    return _isolate_sql(sql, srvctx.current())
+    sid = srvctx.current()
+    if sid in _BLOCKED_SIDS:
+        raise RuntimeError(f"سرور {sid} پاک شده است؛ دسترسی به دیتابیسش مسدود است.")
+    return _isolate_sql(sql, sid)
 
 
 def _main_client():

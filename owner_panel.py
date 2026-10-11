@@ -21,6 +21,7 @@ from telegram.ext import (ApplicationHandlerStop, CallbackQueryHandler, ContextT
 
 import database as db
 import servers
+from btn import mk as _mk
 import srvctx
 from config import (BOT_USERNAME, PISHVA_ID, PISHVA_USERNAME, ROLE_SECURITY_MANAGER,
                     ROLE_TOURNAMENT_MANAGER)
@@ -37,7 +38,7 @@ def _e(x) -> str:
 
 
 def _btn(text, data=None, url=None):
-    return InlineKeyboardButton(text, url=url) if url else InlineKeyboardButton(text, callback_data=data)
+    return _mk(text, data, url)   # رنگِ خودکار (btn.py)
 
 
 def _back(target="main"):
@@ -399,7 +400,7 @@ async def own_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         try:
             await ctx.bot.send_message(
                 PISHVA_ID, header + _e(text[:3500]), parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💬 پاسخ", url=f"tg://user?id={me.id}")]]))
+                reply_markup=InlineKeyboardMarkup([[_mk("💬 پاسخ", url=f"tg://user?id={me.id}")]]))
             await update.message.reply_text("✅ پیام برای مدیر ارشد ارسال شد.")
         except Exception:
             logger.exception("own_msg send")

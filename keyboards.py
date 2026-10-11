@@ -63,20 +63,20 @@ def kb_owner_main():
     """هم‌ترازِ مدیر مسابقات + استخدام/مدیریتِ مدیران، ساعت کاری و ارتباط با مدیر ارشد.
     پنل مدیر ارشد، انتقادات و پیشنهادات، تنظیمات و کنترل‌ها عمداً نیستند."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("♟️ مدیریت مسابقات", callback_data="menu_matches"),
-        InlineKeyboardButton("👤 مدیریت بازیکنان", callback_data="menu_players")],
-        [InlineKeyboardButton("👥 مدیریت مدیران", callback_data="own_mgrs"),
-        InlineKeyboardButton("📊 داشبورد مجموعه", callback_data="own_dash")],
-        [InlineKeyboardButton("📡 مخابرات", callback_data="menu_comms"),
-        InlineKeyboardButton("📋 وظایف", callback_data="menu_tasks")],
-        [InlineKeyboardButton("🕐 ساعت کاری", callback_data="pishva_workhours"),
-        InlineKeyboardButton("📅 تقویم", callback_data="menu_calendar")],
-        [InlineKeyboardButton("❓ راهنما", callback_data="menu_help"),
-        InlineKeyboardButton("♟️ شطرنج زنده", callback_data="chess_menu")],
-        [InlineKeyboardButton("🤖 رهگشا", callback_data="ai_assistant_open"),
-        InlineKeyboardButton("🔗 دعوت مدیر", callback_data="own_invite")],
-        [InlineKeyboardButton("💾 بکاپ", callback_data="own_bk"),
-        InlineKeyboardButton("☎️ ارتباط با مدیر ارشد", callback_data="own_contact")],
+        [InlineKeyboardButton("♟️ مدیریت مسابقات", callback_data="menu_matches", style="primary"),
+        InlineKeyboardButton("👤 مدیریت بازیکنان", callback_data="menu_players", style="primary")],
+        [InlineKeyboardButton("👥 مدیریت مدیران", callback_data="own_mgrs", style="primary"),
+        InlineKeyboardButton("📊 داشبورد مجموعه", callback_data="own_dash", style="primary")],
+        [InlineKeyboardButton("📡 مخابرات", callback_data="menu_comms", style="primary"),
+        InlineKeyboardButton("📋 وظایف", callback_data="menu_tasks", style="primary")],
+        [InlineKeyboardButton("🕐 ساعت کاری", callback_data="pishva_workhours", style="success"),
+        InlineKeyboardButton("📅 تقویم", callback_data="menu_calendar", style="primary")],
+        [InlineKeyboardButton("❓ راهنما", callback_data="menu_help", style="primary"),
+        InlineKeyboardButton("♟️ شطرنج زنده", callback_data="chess_menu", style="primary")],
+        [InlineKeyboardButton("🤖 رهگشا", callback_data="ai_assistant_open", style="primary"),
+        InlineKeyboardButton("🔗 دعوت مدیر", callback_data="own_invite", style="success")],
+        [InlineKeyboardButton("💾 بکاپ", callback_data="own_bk", style="primary"),
+        InlineKeyboardButton("☎️ ارتباط با مدیر ارشد", callback_data="own_contact", style="primary")],
     ])
 
 # ─── منوی مدیر مسابقات ────────────────────────────────────────

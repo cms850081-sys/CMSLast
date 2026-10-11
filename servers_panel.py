@@ -21,6 +21,7 @@ from telegram.ext import (ApplicationHandlerStop, CallbackQueryHandler, ContextT
 
 import database as db
 import servers
+from btn import mk as _mk
 import srvctx
 import turso_db
 from config import (BOT_USERNAME, DB_PATH, PISHVA_ID, ROLE_SECURITY_MANAGER,
@@ -58,7 +59,7 @@ def _e(x) -> str:
 
 
 def _b(text, data):
-    return InlineKeyboardButton(text, callback_data=data)
+    return _mk(text, data)   # رنگِ خودکار (btn.py)
 
 
 def _kb(rows):
@@ -565,8 +566,10 @@ async def router(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return await _show(q, request_text(r), request_kb(r["id"]).inline_keyboard)
         if d.startswith("srv_rec_"):
             sid = int(d[8:]); await q.answer()
-            return await _show(q, f"♻️ بازیابیِ «{_e(servers.get(sid)['name'])}»؟",
-                               [[_b("✅ بازیابی", f"srv_rec2_{sid}"), _b("❌ انصراف", "srv_trash")]])
+            return await _show(q, f"♻️ «{_e(servers.get(sid)['name'])}» (سرور {sid})\nبازیابی یا پاک‌سازیِ نهایی؟",
+                               [[_b("✅ بازیابی", f"srv_rec2_{sid}")],
+                                [_b("🔥 پاک‌سازیِ نهایی", f"srv_px_{sid}")],
+                                [_b("🔙 بازگشت", "srv_trash")]])
         if d.startswith("srv_rec2_"):
             sid = int(d[9:])
             await servers.set_status(sid, servers.ST_ACTIVE)
@@ -692,6 +695,35 @@ async def router(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await send_server_backup(ctx.bot, PISHVA_ID, sid, "all", parts[3])
             await db.log_action(PISHVA_ID, "server_backup", f"بکاپ سرور {sid} ({parts[3]})")
             return await detail(q, ctx, sid, "💾 بکاپ ارسال شد.")
+        if op == "px":
+            if s.get("status") != servers.ST_DELETED:
+                return await q.answer("فقط سرورِ حذف‌شده.", show_alert=True)
+            await q.answer()
+            return await _show(q, f"🔥 <b>پاک‌سازیِ نهایی «{_e(s['name'])}» (سرور {sid})</b>\n\n"
+                                  "این کار <b>برگشت‌ناپذیر</b> است و هیچ اثری نمی‌ماند:\n"
+                                  "• همه‌ی جدول‌ها و داده‌های این سرور\n• ردیف‌های رجیستری، اعضا و درخواست‌ها\n"
+                                  "• لاگ‌های مدیر ارشد درباره‌ی این سرور\n• جاب‌ها و کش‌ها\n\n"
+                                  "بعدش اسلات برای مجموعه‌ی جدید آزاد می‌شود. پیشنهاد: اول بکاپ بگیرید.",
+                               [[_b("💾 بکاپ بگیر و ادامه", f"srv_pxb_{sid}")],
+                                [_b("⚠️ بدونِ بکاپ ادامه", f"srv_pxn_{sid}")],
+                                [_b("❌ انصراف", "srv_trash")]])
+        if op in ("pxb", "pxn"):
+            if s.get("status") != servers.ST_DELETED:
+                return await q.answer("فقط سرورِ حذف‌شده.", show_alert=True)
+            if op == "pxb":
+                await q.answer("⏳ در حال تهیه‌ی بکاپ…")
+                try:
+                    from backup_utils import send_server_backup
+                    await send_server_backup(ctx.bot, PISHVA_ID, sid, "all", "excel")
+                except Exception as ex:
+                    logger.exception("purge backup")
+                    return await _show(q, f"❌ بکاپ ساخته نشد:\n{_e(ex)}\n\nبرای ادامه، «بدونِ بکاپ» را بزنید یا انصراف دهید.",
+                                       [[_b("⚠️ بدونِ بکاپ ادامه", f"srv_pxn_{sid}")], [_b("❌ انصراف", "srv_trash")]])
+            else:
+                await q.answer()
+            _set_wait(ctx, "purge", sid=sid, name=s["name"])
+            return await _show(q, f"🔥 برای تأییدِ نهایی، <b>نامِ دقیقِ سرور</b> را تایپ کنید:\n\n<code>{_e(s['name'])}</code>",
+                               [[_b("❌ انصراف", "srv_trash")]])
         if op == "d":
             await q.answer(); return await delete_step(q, sid, 1)
         if op == "d2":
@@ -766,6 +798,22 @@ async def text_input(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await servers.set_status(w["sid"], servers.ST_SUSPENDED, text[:300])
         await db.log_action(PISHVA_ID, "server_suspend", f"سرور {w['sid']} تعلیق شد: {text[:200]}")
         await update.message.reply_text("🟠 سرور تعلیق شد.")
+    elif kind == "purge":
+        if text.strip() != w["name"]:
+            await update.message.reply_text("❌ نام مطابقت نداشت؛ پاک‌سازی لغو شد.")
+            raise ApplicationHandlerStop
+        await update.message.reply_text("⏳ در حال پاک‌سازیِ کامل…")
+        try:
+            rep = await servers.purge_server(w["sid"], ctx.application.job_queue)
+        except Exception as ex:
+            logger.exception("purge_server")
+            await update.message.reply_text(f"❌ پاک‌سازی انجام نشد:\n{ex}")
+            raise ApplicationHandlerStop
+        await update.message.reply_text(
+            f"🔥 سرور {w['sid']} برای همیشه پاک شد.\n\n"
+            f"🗄 جدول‌های حذف‌شده: {rep['tables']}\n👥 اعضای آزاد‌شده: {rep['members']}\n"
+            f"📜 لاگ‌های پاک‌شده: {rep['logs']}\n⏱ جاب‌های لغوشده: {rep['jobs']}\n"
+            f"🔎 باقی‌مانده در دیتابیس: {rep['leftover']}\n\n✅ هیچ اثری نماند؛ اسلات آزاد است.")
     elif kind == "s_ai":
         with srvctx.use(w["sid"]):
             await db.set_setting("ai_server_prompt", text[:4000])

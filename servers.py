@@ -415,6 +415,7 @@ async def create_server(name: str, school: str, owner_tid_: int, username: str, 
     sid = next_free_id()
     if sid is None:
         raise RuntimeError(f"ظرفیتِ سرورها پر است (حداکثر {MAX_SERVERS} سرور، با سرور اصلی).")
+    turso_db.unblock_server(sid)   # اگر قبلاً پاک‌سازیِ نهایی شده بود، اسلات دوباره آزاد است
 
     # همه‌ی سرورها در همین یک اکانت/دیتابیسِ Turso‌اند؛ هر سرور مجموعه‌ی جدولِ جداگانه‌ی sN_* دارد.
     db_name = f"s{sid}_*"
@@ -443,6 +444,72 @@ async def create_server(name: str, school: str, owner_tid_: int, username: str, 
                 r = await cur.fetchone()
     _SERVERS[sid]["invite_code"] = r[0] if r else ""
     return sid
+
+
+# ═════════════════════════ پاک‌سازیِ نهایی (بدونِ هیچ اثری) ═════════════════════════
+async def purge_server(sid: int, job_queue=None) -> dict:
+    """سرورِ «حذف‌شده» را برای همیشه و کامل پاک می‌کند:
+       ۱) همه‌ی جدول‌ها و ایندکس‌های sN_*   ۲) ردیف‌های رجیستری (servers/اعضا/درخواست‌ها)
+       ۳) لاگ‌های مدیر ارشد درباره‌ی این سرور در دیتابیسِ اصلی   ۴) جاب‌های زمان‌بندی‌شده‌ی این سرور
+       ۵) همه‌ی کش‌ها و وضعیتِ درون‌حافظه   ۶) قفلِ دسترسی تا وقتی اسلات دوباره ساخته شود.
+       فقط برای سرورِ در وضعیتِ «حذف‌شده». گزارشِ کار را برمی‌گرداند."""
+    sid = int(sid)
+    s = _SERVERS.get(sid)
+    if sid == MAIN_ID or not s:
+        raise RuntimeError("این سرور وجود ندارد.")
+    if s.get("status") != ST_DELETED:
+        raise RuntimeError("فقط سرورِ «حذف‌شده» را می‌شود پاک‌سازیِ نهایی کرد.")
+    rep = {"tables": 0, "leftover": 0, "jobs": 0, "logs": 0, "members": 0}
+    # ۰) قفل: از این لحظه هیچ کوئریِ این سرور اجرا نمی‌شود (تسک‌های معوق نمی‌توانند چیزی بسازند)
+    turso_db.block_server(sid)
+    pfx_like = f"s{sid}\\_%"
+    with _main():
+        async with turso_db.connect(DB_PATH) as c:
+            # ۱) همه‌ی اشیای دیتابیس با این پیشوند
+            async with c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE ? ESCAPE '\\'", (pfx_like,)) as cur:
+                names = [r[0] for r in await cur.fetchall()]
+            for n in names:
+                await c.execute(f'DROP TABLE IF EXISTS "{n}"')
+            rep["tables"] = len(names)
+            # ایندکس/تریگر/ویوی یتیم (اگر مانده باشد)
+            async with c.execute("SELECT type, name FROM sqlite_master WHERE name LIKE ? ESCAPE '\\' AND type IN ('index','trigger','view')", (pfx_like,)) as cur:
+                orphans = await cur.fetchall()
+            for t, n in orphans:
+                await c.execute(f'DROP {t.upper()} IF EXISTS "{n}"')
+            await c.execute("DELETE FROM sqlite_sequence WHERE name LIKE ? ESCAPE '\\'", (pfx_like,)) if await _has_table(c, "sqlite_sequence") else None
+            # ۲) رجیستری
+            await c.execute("DELETE FROM server_members WHERE server_id=?", (sid,))
+            await c.execute("DELETE FROM server_requests WHERE server_id=?", (sid,))
+            await c.execute("DELETE FROM servers WHERE id=?", (sid,))
+            # ۳) ردپا در لاگ‌های اصلی (اقداماتِ مدیر ارشد درباره‌ی این سرور)
+            async with c.execute("SELECT COUNT(*) FROM action_logs WHERE action_type LIKE 'server\\_%' ESCAPE '\\' AND description LIKE ?",
+                                 (f"%سرور {sid}%",)) as cur:
+                rep["logs"] = (await cur.fetchone())[0]
+            await c.execute("DELETE FROM action_logs WHERE action_type LIKE 'server\\_%' ESCAPE '\\' AND description LIKE ?",
+                            (f"%سرور {sid}%",))
+            await c.commit()
+            # ۴) راستی‌آزمایی: چیزی با این پیشوند نمانده باشد
+            async with c.execute("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE ? ESCAPE '\\'", (pfx_like,)) as cur:
+                rep["leftover"] = (await cur.fetchone())[0]
+    # ۵) جاب‌های زمان‌بندی‌شده‌ی در-حافظه
+    if job_queue is not None:
+        for job in list(job_queue.jobs()):
+            if (job.name or "").endswith(f"@s{sid}"):
+                job.schedule_removal(); rep["jobs"] += 1
+    # ۶) حافظه
+    rep["members"] = len([u for u, (ms, _st) in _MEMBERS.items() if ms == sid])
+    for u in [u for u, (ms, _st) in _MEMBERS.items() if ms == sid]:
+        _MEMBERS.pop(u, None)
+    _SERVERS.pop(sid, None)
+    srvctx.purge_server_state(sid)
+    if rep["leftover"]:
+        raise RuntimeError(f"پاک‌سازی ناقص ماند ({rep['leftover']} شیء).")
+    return rep
+
+
+async def _has_table(c, name):
+    async with c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)) as cur:
+        return (await cur.fetchone()) is not None
 
 
 # ═════════════════════════ لینکِ دعوت (استخدامِ مدیر) ═════════════════════════
