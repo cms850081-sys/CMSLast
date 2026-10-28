@@ -503,3 +503,38 @@ html.scrolling .q-ic.ai .ic, html.scrolling .q-ic.ai .ai-ring, html.scrolling .q
 .cv-trend{ contain-intrinsic-size:auto 250px; }
 .cv-top{ contain-intrinsic-size:auto 640px; }
 .tab{ -webkit-tap-highlight-color:transparent; }
+
+
+/* ═══ رهگشا: لوگوی صاعقه + دکمه‌ی خانه ═══════════════════════════════
+   • لوگو (.rg-bw/.rg-bolt) هم اینجا و هم داخل چتِ رهگشا (rahgosha.css) استفاده می‌شود
+   • فقط transform/opacity انیمیت می‌شود (برقِ عبوری = حرکتِ یک لایه‌ی روشن روی ماسکِ صاعقه) */
+:root{ --rg-m:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1280 1240'%3E%3Cpolygon points='282,5 655,495 663,222 1220,1228 637,707 635,1013 158,273 500,580'/%3E%3C/svg%3E"); }
+.rg-bw{ position:relative; display:inline-block; flex:none; }
+.rg-bw::before{ content:''; position:absolute; inset:-45%; border-radius:50%; pointer-events:none;
+  background:radial-gradient(closest-side, rgba(255,70,84,.5), rgba(255,70,84,0) 72%); opacity:.5; animation:rg-glow 3.6s ease-in-out infinite; will-change:transform,opacity; }
+.rg-bolt{ position:relative; display:block; width:100%; aspect-ratio:1280/1240; overflow:hidden;
+  -webkit-mask:var(--rg-m) center/contain no-repeat; mask:var(--rg-m) center/contain no-repeat;
+  background:linear-gradient(160deg,#ff5663,#d3202c 52%,#8c0d16); }
+.rg-bolt::after{ content:''; position:absolute; inset:0; transform:translateX(-110%); animation:rg-sweep 4.4s ease-in-out infinite; will-change:transform;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.92) 50%,transparent 58%); }
+.rg-bw.rg-charge{ animation:rg-flick 1.6s steps(1) infinite; }
+.rg-bw.rg-charge::before{ animation-duration:.8s; }
+.rg-charge .rg-bolt::after{ animation-duration:.8s; animation-timing-function:linear; }
+@keyframes rg-sweep{ 0%{ transform:translateX(-110%); } 38%,100%{ transform:translateX(110%); } }
+@keyframes rg-glow{ 0%,100%{ opacity:.3; transform:scale(.95); } 50%{ opacity:.8; transform:scale(1.06); } }
+@keyframes rg-flick{ 0%,100%{ opacity:1; } 30%{ opacity:.6; } 34%{ opacity:1; } 72%{ opacity:.75; } 76%{ opacity:1; } }
+html.scrolling .rg-bolt::after, html.scrolling .rg-bw::before{ animation-play-state:paused; }
+@media (prefers-reduced-motion:reduce){ .rg-bw::before, .rg-bw.rg-charge{ animation:none; } .rg-bolt::after{ display:none; } }
+
+/* دکمه‌ی رهگشا در خانه (بینِ میانبرها و کارتِ آب‌وهوا) */
+.rgm{ position:relative; display:flex; align-items:center; gap:13px; width:calc(100% - 32px); margin:0 16px 14px; padding:10px 14px 10px 12px; min-height:66px; border-radius:20px; text-align:start; overflow:hidden;
+  background:linear-gradient(135deg, rgba(224,42,55,.20), rgba(224,42,55,.05) 72%), var(--surface); border:1px solid rgba(224,42,55,.32); }
+.rgm:active{ transform:scale(.98); }
+.rgm-ic{ flex:none; width:46px; height:46px; border-radius:15px; display:grid; place-items:center; background:#050607; box-shadow:0 0 0 1px rgba(255,255,255,.09) inset, 0 8px 18px -8px rgba(224,42,55,.6); }
+.rgm-ic .rg-bw{ width:28px; }
+.rgm-t{ flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.rgm-t b{ font-size:15.5px; font-weight:800; }
+.rgm-t small{ font-size:12px; color:var(--hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rgm-tag{ flex:none; padding:2px 9px; border-radius:99px; font-size:10.5px; font-weight:600; color:var(--hint); background:rgba(128,128,128,.16); }
+.rgm-go{ flex:none; color:var(--hint); display:grid; place-items:center; }
+.rgm-go .ic{ width:16px; height:16px; transform:scaleX(-1); }

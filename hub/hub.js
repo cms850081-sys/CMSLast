@@ -296,6 +296,8 @@
     }
     /* کارتِ آب‌وهوا: یک نمونه برای همیشه (انیمیشن‌هایش هیچ‌وقت از نو شروع نمی‌شوند) */
     if (!E.wx) { E.wx = weatherCard(); E.top.append(E.wx); }
+    /* رهگشا: بینِ میانبرها و آب‌وهوا (نسخه‌ی نمایشی فقط برای مدیر ارشد) */
+    if (!E.rg && (!RG_PREVIEW || isP)) { E.rg = rahgoshaCard(); E.top.insertBefore(E.rg, E.wx); }
 
     /* بخشِ داده: اگر چیزی عوض نشده، هیچ کاری نکن */
     var sigD = JSON.stringify([sm, B.trend, B.top, hasT, hasP]);
@@ -802,6 +804,66 @@
         h('i', { class: 'ai-ring' }), h('i', { class: 'ai-ring r2' }),
         ic('sparkle'),
         h('i', { class: 'ai-st s1' }), h('i', { class: 'ai-st s2' })));
+  }
+
+  /* ─── رهگشا (دستیارِ هوشمندِ CMS؛ تنبل) ───────────────────────
+     RG_PREVIEW=true: نسخه‌ی ظاهری — فقط مدیر ارشد دکمه را می‌بیند و پاسخ‌های چت ساختگی‌اند.
+     بعد از وصل‌شدن به ربات (get_prefs/save_prefs در hub_chat.py) این را false کن تا برای همه‌ی مدیرها باز شود. */
+  var RG_PREVIEW = true;
+  var rgState = 0, rgOpen = false, rgEl = $('#rg');
+  function rgRole() { var r = S.boot && S.boot.me && S.boot.me.role; return r === 'pishva' ? 'pishva' : r === 'security_manager' ? 'sm' : 'tm'; }
+  function loadRahgosha(cb) {
+    if (rgState === 2) return cb && cb();
+    if (rgState === 1) return;
+    rgState = 1;
+    if (!doc.getElementById('rg-css')) {
+      var l = doc.createElement('link'); l.id = 'rg-css'; l.rel = 'stylesheet'; l.href = 'rahgosha.css?v=' + V; doc.head.append(l);
+      var f = doc.createElement('link'); f.rel = 'stylesheet'; f.href = 'https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;500&display=swap'; doc.head.append(f);
+    }
+    var s = doc.createElement('script');
+    s.src = 'rahgosha.js?v=' + V;
+    s.onload = function () {
+      rgState = 2;
+      window.HubRahgosha.mount(rgEl, { tg: tg, hx: hx, LS: LS, preview: RG_PREVIEW, role: rgRole(), close: closeRahgosha });
+      if (cb) cb();
+    };
+    s.onerror = function () { rgState = 0; toast('بارگذاری رهگشا ناموفق بود'); };
+    doc.head.append(s);
+  }
+  function openRahgosha() {
+    if (rgOpen) return;
+    hx.tap();
+    loadRahgosha(function () {
+      if (rgOpen) return;
+      rgOpen = true;
+      rgEl.hidden = false;
+      pushBack(function () { if (window.HubRahgosha) window.HubRahgosha.back(); });
+      try { tg.setHeaderColor('bg_color'); } catch (e) {}
+      window.HubRahgosha.open();
+      if (!reduceMotion && rgEl.animate) { try { rgEl.animate([{ opacity: 0, transform: 'translateY(22px) scale(.98)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.2,.85,.25,1)' }); } catch (e) {} }
+    });
+  }
+  function closeRahgosha() {
+    if (!rgOpen) return;
+    rgOpen = false;
+    popBack();
+    var fin = function () { rgEl.hidden = true; if (window.HubRahgosha) window.HubRahgosha.onClose(); chrome(); };
+    if (!reduceMotion && rgEl.animate) {
+      try { var a = rgEl.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(22px) scale(.98)' }], { duration: 200, easing: 'ease-in', fill: 'forwards' }); a.onfinish = function () { fin(); a.cancel(); }; return; } catch (e) {}
+    }
+    fin();
+  }
+  function rahgoshaCard() {
+    var bolt = h('span', { class: 'rg-bw' }, h('span', { class: 'rg-bolt' }));
+    var el = h('button', { type: 'button', class: 'rgm', 'aria-label': 'رهگشا — دستیار هوشمند', onclick: openRahgosha },
+      h('span', { class: 'rgm-ic' }, bolt),
+      h('span', { class: 'rgm-t' }, h('b', { text: 'رهگشا' }), h('small', { text: 'دستیار هوشمند CMS' })),
+      RG_PREVIEW ? h('span', { class: 'rgm-tag', text: 'نمایشی' }) : null,
+      h('span', { class: 'rgm-go' }, ic('chev')));
+    /* پیش‌بارگیریِ بی‌صدا تا با اولین لمس فوری باز شود */
+    var a = doc.createElement('link'); a.rel = 'prefetch'; a.as = 'script'; a.href = 'rahgosha.js?v=' + V; doc.head.append(a);
+    var b = doc.createElement('link'); b.rel = 'prefetch'; b.as = 'style'; b.href = 'rahgosha.css?v=' + V; doc.head.append(b);
+    return el;
   }
 
   /* ─── آب‌وهوا (تنبل) ───────────────────────────────────────── */
