@@ -247,6 +247,12 @@ async def post_init(application: Application) -> None:
         logger.exception("servers.load failed")
 
     try:
+        import sheets_sync
+        await sheets_sync.start(application)
+    except Exception as e:
+        logger.warning(f"sheets_sync start failed: {e}")
+
+    try:
         from elo import ensure_elo_table
         await ensure_elo_table()
         logger.info("Elo tables ready.")
@@ -611,6 +617,13 @@ def build_application():
 
     # 🌐 روترِ چندسرور — اولین هندلرِ همه‌ی آپدیت‌ها (سرورِ جاریِ این آپدیت را تعیین می‌کند)
     app.add_handler(TypeHandler(Update, routing.route_update), group=-100)
+
+    # 📊 آینه‌ی دیتابیس در گوگل‌شیت (/sheets — فقط مدیر ارشد)
+    try:
+        import sheets_sync
+        sheets_sync.register(app)
+    except Exception as _e:
+        logger.warning(f"sheets_sync register failed: {_e}")
 
     # 🔎 ردیابیِ کاملِ اقدامات مدیران (گروه -5؛ قبل از هر چیز، بدونِ اثر روی پردازش)
     import audit as _audit
