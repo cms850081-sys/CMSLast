@@ -604,5 +604,10 @@ def register_hub_routes(app: web.Application):
         app.add_routes(hub_brief.routes)
     except Exception:
         logger.exception("hub_brief routes could not be registered")
+    try:
+        import hub_chat   # رهگشای واقعی داخلِ هاب (/hub/api/rg/*)
+        app.add_routes(hub_chat.routes)
+    except Exception:
+        logger.exception("hub_chat (رهگشا) routes could not be registered")
     app.add_routes(routes)
     logger.info("Hub (پنل من) routes registered.")

@@ -293,6 +293,11 @@ async def post_init(application: Application) -> None:
         from hub import sync_menu_buttons
         await sync_menu_buttons(application.bot)
         logger.info("Hub (پنل من) menu buttons set.")
+        try:
+            import hub_chat
+            hub_chat.set_application(application)   # رهگشای هاب به job_queue واقعی وصل می‌شود (یادآور/زمان‌بندی)
+        except Exception as _e:
+            logger.warning(f"hub_chat.set_application failed: {_e}")
     except Exception as e:
         logger.warning(f"Could not set hub menu buttons: {e}")
 

@@ -31,6 +31,7 @@ import ai_tools_oversight
 import ai_persona
 import ai_memory
 import knowledge_base
+import ai_shared
 
 logger = logging.getLogger(__name__)
 
@@ -582,6 +583,7 @@ async def ai_assistant_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["ai_mode"] = True
     ctx.user_data["ai_history"] = []
     ctx.user_data["ai_session_id"] = await db.ai_create_session(uid, role or "")
+    await ai_shared.set_active_session(uid, ctx.user_data["ai_session_id"])   # همان چت در «پنل من» هم فعال می‌شود
     text = (
         "🤖 رهگشا فعال شد. هرچی بخوای بگو — می‌تونم کارهات رو انجام بدم، "
         "گزارش بدم یا فقط باهات حرف بزنم."
@@ -613,6 +615,7 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data["ai_mode"] = True
         ctx.user_data["ai_history"] = []
         ctx.user_data["ai_session_id"] = await db.ai_create_session(uid, role)
+        await ai_shared.set_active_session(uid, ctx.user_data["ai_session_id"])
         await update.message.reply_text(
             "🤖 رهگشا فعال شد. هرچی بخوای بگو — می‌تونم کارهات رو انجام بدم، "
             "گزارش بدم یا فقط باهات حرف بزنم.",
@@ -644,10 +647,12 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ کلید Gemini تنظیم نشده (GEMINI_API_KEY خالیه).")
         return
 
-    session_id = ctx.user_data.get("ai_session_id")
+    # جلسه‌ی فعال از نشانگرِ مشترکِ دیتابیس می‌آید (تلگرام و «پنل من» یک چت‌اند)
+    session_id = await ai_shared.get_active_session(uid) or ctx.user_data.get("ai_session_id")
     if not session_id:
         session_id = await db.ai_create_session(uid, role)
-        ctx.user_data["ai_session_id"] = session_id
+        await ai_shared.set_active_session(uid, session_id)
+    ctx.user_data["ai_session_id"] = session_id
 
     text = await ai_persona.expand_shortcut(uid, text)
     ai_memory.reset_memo_flags(ctx)
@@ -655,8 +660,13 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await db.ai_add_message(session_id, "user", text)
 
-    history = ctx.user_data.setdefault("ai_history", [])
-    history.append({"role": "user", "parts": [{"text": text}]})
+    # تاریخچه‌ی مدل از دیتابیس ساخته می‌شود (شاملِ پیام‌هایی که در «پنل من» نوشته شده؛ و بعد از ری‌استارت هم گم نمی‌شود)
+    try:
+        history = await ai_shared.history_from_db(session_id)
+    except Exception:
+        logger.warning("history_from_db failed; falling back to in-memory history", exc_info=True)
+        history = ctx.user_data.setdefault("ai_history", [])
+        history.append({"role": "user", "parts": [{"text": text}]})
 
     if role == ROLE_PISHVA:
         display_name = await pishva_display()

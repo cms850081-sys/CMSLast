@@ -465,6 +465,14 @@ async def cb_confirm(update, ctx):
     hist = ctx.user_data.setdefault("ai_history", [])
     hist.append({"role": "user", "parts": [{"text": f"(تأیید شد) نتیجه‌ی {pend['name']}: {result}"}]})
     hist.append({"role": "model", "parts": [{"text": "انجام شد."}]})
+    # تاریخچه‌ی مدل حالا از دیتابیس ساخته می‌شود؛ پس نتیجه‌ی تأییدشده باید همان‌جا هم ثبت شود
+    try:
+        import ai_shared
+        _sid = await ai_shared.get_active_session(uid)
+        if _sid:
+            await db.ai_add_message(_sid, "ai", f"✅ انجام شد.\n📋 {pend['name']}: {result}")
+    except Exception:
+        logger.warning("could not store confirmed-action result", exc_info=True)
     try:
         await q.edit_message_text(f"✅ انجام شد.\n📋 {pend['name']}: {result}")
     except Exception:

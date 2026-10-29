@@ -87,6 +87,11 @@ async def ai_new_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["ai_mode"] = True
     ctx.user_data["ai_history"] = []
     ctx.user_data["ai_session_id"] = await db.ai_create_session(uid, role)
+    try:
+        import ai_shared
+        await ai_shared.set_active_session(uid, ctx.user_data["ai_session_id"])
+    except Exception:
+        logger.warning("set_active_session failed", exc_info=True)
     await query.message.reply_text(
         "🆕 چت جدید شروع شد. هرچی بخوای بگو.",
         reply_markup=kb_ai_reply()
@@ -140,6 +145,11 @@ async def ai_hist_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["ai_mode"] = True
     ctx.user_data["ai_history"] = history[-12:]
     ctx.user_data["ai_session_id"] = sid
+    try:
+        import ai_shared
+        await ai_shared.set_active_session(uid, sid)
+    except Exception:
+        logger.warning("set_active_session failed", exc_info=True)
 
     recap_lines = []
     for m in msgs[-6:]:

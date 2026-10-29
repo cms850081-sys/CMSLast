@@ -287,12 +287,17 @@ async def audit_middleware(request, handler):
 
 def _record_http(request, kind, status):
     write = request.method not in ("GET", "HEAD")
+    # رهگشا (چتِ هاب): خواندن‌ها (boot/sessions/session…) لاگ نمی‌شوند تا لاگ شلوغ نشود؛ برای
+    # نوشتن‌ها هم «متنِ پیام‌ها» وارد لاگِ اقدامات نمی‌شود (خودِ چت در سوابقِ رهگشا ثبت است).
+    rg = request.path.startswith("/hub/api/rg/")
+    if rg and not write:
+        return
     q = {k: ("***" if _SECRET_KEY.search(k) else _clip(v, 80)) for k, v in request.query.items() if k != "init"}
     qs = (" ?" + "&".join(f"{k}={v}" for k, v in q.items())) if q else ""
     ip = request.headers.get("X-Forwarded-For", request.remote or "").split(",")[0].strip()
     label = _HUB_LABELS.get(request.path)
     base = f"{request.method} {request.path}{qs} → {status}"
-    desc = (f"{label}: " if label else "") + base + _body_summary(request) + (f" | ip={ip}" if ip else "")
+    desc = (f"{label}: " if label else "") + base + ("" if rg else _body_summary(request)) + (f" | ip={ip}" if ip else "")
     if kind == "hub":
         uid = _hub_actor(request)
         if uid is None or status in (401, 403):
