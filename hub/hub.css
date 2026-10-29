@@ -526,15 +526,14 @@ html.scrolling .q-ic.ai .ic, html.scrolling .q-ic.ai .ai-ring, html.scrolling .q
 html.scrolling .rg-bolt::after, html.scrolling .rg-bw::before{ animation-play-state:paused; }
 @media (prefers-reduced-motion:reduce){ .rg-bw::before, .rg-bw.rg-charge{ animation:none; } .rg-bolt::after{ display:none; } }
 
-/* دکمه‌ی رهگشا در خانه (بینِ میانبرها و کارتِ آب‌وهوا) */
-.rgm{ position:relative; display:flex; align-items:center; gap:13px; width:calc(100% - 32px); margin:0 16px 14px; padding:10px 14px 10px 12px; min-height:66px; border-radius:20px; text-align:start; overflow:hidden;
-  background:linear-gradient(135deg, rgba(224,42,55,.20), rgba(224,42,55,.05) 72%), var(--surface); border:1px solid rgba(224,42,55,.32); }
-.rgm:active{ transform:scale(.98); }
-.rgm-ic{ flex:none; width:46px; height:46px; border-radius:15px; display:grid; place-items:center; background:#050607; box-shadow:0 0 0 1px rgba(255,255,255,.09) inset, 0 8px 18px -8px rgba(224,42,55,.6); }
-.rgm-ic .rg-bw{ width:28px; }
-.rgm-t{ flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
-.rgm-t b{ font-size:15.5px; font-weight:800; }
-.rgm-t small{ font-size:12px; color:var(--hint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.rgm-tag{ flex:none; padding:2px 9px; border-radius:99px; font-size:10.5px; font-weight:600; color:var(--hint); background:rgba(128,128,128,.16); }
-.rgm-go{ flex:none; color:var(--hint); display:grid; place-items:center; }
-.rgm-go .ic{ width:16px; height:16px; transform:scaleX(-1); }
+/* آیکونِ دایره‌ایِ رهگشا: بالای کپسولِ پایین، سمتِ پایانیِ نوار؛ با نوار هم‌زمان ظاهر/پنهان می‌شود */
+.rg-fab{ position:fixed; z-index:21; inset-inline-end:18px; bottom:calc(10px + var(--bottom) + var(--tabbar-h) + 14px);
+  width:54px; height:54px; border-radius:50%; display:grid; place-items:center; background:#050607;
+  box-shadow:0 0 0 1px rgba(255,255,255,.1) inset, 0 0 0 3px rgba(224,42,55,.25), 0 12px 24px -8px rgba(224,42,55,.7);
+  transition:transform .4s cubic-bezier(.2,.8,.2,1), opacity .3s; -webkit-tap-highlight-color:transparent; }
+.rg-fab .rg-bw{ width:30px; }
+.rg-fab:active{ transform:scale(.9); }
+.rg-fab[aria-expanded="true"]{ box-shadow:0 0 0 1px rgba(255,255,255,.1) inset, 0 0 0 5px rgba(224,42,55,.45), 0 12px 24px -8px rgba(224,42,55,.7); }
+.tabbar.pending ~ .rg-fab{ opacity:0; pointer-events:none; transform:scale(.5); }
+body.clock-live .rg-fab{ opacity:0; pointer-events:none; transform:scale(.5); }
+@media (min-width:560px){ .rg-fab{ inset-inline-end:auto; left:calc(50% - 248px + 18px); } }

@@ -296,8 +296,6 @@
     }
     /* کارتِ آب‌وهوا: یک نمونه برای همیشه (انیمیشن‌هایش هیچ‌وقت از نو شروع نمی‌شوند) */
     if (!E.wx) { E.wx = weatherCard(); E.top.append(E.wx); }
-    /* رهگشا: بینِ میانبرها و آب‌وهوا (نسخه‌ی نمایشی فقط برای مدیر ارشد) */
-    if (!E.rg && (!RG_PREVIEW || isP)) { E.rg = rahgoshaCard(); E.top.insertBefore(E.rg, E.wx); }
 
     /* بخشِ داده: اگر چیزی عوض نشده، هیچ کاری نکن */
     var sigD = JSON.stringify([sm, B.trend, B.top, hasT, hasP]);
@@ -807,9 +805,8 @@
   }
 
   /* ─── رهگشا (دستیارِ هوشمندِ CMS؛ تنبل) ───────────────────────
-     RG_PREVIEW=true: نسخه‌ی ظاهری — فقط مدیر ارشد دکمه را می‌بیند و پاسخ‌های چت ساختگی‌اند.
-     بعد از وصل‌شدن به ربات (get_prefs/save_prefs در hub_chat.py) این را false کن تا برای همه‌ی مدیرها باز شود. */
-  var RG_PREVIEW = true;
+     نسخه‌ی واقعی: به /hub/api/rg/* (hub_chat.py) وصل است و برای همه‌ی مدیران (با نقشِ تشخیص‌داده‌شده در سرور) کار می‌کند.
+     ورودی: آیکونِ دایره‌ایِ #rg-fab بالای کپسولِ پایین (در index.html). */
   var rgState = 0, rgOpen = false, rgEl = $('#rg');
   function rgRole() { var r = S.boot && S.boot.me && S.boot.me.role; return r === 'pishva' ? 'pishva' : r === 'security_manager' ? 'sm' : 'tm'; }
   function loadRahgosha(cb) {
@@ -824,7 +821,7 @@
     s.src = 'rahgosha.js?v=' + V;
     s.onload = function () {
       rgState = 2;
-      window.HubRahgosha.mount(rgEl, { tg: tg, hx: hx, LS: LS, preview: RG_PREVIEW, role: rgRole(), close: closeRahgosha });
+      window.HubRahgosha.mount(rgEl, { tg: tg, hx: hx, LS: LS, api: api, toast: toast, close: closeRahgosha });
       if (cb) cb();
     };
     s.onerror = function () { rgState = 0; toast('بارگذاری رهگشا ناموفق بود'); };
@@ -837,6 +834,7 @@
       if (rgOpen) return;
       rgOpen = true;
       rgEl.hidden = false;
+      var _f = $('#rg-fab'); if (_f) _f.setAttribute('aria-expanded', 'true');
       pushBack(function () { if (window.HubRahgosha) window.HubRahgosha.back(); });
       try { tg.setHeaderColor('bg_color'); } catch (e) {}
       window.HubRahgosha.open();
@@ -846,6 +844,7 @@
   function closeRahgosha() {
     if (!rgOpen) return;
     rgOpen = false;
+    var _f2 = $('#rg-fab'); if (_f2) _f2.setAttribute('aria-expanded', 'false');
     popBack();
     var fin = function () { rgEl.hidden = true; if (window.HubRahgosha) window.HubRahgosha.onClose(); chrome(); };
     if (!reduceMotion && rgEl.animate) {
@@ -853,18 +852,15 @@
     }
     fin();
   }
-  function rahgoshaCard() {
-    var bolt = h('span', { class: 'rg-bw' }, h('span', { class: 'rg-bolt' }));
-    var el = h('button', { type: 'button', class: 'rgm', 'aria-label': 'رهگشا — دستیار هوشمند', onclick: openRahgosha },
-      h('span', { class: 'rgm-ic' }, bolt),
-      h('span', { class: 'rgm-t' }, h('b', { text: 'رهگشا' }), h('small', { text: 'دستیار هوشمند CMS' })),
-      RG_PREVIEW ? h('span', { class: 'rgm-tag', text: 'نمایشی' }) : null,
-      h('span', { class: 'rgm-go' }, ic('chev')));
+  /* آیکونِ دایره‌ایِ رهگشا (بالای کپسولِ پایین، در همه‌ی صفحه‌ها) */
+  (function initRahgoshaFab() {
+    var fab = $('#rg-fab');
+    if (!fab) return;
+    fab.addEventListener('click', openRahgosha);
     /* پیش‌بارگیریِ بی‌صدا تا با اولین لمس فوری باز شود */
     var a = doc.createElement('link'); a.rel = 'prefetch'; a.as = 'script'; a.href = 'rahgosha.js?v=' + V; doc.head.append(a);
     var b = doc.createElement('link'); b.rel = 'prefetch'; b.as = 'style'; b.href = 'rahgosha.css?v=' + V; doc.head.append(b);
-    return el;
-  }
+  })();
 
   /* ─── آب‌وهوا (تنبل) ───────────────────────────────────────── */
   var wxState = 0; // 0 نه، 1 در حال بارگذاری، 2 آماده
