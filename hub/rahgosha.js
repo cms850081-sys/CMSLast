@@ -496,7 +496,7 @@
   }
   function aiRow(text, extra, charging) {
     var r = el('div', 'rg-row rg-ai'), av = el('span', 'rg-av'), b = el('div', 'rg-bub', text);
-    av.append(logo(22, charging)); if (extra) b.append(extra); r.append(av, b); return r;
+    var lg = logo(22, charging); if (!charging) lg.classList.add('rg-still'); av.append(lg); if (extra) b.append(extra); r.append(av, b); return r;
   }
   function msgRow(m) {
     if (m.who === 'me') { var r = el('div', 'rg-row rg-me'); r.append(el('div', 'rg-bub', m.text)); return r; }

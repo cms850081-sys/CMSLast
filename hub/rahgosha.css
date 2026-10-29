@@ -151,3 +151,6 @@
 #rg .rg-sv{display:flex;flex-direction:column;gap:12px;padding-top:6px}
 #rg .rg-in:disabled{opacity:.6}
 #rg .rg-pvw{white-space:pre-wrap;word-break:break-word}
+/* پیامِ تمام‌شده: صاعقه ثابت و بی‌انیمیشن؛ فقط حبابِ «در حال فکر» انیمیشنِ شارژ دارد */
+#rg .rg-bw.rg-still::before{animation:none;opacity:.25}
+#rg .rg-bw.rg-still .rg-bolt::after{display:none}

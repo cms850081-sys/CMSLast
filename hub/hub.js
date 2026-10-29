@@ -1183,6 +1183,7 @@
   var lockTimer = 0;
   function gate(kind, info) {
     bar.hidden = true;
+    var _fg = $('#rg-fab'); if (_fg) _fg.hidden = true;   /* بدونِ دسترسی/قفل، رهگشا هم نباید دیده شود */
     try { if (tg && tg.BackButton) tg.BackButton.hide(); } catch (e) {}
     try { Sheet.close(); } catch (e) {}
     var locked = kind === 403 && info && info.error === 'locked';
