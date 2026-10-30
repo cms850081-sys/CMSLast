@@ -197,6 +197,19 @@ async def generate_excel_backup(period: str = "all") -> io.BytesIO:
         _write_row(ws_c, i + 1, [i, c["name"], str(c["created_at"] or "")[:10]])
     _auto_width(ws_c)
 
+    # ─── شیت «شیت‌ها»: اطلاعات و وضعیتِ اتصالِ گوگل‌شیت‌ها داخلِ بکاپ ─────────
+    try:
+        import sheets_sync
+        rows_s = await sheets_sync.backup_rows()
+        ws_s = wb.create_sheet("شیت‌ها")
+        ws_s.sheet_view.rightToLeft = True
+        _write_header(ws_s, rows_s[0])
+        for i, r in enumerate(rows_s[1:], 1):
+            _write_row(ws_s, i + 1, r)
+        _auto_width(ws_s)
+    except Exception as _e:
+        logger.warning(f"backup: sheets info skipped: {_e}")
+
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)

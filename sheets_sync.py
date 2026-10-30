@@ -39,12 +39,13 @@ logger = logging.getLogger(__name__)
 
 TEHRAN = pytz.timezone("Asia/Tehran")
 BATCH = 400                      # حداکثر رویداد در هر ارسال برای هر سرور
-TICK_SECONDS = 6
+TICK_SECONDS = 3                 # کارگر هر ۳ ثانیه بیدار می‌شود؛ فاصله‌ی واقعیِ ارسال از تنظیماتِ «سرعت» می‌آید
 _SECRET_COL = re.compile(r"token|secret|password|passwd|private_key|api_key|apikey|auth_key|credential", re.I)
 _SECRET_KEY_SQL = ("lower(NEW.\"key\") NOT LIKE '%token%' AND lower(NEW.\"key\") NOT LIKE '%secret%' "
                    "AND lower(NEW.\"key\") NOT LIKE '%password%' AND lower(NEW.\"key\") NOT LIKE '%api%key%' "
                    "AND lower(NEW.\"key\") NOT LIKE '%private%'")
-_EXCLUDED_EXACT = {"push_config", "principal_push_subscriptions", "backups"}
+_EXCLUDED_EXACT = {"push_config", "principal_push_subscriptions"}
+_SKIP_COLS = {"backups": {"file_data"}}   # سابقه‌ی بکاپ‌ها وارد شیت می‌شود، ولی نه خودِ فایل
 _EXCLUDED_PREFIX = ("sheet_", "_sheet", "sqlite_", "_litestream", "_cf_")
 
 # دسته‌بندی و عنوانِ فارسیِ تب‌ها: «دسته | عنوان»
@@ -67,7 +68,7 @@ CATS = {
     "chess_chat": ("۶ شطرنج زنده", "چت بازی"),
     "principal_access_log": ("۷ مدیر مدرسه", "ورودها"), "principal_blocked_devices": ("۷ مدیر مدرسه", "دستگاه‌های مسدود"),
     "principal_notifications": ("۷ مدیر مدرسه", "اعلان‌ها"),
-    "system_settings": ("۸ سیستم", "تنظیمات سیستم"), "blocked_users": ("۸ سیستم", "کاربران مسدود"),
+    "backups": ("۸ سیستم", "سابقه بکاپ‌ها"), "system_settings": ("۸ سیستم", "تنظیمات سیستم"), "blocked_users": ("۸ سیستم", "کاربران مسدود"),
     "stranger_log": ("۸ سیستم", "افراد ناشناس"),
 }
 
@@ -139,9 +140,14 @@ async def _columns(physical: str):
     return [row[1] for row in r.rows]       # (cid, name, type, ...)
 
 
-def _json_expr(cols, prefix: str):
+def _vis(cols, logical=""):
+    skip = _SKIP_COLS.get(logical, set())
+    return [c for c in cols if not _SECRET_COL.search(c) and c not in skip]
+
+
+def _json_expr(cols, prefix: str, logical: str = ""):
     """عبارتِ json_object برای ستون‌ها (ستون‌های حساس حذف؛ BLOB → متن)؛ برای >۵۰ ستون چندتکه و json_patch."""
-    cols = [c for c in cols if not _SECRET_COL.search(c)]
+    cols = _vis(cols, logical)
     parts = []
     for i in range(0, len(cols), 50):
         args = ", ".join(
@@ -162,7 +168,7 @@ def _when(logical: str) -> str:
 
 def _trigger_sql(physical: str, logical: str, sid: int, cols):
     safe = re.sub(r"\W", "_", physical)
-    new_j, old_j = _json_expr(cols, "NEW."), _json_expr(cols, "OLD.")
+    new_j, old_j = _json_expr(cols, "NEW.", logical), _json_expr(cols, "OLD.", logical)
     when_new = _when(logical)
     when_old = _when(logical).replace("NEW.", "OLD.")
     ins = (f"INSERT INTO _sheet_outbox(sid,tbl,op,ts,row_json) VALUES({sid},'{logical}','%s',datetime('now'),%s);")
@@ -182,7 +188,7 @@ async def ensure_triggers(sids):
         for physical, logical in await _tables_of(sid):
             try:
                 cols = await _columns(physical)
-                sig = f"{sid}|{','.join(cols)}"
+                sig = f"v2|{sid}|{','.join(cols)}"
                 if sigs.get(physical) == sig:
                     continue
                 await _pipe([(q, None) for q in _trigger_sql(physical, logical, sid, cols)] + [
@@ -211,11 +217,89 @@ async def queue_snapshot(sid: int) -> int:
             cols = await _columns(physical)
             where = f"WHERE {_SECRET_KEY_SQL.replace('NEW.', '')}" if logical == "system_settings" else ""
             r = await _x(f'INSERT INTO _sheet_outbox(sid,tbl,op,ts,row_json) SELECT {sid},\'{logical}\',\'SNAPSHOT\','
-                         f'datetime(\'now\'),{_json_expr(cols, "")} FROM "{physical}" {where}')
+                         f'datetime(\'now\'),{_json_expr(cols, "", logical)} FROM "{physical}" {where}')
             n += 1
         except Exception:
             logger.exception("sheets: snapshot failed for %s", physical)
     return n
+
+
+# ───────────────────────── تنظیماتِ شیت (کلی + اختصاصیِ هر سرور) ─────────────────────────
+CAT_NAMES = sorted({c for c, _t in CATS.values()} | {"۹ سایر"})
+HDR_COLORS = {"آبی": "1E3A8A", "سبز": "14532D", "قرمز": "7F1D1D", "خاکستری": "374151", "طلایی": "92400E", "مشکی": "111827"}
+FONTS = ["Arial", "Calibri", "Roboto", "Verdana", "Georgia"]
+FSIZES = [9, 10, 11, 12, 14]
+CWIDTHS = {"کم": 110, "متوسط": 160, "زیاد": 240}
+INTERVALS = [3, 6, 15, 30, 60]
+BATCHES = [100, 400, 1000]
+DELAYS = [(0, "فوری"), (60, "۱ دقیقه"), (300, "۵ دقیقه"), (1800, "۳۰ دقیقه"), (3600, "۱ ساعت")]
+OP_COLORS = {"INSERT": "DCFCE7", "UPDATE": "FEF3C7", "DELETE": "FEE2E2", "SNAPSHOT": "E0E7FF"}
+DEFAULTS = {"on": 1, "ev_update": 1, "ev_delete": 1, "ev_snapshot": 1, "hdr": "آبی", "font": "Arial", "fsize": 10, "cw": "متوسط",
+            "tabcolor": 1, "opcolor": 1, "interval": 6, "batch": 400, "delay": 0}
+SCOPED = {"on", "ev_update", "ev_delete"}          # اینها برای هر سرور جدا هم قابل‌تنظیم‌اند؛ بقیه فقط کلی
+_last_run = {}
+
+
+async def _json_cfg(k):
+    try:
+        return json.loads(await _cfg_get(k) or "{}")
+    except Exception:
+        return {}
+
+
+async def get_opts(sid=None) -> dict:
+    """تنظیماتِ مؤثر: پیش‌فرض ← کلی ← اختصاصیِ سرور (فقط کلیدهای مجاز و دسته‌ها)."""
+    o = dict(DEFAULTS)
+    g = await _json_cfg("opts")
+    o.update({k: v for k, v in g.items() if k != "cats"})
+    cats = dict(g.get("cats", {}))
+    if sid is not None:
+        ov = await _json_cfg(f"opts_{int(sid)}")
+        o.update({k: v for k, v in ov.items() if k in SCOPED})
+        cats.update(ov.get("cats", {}))
+    o["cats"] = cats
+    return o
+
+
+def _cat_on(o, logical) -> bool:
+    cat = CATS.get(logical, ("۹ سایر", ""))[0]
+    return bool(o["cats"].get(cat, 1))
+
+
+def _op_on(o, op) -> bool:
+    return bool(o.get({"UPDATE": "ev_update", "DELETE": "ev_delete", "SNAPSHOT": "ev_snapshot"}.get(op, "on"), 1))
+
+
+async def set_opt(scope, key, val):
+    """scope: 'g' یا sid. key می‌تواند 'cat:<نام دسته>' باشد."""
+    k = "opts" if scope == "g" else f"opts_{int(scope)}"
+    d = await _json_cfg(k)
+    if key.startswith("cat:"):
+        d.setdefault("cats", {})[key[4:]] = val
+    else:
+        d[key] = val
+    await _cfg_set(k, json.dumps(d, ensure_ascii=False))
+
+
+async def reset_scope(sid):
+    await _x("DELETE FROM sheet_cfg WHERE k=?", [f"opts_{int(sid)}"])
+
+
+def _rgb(hexs):
+    return {"red": int(hexs[0:2], 16) / 255, "green": int(hexs[2:4], 16) / 255, "blue": int(hexs[4:6], 16) / 255}
+
+
+def _fmt_text(o, bold=False, white=False):
+    tf = {"fontFamily": o["font"], "fontSize": int(o["fsize"]), "bold": bold}
+    if white:
+        tf["foregroundColor"] = _rgb("FFFFFF")
+    return tf
+
+
+def _tab_color(logical):
+    i = CAT_NAMES.index(CATS.get(logical, ("۹ سایر", ""))[0]) if CATS.get(logical, ("۹ سایر", ""))[0] in CAT_NAMES else 0
+    pal = ["6B7280", "2563EB", "16A34A", "D97706", "7C3AED", "DB2777", "0891B2", "DC2626", "475569", "9CA3AF"]
+    return pal[i % len(pal)]
 
 
 # ───────────────────────── Google API ─────────────────────────
@@ -298,15 +382,18 @@ def _tab_title(logical: str) -> str:
     return re.sub(r"[\[\]\*\?/\\:]", "-", t)[:95]
 
 
-def _cell(v):
+def _cell(v, fmt=None):
     if v is None:
-        return {}
-    if isinstance(v, bool):
-        return {"userEnteredValue": {"boolValue": v}}
-    if isinstance(v, (int, float)):
-        return {"userEnteredValue": {"numberValue": v}}
-    s = str(v)
-    return {"userEnteredValue": {"stringValue": s[:45000]}}
+        c = {}
+    elif isinstance(v, bool):
+        c = {"userEnteredValue": {"boolValue": v}}
+    elif isinstance(v, (int, float)):
+        c = {"userEnteredValue": {"numberValue": v}}
+    else:
+        c = {"userEnteredValue": {"stringValue": str(v)[:45000]}}
+    if fmt:
+        c["userEnteredFormat"] = fmt
+    return c
 
 
 def _tehran(ts: str) -> str:
@@ -320,17 +407,31 @@ def _tehran(ts: str) -> str:
 FIXED = ["شناسه رویداد", "زمان (تهران)", "نوع"]
 
 
+def _hdr_fmt(o):
+    return {"backgroundColor": _rgb(HDR_COLORS.get(o["hdr"], "1E3A8A")), "horizontalAlignment": "CENTER",
+            "textFormat": _fmt_text(o, bold=True, white=True)}
+
+
+def _body_fmt(o, op_cell=None):
+    f = {"textFormat": _fmt_text(o)}
+    if op_cell and o.get("opcolor"):
+        f["backgroundColor"] = _rgb(OP_COLORS.get(op_cell, "FFFFFF"))
+    return f
+
+
 async def _tabs_state(sid):
     r = await _x("SELECT tbl, cols, gid FROM sheet_tabs WHERE sid=?", [sid])
     return {row[0]: {"cols": json.loads(row[1] or "[]"), "gid": row[2]} for row in r.rows}
 
 
-async def _ensure_tabs(sid, sheet_id, needs: dict):
+async def _ensure_tabs(sid, sheet_id, needs: dict, o=None):
     """needs: {logical: [cols...]} — تب‌های جاافتاده را (به ترتیبِ دسته‌بندی) می‌سازد و ستون‌های جدید را به هدر اضافه می‌کند."""
+    o = o or await get_opts(sid)
     state = await _tabs_state(sid)
     meta = await _meta(sheet_id)
     by_title = {s["properties"]["title"]: s["properties"]["sheetId"] for s in meta.get("sheets", [])}
     reqs, new_state = [], {}
+    hf = _hdr_fmt(o)
     for logical in sorted(needs, key=lambda t: _tab_title(t)):
         want_cols = needs[logical]
         title = _tab_title(logical)
@@ -341,18 +442,22 @@ async def _ensure_tabs(sid, sheet_id, needs: dict):
             if extra:
                 allc = cur + extra
                 reqs.append({"updateCells": {"start": {"sheetId": st["gid"], "rowIndex": 0, "columnIndex": 0},
-                                             "rows": [{"values": [_cell(h) for h in FIXED + allc]}],
-                                             "fields": "userEnteredValue"}})
+                                             "rows": [{"values": [_cell(h, hf) for h in FIXED + allc]}],
+                                             "fields": "userEnteredValue,userEnteredFormat"}})
                 new_state[logical] = (allc, st["gid"])
             continue
         gid = by_title.get(title)
+        props = {"sheetId": None, "title": title, "rightToLeft": True, "gridProperties": {"frozenRowCount": 1}}
+        if o.get("tabcolor"):
+            props["tabColor"] = _rgb(_tab_color(logical))
         if gid is None:
             gid = zlib.crc32(f"{sid}:{logical}".encode()) % 2_000_000_000
-            reqs.append({"addSheet": {"properties": {"sheetId": gid, "title": title, "rightToLeft": True,
-                                                     "gridProperties": {"frozenRowCount": 1}}}})
+            props["sheetId"] = gid
+            reqs.append({"addSheet": {"properties": {k: v for k, v in props.items() if v is not None}}})
         cols = list(dict.fromkeys(want_cols))
         reqs.append({"updateCells": {"start": {"sheetId": gid, "rowIndex": 0, "columnIndex": 0},
-                                     "rows": [{"values": [_cell(h) for h in FIXED + cols]}], "fields": "userEnteredValue"}})
+                                     "rows": [{"values": [_cell(h, hf) for h in FIXED + cols]}],
+                                     "fields": "userEnteredValue,userEnteredFormat"}})
         new_state[logical] = (cols, gid)
     if reqs:
         await _g("POST", f"{API}/{sheet_id}:batchUpdate", json={"requests": reqs})
@@ -362,13 +467,40 @@ async def _ensure_tabs(sid, sheet_id, needs: dict):
 
 
 async def create_all_tabs(sid, sheet_id):
+    o = await get_opts(sid)
     needs = {}
     for physical, logical in await _tables_of(sid):
-        needs[logical] = [c for c in await _columns(physical) if not _SECRET_COL.search(c)]
-    await _ensure_tabs(sid, sheet_id, needs)
+        if _cat_on(o, logical):
+            needs[logical] = _vis(await _columns(physical), logical)
+    await _ensure_tabs(sid, sheet_id, needs, o)
 
 
-async def _send_batch(sid, sheet_id, rows):
+async def apply_format(sid, sheet_id) -> int:
+    """ظاهرِ فعلیِ تنظیمات (رنگِ هدر، فونت، اندازه، عرضِ ستون، رنگِ تب) را روی همه‌ی تب‌های موجود اعمال می‌کند."""
+    o = await get_opts(sid)
+    state = await _tabs_state(sid)
+    reqs = []
+    for logical, st in state.items():
+        gid, ncols = st["gid"], len(FIXED) + len(st["cols"])
+        props = {"sheetId": gid, "gridProperties": {"frozenRowCount": 1}}
+        fields = "gridProperties.frozenRowCount"
+        if o.get("tabcolor"):
+            props["tabColor"] = _rgb(_tab_color(logical)); fields += ",tabColor"
+        reqs.append({"updateSheetProperties": {"properties": props, "fields": fields}})
+        reqs.append({"repeatCell": {"range": {"sheetId": gid, "startRowIndex": 1},
+                                    "cell": {"userEnteredFormat": {"textFormat": _fmt_text(o)}},
+                                    "fields": "userEnteredFormat.textFormat"}})
+        reqs.append({"repeatCell": {"range": {"sheetId": gid, "startRowIndex": 0, "endRowIndex": 1},
+                                    "cell": {"userEnteredFormat": _hdr_fmt(o)},
+                                    "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"}})
+        reqs.append({"updateDimensionProperties": {"range": {"sheetId": gid, "dimension": "COLUMNS", "startIndex": 0, "endIndex": ncols},
+                                                   "properties": {"pixelSize": CWIDTHS.get(o["cw"], 160)}, "fields": "pixelSize"}})
+    for k in range(0, len(reqs), 200):
+        await _g("POST", f"{API}/{sheet_id}:batchUpdate", json={"requests": reqs[k:k + 200]})
+    return len(state)
+
+
+async def _send_batch(sid, sheet_id, rows, o):
     """rows: [(id, tbl, op, ts, row_json)] → یک batchUpdate با appendCells برای همه‌ی تب‌ها."""
     events = []
     needs = {}
@@ -382,7 +514,7 @@ async def _send_batch(sid, sheet_id, rows):
         for k in data:
             if k not in needs[tbl]:
                 needs[tbl].append(k)
-    await _ensure_tabs(sid, sheet_id, needs)
+    await _ensure_tabs(sid, sheet_id, needs, o)
     state = await _tabs_state(sid)
     per_tab = {}
     for eid, tbl, op, ts, data in events:
@@ -390,8 +522,9 @@ async def _send_batch(sid, sheet_id, rows):
         if not st:
             continue
         vals = [eid, _tehran(ts), op] + [data.get(c) for c in st["cols"]]
-        per_tab.setdefault(st["gid"], []).append({"values": [_cell(v) for v in vals]})
-    reqs = [{"appendCells": {"sheetId": gid, "rows": rws, "fields": "userEnteredValue"}} for gid, rws in per_tab.items()]
+        cells = [_cell(v, _body_fmt(o, op if i == 2 else None)) for i, v in enumerate(vals)]
+        per_tab.setdefault(st["gid"], []).append({"values": cells})
+    reqs = [{"appendCells": {"sheetId": gid, "rows": rws, "fields": "userEnteredValue,userEnteredFormat"}} for gid, rws in per_tab.items()]
     if reqs:
         await _g("POST", f"{API}/{sheet_id}:batchUpdate", json={"requests": reqs})
 
@@ -400,10 +533,10 @@ _busy = asyncio.Lock()
 _backoff_until = 0.0
 
 
-async def tick(context=None):
-    """هر چند ثانیه: صفِ هر سرور را به شیتش می‌فرستد."""
+async def tick(context=None, force=False):
+    """هر ۳ ثانیه بیدار می‌شود؛ طبقِ تنظیماتِ هر سرور (روشن/خاموش، سرعت، تأخیر، دسته‌ها و نوعِ رویداد) صفش را به شیتش می‌فرستد."""
     global _backoff_until
-    if _busy.locked() or time.time() < _backoff_until:
+    if _busy.locked() or (time.time() < _backoff_until and not force):
         return
     async with _busy:
         try:
@@ -411,16 +544,29 @@ async def tick(context=None):
             if not links or not await _cfg_get("sa_json"):
                 return
             for sid, sheet_id in links:
-                r = await _x("SELECT id,tbl,op,ts,row_json FROM _sheet_outbox WHERE sid=? AND sent=0 ORDER BY id LIMIT ?", [sid, BATCH])
-                rows = [tuple(x) for x in r.rows]
+                o = await get_opts(sid)
+                if not o["on"]:
+                    continue
+                if not force and time.time() - _last_run.get(sid, 0) < int(o["interval"]):
+                    continue
+                _last_run[sid] = time.time()
+                q, args = "SELECT id,tbl,op,ts,row_json FROM _sheet_outbox WHERE sid=? AND sent=0", [sid]
+                if int(o["delay"]) > 0 and not force:
+                    q += " AND ts <= datetime('now', ?)"
+                    args.append(f"-{int(o['delay'])} seconds")
+                q += " ORDER BY id LIMIT ?"
+                args.append(int(o["batch"]))
+                rows = [tuple(x) for x in (await _x(q, args)).rows]
                 if not rows:
                     continue
                 try:
-                    await _send_batch(sid, sheet_id, rows)
+                    keep = [r for r in rows if _cat_on(o, r[1]) and _op_on(o, r[2])]
+                    if keep:
+                        await _send_batch(sid, sheet_id, keep, o)
                     lo, hi = rows[0][0], rows[-1][0]
                     await _x("UPDATE _sheet_outbox SET sent=1 WHERE sid=? AND sent=0 AND id>=? AND id<=?", [sid, lo, hi])
                     await _x("UPDATE sheet_links SET last_sync=?, last_error='', sent_total=sent_total+? WHERE sid=?",
-                             [datetime.now(TEHRAN).strftime("%Y-%m-%d %H:%M:%S"), len(rows), sid])
+                             [datetime.now(TEHRAN).strftime("%Y-%m-%d %H:%M:%S"), len(keep), sid])
                 except GoogleError as e:
                     await _x("UPDATE sheet_links SET last_error=? WHERE sid=?", [str(e)[:300], sid])
                     logger.warning("sheets: sid %s send failed: %s", sid, e)
@@ -481,7 +627,8 @@ async def _menu_text_kb():
     lines = ["📊 <b>شیت‌ها — مرکز داده‌ی آفلاین</b>", ""]
     lines.append(f"🔑 کلید گوگل: {'✅ ' + sa['client_email'] if sa else '❌ ثبت نشده'}")
     lines.append("")
-    kb = [[InlineKeyboardButton("🔑 ارسال/تغییر کلید گوگل", callback_data="sh:key")]]
+    kb = [[InlineKeyboardButton("🔑 ارسال/تغییر کلید گوگل", callback_data="sh:key"),
+           InlineKeyboardButton("⚙️ تنظیمات شیت", callback_data="sh:cfg")]]
     for s in servers.all_servers(include_deleted=False):
         sid = int(s["id"])
         ln = links.get(sid)
@@ -521,6 +668,168 @@ async def _srv_text_kb(sid):
     return "\n".join(lines), InlineKeyboardMarkup(kb)
 
 
+# ───────────────────────── منوی تنظیماتِ شیت ─────────────────────────
+def _onoff(v):
+    return "✅" if v else "⬜"
+
+
+def _delay_label(sec):
+    return dict(DELAYS).get(int(sec), f"{sec} ثانیه")
+
+
+def _btn(label, data):
+    return [InlineKeyboardButton(label, callback_data=data)]
+
+
+async def _cfg_main():
+    o = await get_opts()
+    text = ("⚙️ <b>تنظیمات شیت</b>\n\n"
+            f"🔌 ارسال به شیت: {'✅ روشن' if o['on'] else '⏸ خاموش (تغییرات در صف می‌مانند)'}\n"
+            f"⏱ فاصله‌ی ارسال: {o['interval']} ثانیه · تأخیر ثبت: {_delay_label(o['delay'])}\n"
+            f"🎨 هدر: {o['hdr']} · فونت: {o['font']} {o['fsize']} · ستون: {o['cw']}")
+    kb = [_btn(f"🔌 ارسال به شیت: {'روشن' if o['on'] else 'خاموش'}", "sh:t:g:on"),
+          _btn("🗂 چه چیزهایی ثبت شود", "sh:cfg:what:g"),
+          _btn("🎨 ظاهر جدول‌ها (رنگ، فونت، سایز)", "sh:cfg:look"),
+          _btn("⏱ سرعت و تأخیر", "sh:cfg:speed"),
+          _btn("🖥 تنظیمات هر سرور", "sh:cfg:srv"),
+          _btn("⬅️ بازگشت", "sh:menu")]
+    return text, InlineKeyboardMarkup(kb)
+
+
+async def _cfg_what(scope):
+    sid = None if scope == "g" else int(scope)
+    o = await get_opts(sid)
+    title = "همه‌ی سرورها" if sid is None else _srv_name(sid)
+    text = (f"🗂 <b>چه چیزهایی ثبت شود — {title}</b>\n\nبا زدن هر مورد روشن/خاموش می‌شود."
+            + ("" if sid is None else "\nاین‌جا هرچه عوض کنی فقط برای همین سرور است."))
+    kb = []
+    if sid is not None:
+        kb.append(_btn(f"{_onoff(o['on'])} ارسال این سرور به شیت", f"sh:t:{scope}:on"))
+    for i, cat in enumerate(CAT_NAMES):
+        kb.append(_btn(f"{_onoff(o['cats'].get(cat, 1))} {cat}", f"sh:t:{scope}:cat{i}"))
+    kb.append([InlineKeyboardButton(f"{_onoff(o['ev_update'])} ویرایش‌ها", callback_data=f"sh:t:{scope}:ev_update"),
+               InlineKeyboardButton(f"{_onoff(o['ev_delete'])} حذف‌ها", callback_data=f"sh:t:{scope}:ev_delete")])
+    if sid is not None:
+        kb.append(_btn("↩️ برگشت به تنظیمات کلی", f"sh:rs:{sid}"))
+    kb.append(_btn("⬅️ بازگشت", "sh:cfg" if sid is None else "sh:cfg:srv"))
+    return text, InlineKeyboardMarkup(kb)
+
+
+async def _cfg_look():
+    o = await get_opts()
+    text = "🎨 <b>ظاهر جدول‌ها</b>\n\nهر دکمه را بزنی گزینه‌ی بعدی انتخاب می‌شود. ردیف‌های جدید همان لحظه با ظاهر تازه نوشته می‌شوند؛ برای تب‌های قبلی «اعمال» را بزن."
+    kb = [_btn(f"🎨 رنگ هدر: {o['hdr']}", "sh:y:hdr"),
+          _btn(f"🔤 فونت: {o['font']}", "sh:y:font"),
+          _btn(f"🔠 اندازه‌ی فونت: {o['fsize']}", "sh:y:fsize"),
+          _btn(f"↔️ عرض ستون: {o['cw']}", "sh:y:cw"),
+          _btn(f"{_onoff(o['tabcolor'])} رنگِ تب‌ها به‌تفکیک دسته", "sh:y:tabcolor"),
+          _btn(f"{_onoff(o['opcolor'])} رنگ‌بندیِ نوع رویداد (درج/ویرایش/حذف)", "sh:y:opcolor"),
+          _btn("✨ اعمال روی همه‌ی تب‌ها", "sh:apply"),
+          _btn("⬅️ بازگشت", "sh:cfg")]
+    return text, InlineKeyboardMarkup(kb)
+
+
+async def _cfg_speed():
+    o = await get_opts()
+    text = ("⏱ <b>سرعت و تأخیر</b>\n\n"
+            "• فاصله‌ی ارسال: هر چند ثانیه صف به شیت برود (کمتر = سریع‌تر، ولی نزدیک‌تر به سقف گوگل).\n"
+            "• حجم هر دسته: در هر ارسال حداکثر چند ردیف.\n"
+            "• تأخیر ثبت: تغییرات تازه‌تر از این مدت هنوز نوشته نمی‌شوند.")
+    kb = [_btn(f"⚡ فاصله‌ی ارسال: {o['interval']} ثانیه", "sh:y:interval"),
+          _btn(f"📦 حجم هر دسته: {o['batch']} ردیف", "sh:y:batch"),
+          _btn(f"⏳ تأخیر ثبت: {_delay_label(o['delay'])}", "sh:y:delay"),
+          _btn("⬅️ بازگشت", "sh:cfg")]
+    return text, InlineKeyboardMarkup(kb)
+
+
+async def _cfg_srv_list():
+    kb = []
+    for sv in servers.all_servers(include_deleted=False):
+        sid = int(sv["id"])
+        ov = await _json_cfg(f"opts_{sid}")
+        kb.append(_btn(f"{'🔧' if ov else '🖥'} {_srv_name(sid)}", f"sh:cfg:what:{sid}"))
+    kb.append(_btn("⬅️ بازگشت", "sh:cfg"))
+    return "🖥 <b>تنظیمات هر سرور</b>\n\n🔧 یعنی تنظیماتِ اختصاصیِ جدا دارد.", InlineKeyboardMarkup(kb)
+
+
+def _cycle_list(key):
+    return {"hdr": list(HDR_COLORS), "font": FONTS, "fsize": FSIZES, "cw": list(CWIDTHS), "tabcolor": [1, 0], "opcolor": [1, 0],
+            "interval": INTERVALS, "batch": BATCHES, "delay": [d for d, _l in DELAYS]}[key]
+
+
+async def _cfg_dispatch(q, ctx, parts):
+    """sh:cfg[:what:<scope>|look|speed|srv] · sh:t:<scope>:<key> · sh:y:<key> · sh:apply · sh:rs:<sid>"""
+    act = parts[1]
+    if act == "cfg":
+        sub = parts[2] if len(parts) > 2 else ""
+        if sub == "what":
+            r = await _cfg_what(parts[3])
+        elif sub == "look":
+            r = await _cfg_look()
+        elif sub == "speed":
+            r = await _cfg_speed()
+        elif sub == "srv":
+            r = await _cfg_srv_list()
+        else:
+            r = await _cfg_main()
+        await q.answer()
+        await _show(q, *r)
+    elif act == "t":
+        scope, key = parts[2], parts[3]
+        o = await get_opts(None if scope == "g" else int(scope))
+        if key.startswith("cat"):
+            name = CAT_NAMES[int(key[3:])]
+            await set_opt(scope, f"cat:{name}", 0 if o["cats"].get(name, 1) else 1)
+        else:
+            await set_opt(scope, key, 0 if o.get(key, 1) else 1)
+        await q.answer("انجام شد")
+        if key == "on" and scope == "g":
+            await _show(q, *(await _cfg_main()))
+        else:
+            await _show(q, *(await _cfg_what(scope)))
+    elif act == "y":
+        key = parts[2]
+        o = await get_opts()
+        lst = _cycle_list(key)
+        cur = o.get(key, DEFAULTS[key])
+        nxt = lst[(lst.index(cur) + 1) % len(lst)] if cur in lst else lst[0]
+        await set_opt("g", key, nxt)
+        await q.answer("انجام شد")
+        await _show(q, *(await (_cfg_speed() if key in ("interval", "batch", "delay") else _cfg_look())))
+    elif act == "apply":
+        n = 0
+        for sid, sheet_id in (await _x("SELECT sid, sheet_id FROM sheet_links WHERE active=1")).rows:
+            try:
+                n += await apply_format(sid, sheet_id)
+            except Exception as e:
+                logger.warning("sheets: apply_format failed sid=%s: %s", sid, e)
+        await q.answer(f"روی {n} تب اعمال شد", show_alert=True)
+    elif act == "rs":
+        await reset_scope(int(parts[2]))
+        await q.answer("به تنظیمات کلی برگشت")
+        await _show(q, *(await _cfg_what(parts[2])))
+
+
+# ───────────────────────── جابه‌جاییِ اطلاعات با بکاپ ─────────────────────────
+async def backup_rows():
+    """جدولِ «شیت‌ها» که داخلِ فایل بکاپ (Excel) گذاشته می‌شود: وضعیتِ اتصال و تنظیماتِ شیتِ هر سرور (بدون کلید/رمز)."""
+    await ensure_tables()
+    g = await get_opts()
+    rows = [["سرور", "لینک شیت", "وضعیت", "آخرین ارسال", "ردیف‌های ارسال‌شده", "در صف", "تنظیمات اختصاصی"]]
+    links = {r[0]: r for r in (await _x("SELECT sid, sheet_id, active, last_sync, sent_total FROM sheet_links")).rows}
+    pend = {r[0]: r[1] for r in (await _x("SELECT sid, COUNT(*) FROM _sheet_outbox WHERE sent=0 GROUP BY sid")).rows}
+    for sv in servers.all_servers(include_deleted=False):
+        sid = int(sv["id"])
+        ln = links.get(sid)
+        ov = await _json_cfg(f"opts_{sid}")
+        rows.append([_srv_name(sid), f"https://docs.google.com/spreadsheets/d/{ln[1]}" if ln else "—",
+                     ("فعال" if ln[2] else "متوقف") if ln else "وصل نیست", (ln[3] if ln else "") or "—",
+                     ln[4] if ln else 0, pend.get(sid, 0), json.dumps(ov, ensure_ascii=False) if ov else "—"])
+    rows.append([])
+    rows.append(["تنظیمات کلی شیت", json.dumps({k: v for k, v in g.items()}, ensure_ascii=False)])
+    return rows
+
+
 async def cmd_sheets(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _is_boss(update):
         return
@@ -544,8 +853,18 @@ async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     parts = q.data.split(":")
     act = parts[1]
-    sid = int(parts[2]) if len(parts) > 2 else None
     await ensure_tables()
+    if act in ("cfg", "t", "y", "apply", "rs"):
+        try:
+            await _cfg_dispatch(q, ctx, parts)
+        except Exception as e:
+            logger.exception("sheets: settings callback failed")
+            try:
+                await q.answer(f"خطا: {e}"[:190], show_alert=True)
+            except Exception:
+                pass
+        return
+    sid = int(parts[2]) if len(parts) > 2 else None
     try:
         if act == "menu":
             ctx.user_data.pop("sheet_wait", None)
@@ -576,7 +895,7 @@ async def on_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 await q.answer(f"❌ {e}"[:190], show_alert=True)
         elif act == "sync":
             await q.answer("در حال ارسال…")
-            await tick()
+            await tick(force=True)
             await _show(q, *(await _srv_text_kb(sid)))
         elif act == "tog":
             await _x("UPDATE sheet_links SET active=1-active WHERE sid=?", [sid])
