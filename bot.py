@@ -277,6 +277,9 @@ async def post_init(application: Application) -> None:
         BotCommand("ss", "📋 اعطای سریع وظیفه"),
         BotCommand("open", "🟢 آغاز ساعت کاری"),
         BotCommand("close", "🔴 پایان ساعت کاری"),
+        BotCommand("override_strike", "✏️ تغییر دستی اخطار مدیر"),
+        BotCommand("sheets", "📊 گوگل‌شیت — مرکز داده‌ی آفلاین"),
+        BotCommand("proactive", "💬 پیام‌دادنِ خودکار رهگشا"),
     ]
     admin_cmds = [
         BotCommand("start", "🏠 شروع — منوی اصلی"),

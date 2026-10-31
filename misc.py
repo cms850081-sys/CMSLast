@@ -1273,37 +1273,61 @@ async def cmd_override_strike(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ خطا: {e}")
 
 
+# ── فهرستِ کاملِ دستورهای «/» ربات (هر دستورِ جدید اینجا اضافه شود تا در /help بیاید) ──
+HELP_COMMON = (
+    "/start — منوی اصلی (ورود/ثبت‌نام)\n"
+    "/help — همین راهنما\n"
+    "/cancel — انصراف از کاری که منتظر ورودی‌اش هستم (تنظیمات رهگشا، خلاصه صبحگاهی، …)\n"
+)
+HELP_BOSS = (
+    "🚨 <b>وضعیت و ایمنی</b>\n"
+    "/panic — وضعیت خطرناکِ اضطراری\n"
+    "/unpanic — بازگشت به وضعیت نرمال\n"
+    "/freeze_all — فعال‌سازی حالت APS (فریزِ همه)\n"
+    "/terminal — تله‌متریِ سیستم\n"
+    "\n💾 <b>داده و بکاپ</b>\n"
+    "/backup_now — بکاپِ اضطراری (مثل «/backup_now all» برای همه‌ی سرورها یا «/backup_now 2» فقط سرور ۲)\n"
+    "/sheets (یا /sheet) — گوگل‌شیت: وصل‌کردن، تنظیمات ظاهر/سرعت/چه‌چیز ثبت شود، وضعیت هر سرور\n"
+    "\n👥 <b>مدیران و کارها</b>\n"
+    "/ss — اعطای سریعِ وظیفه به یک مدیر\n"
+    "/override_strike [آیدی] [تعداد] — تغییرِ دستیِ تعدادِ اخطارِ یک مدیر\n"
+    "/open — آغاز ساعتِ کاری\n"
+    "/close — پایان ساعتِ کاری\n"
+    "\n🤖 <b>رهگشا</b>\n"
+    "/proactive — تنظیماتِ پیام‌دادنِ خودکارِ رهگشا (کلیدِ کلی، سقف، آستانه، موضوع‌ها، افراد)\n"
+)
+HELP_CONTEXT = (
+    "\n💡 <b>دستورهای موقعیتی</b>\n"
+    "/skip — در ثبت‌نامِ مدیر: رد کردنِ «پیام برای مدیر»\n"
+    "/default — در ویرایشِ متنِ اعلامِ شکستِ هوش مصنوعیِ شطرنج: بازگشت به متنِ پیش‌فرض (فقط مدیر ارشد)\n"
+    "/start join_کد — لینکِ دعوتِ استخدام در سرورِ یک مجموعه\n"
+)
+
+
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid == PISHVA_ID:
-        text = (
-            "👑 *دستورات مدیر ارشد:*\n\n"
-            "/panic — وضعیت خطرناک اضطراری\n"
-            "/unpanic — بازگشت به نرمال\n"
-            "/freeze\\_all — حالت APS\n"
-            "/terminal — تله‌متری سیستم\n"
-            "/backup\\_now — بکاپ اضطراری\n"
-            "/override\\_strike [id] [count] — تغییر اخطار\n"
-            "/ss — اعطای سریع وظیفه\n"
-            "/start — منوی اصلی"
-        )
+        text = "👑 <b>راهنمای دستورات — مدیر ارشد</b>\n\n" + HELP_COMMON + "\n" + HELP_BOSS + HELP_CONTEXT
     else:
         admin = await db.get_admin(uid)
         if admin and admin["role"] == ROLE_TOURNAMENT_MANAGER:
-            text = (
-                "🏆 *دستورات مدیر مسابقات:*\n\n"
-                "/start — منوی اصلی\n"
-                "/help — این راهنما"
-            )
+            text = "🏆 <b>راهنمای دستورات — مدیر مسابقات</b>\n\n" + HELP_COMMON
         elif admin and admin["role"] == ROLE_SECURITY_MANAGER:
-            text = (
-                "🛡️ *دستورات مدیر امنیتی:*\n\n"
-                "/start — منوی اصلی\n"
-                "/help — این راهنما"
-            )
+            text = "🛡️ <b>راهنمای دستورات — مدیر امنیتی</b>\n\n" + HELP_COMMON
         else:
-            text = "⛔ شما دسترسی ندارید."
-    await update.message.reply_text(text, parse_mode="Markdown")
+            try:
+                from helpers import get_user_role
+                role = await get_user_role(uid)
+            except Exception:
+                role = None
+            if role:      # مثلاً مدیرِ یک مجموعه (سرورِ فرعی)
+                text = "👑 <b>راهنمای دستورات</b>\n\n" + HELP_COMMON
+            else:
+                text = ("⛔ شما هنوز دسترسی ندارید.\n\n"
+                        "/start — شروع ثبت‌نام / درخواستِ دسترسی\n"
+                        "/skip — رد کردنِ «پیام برای مدیر» هنگامِ ثبت‌نام\n")
+    text += "\nℹ️ بیشترِ کارها از «منوی اصلی» و «پنل من» (دکمه‌ی کنارِ چت) هم در دسترس است."
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 # cmd_open / cmd_close (دستورات /open و /close) به workhours.py منتقل
