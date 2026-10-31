@@ -13,6 +13,7 @@ import base64
 import logging
 import os
 
+import asyncio
 import httpx
 
 logger = logging.getLogger("turso_db")
@@ -49,12 +50,49 @@ class _TursoHttpClient:
             limits=httpx.Limits(max_keepalive_connections=20, keepalive_expiry=120.0),
         )
 
+    def _new_http(self):
+        return httpx.AsyncClient(
+            timeout=30.0,
+            http2=True,
+            limits=httpx.Limits(max_keepalive_connections=20, keepalive_expiry=120.0),
+        )
+
+    async def _reset_http(self, failed_client):
+        """اتصالِ HTTP/2 که سرور/پروکسی نیمه‌راه بسته (Server disconnected…) را دور می‌ریزد و تازه می‌سازد.
+        فقط اگر کلاینتِ خراب هنوز همان کلاینتِ فعلی باشد (چند درخواستِ هم‌زمان یک‌بار ریست کنند)."""
+        if self._http is failed_client:
+            self._http = self._new_http()
+            try:
+                asyncio.get_running_loop().create_task(failed_client.aclose())
+            except Exception:
+                pass
+
     async def _pipeline(self, requests):
         endpoint = f"{self._base_url}/v2/pipeline"
         headers = {"Authorization": f"Bearer {self._token}"}
-        resp = await self._http.post(endpoint, json={"requests": requests}, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+        # FIX: «Server disconnected without sending a response» — اتصالِ نگه‌داشته‌شده‌ی HTTP/2 را Turso/پروکسی بسته بود و
+        # درخواست بدونِ تلاشِ دوباره خطا می‌خورد. خطاهای گذرای شبکه را تا ۳ بار (با اتصالِ تازه) دوباره امتحان می‌کنیم.
+        transient = (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError, httpx.WriteError,
+                     httpx.PoolTimeout, httpx.ConnectTimeout)
+        last = None
+        for attempt in range(3):
+            client = self._http
+            try:
+                resp = await client.post(endpoint, json={"requests": requests}, headers=headers)
+                if resp.status_code in (502, 503, 504) and attempt < 2:
+                    logger.warning("Turso HTTP %s — retry %s", resp.status_code, attempt + 1)
+                    await self._reset_http(client)
+                    await asyncio.sleep(0.2 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+            except transient as exc:
+                last = exc
+                logger.warning("Turso transient network error (%r) — retry %s/2", exc, attempt + 1)
+                await self._reset_http(client)
+                if attempt < 2:
+                    await asyncio.sleep(0.2 * (attempt + 1))
+        raise last
 
     @staticmethod
     def _check_pipeline_error(entry, sql, args):
