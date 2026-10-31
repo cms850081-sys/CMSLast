@@ -83,6 +83,10 @@ OPTIONS = {
                    [("off", "غیرفعال")] + [(k, v[0]) for k, v in MODES.items()]),
     "work_mode": ("🏢 حالت ساعت کاری", "time",
                   [("off", "غیرفعال")] + [(k, v[0]) for k, v in MODES.items()]),
+    "pro_on":    ("📣 پیام‌دادنِ خودکارِ رهگشا (اول خودش پیام بده)", "behavior", [("1", "روشن"), ("0", "خاموش")]),
+    "pro_quiet": ("🌙 ساعتِ سکوتِ پیام‌های خودکار", "time",
+                  [("23:45-09:40", "۲۳:۴۵ تا ۰۹:۴۰ (پیش‌فرض)"), ("22:00-08:00", "۲۲ تا ۸"), ("23:00-07:00", "۲۳ تا ۷"),
+                   ("00:00-10:00", "۰ تا ۱۰"), ("off", "بدون ساعت سکوت")]),
     "deliver":   ("📥 ساعات دریافت پیام‌های رهگشا", "time",
                   [("all", "همیشه"), ("8-22", "۸ تا ۲۲"), ("9-21", "۹ تا ۲۱"), ("10-23", "۱۰ تا ۲۳")]),
 }
@@ -91,8 +95,8 @@ SECTIONS = {
     "mode":     ("🎭 حالت رفتار", ["mode"]),
     "style":    ("🎨 سبک گفتار", ["emoji", "humor", "profanity", "formality"]),
     "format":   ("📏 قالب جواب", ["length", "structure", "result_first"]),
-    "behavior": ("⚙️ رفتار", ["ask_or_guess", "confirm", "proactive", "auto_remind", "memory", "trainer", "voice"]),
-    "time":     ("🕒 زمان", ["night_mode", "work_mode", "deliver"]),
+    "behavior": ("⚙️ رفتار", ["ask_or_guess", "confirm", "proactive", "pro_on", "auto_remind", "memory", "trainer", "voice"]),
+    "time":     ("🕒 زمان", ["night_mode", "work_mode", "deliver", "pro_quiet"]),
 }
 
 TEXT_FIELDS = {

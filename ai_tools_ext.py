@@ -93,6 +93,11 @@ import ai_tools_servers as _srv
 TOOL_PERMISSIONS_EXT.update({_n: ONLY_PISHVA for _n in _srv.TOOL_PERMISSIONS})
 CATEGORIES_EXT.append(_srv.CATEGORY)
 
+# ── پیام‌دادنِ خودکارِ رهگشا + «اگر فلان شد بهم بگو» ──
+import ai_proactive as _pro
+TOOL_PERMISSIONS_EXT.update(_pro.TOOL_PERMISSIONS)
+CATEGORIES_EXT.append(_pro.CATEGORY)
+
 # ابزارهایی که واقعاً چیزی رو تغییر می‌دن (گزارش سیستم + اطلاع به مدیر ارشد)
 ACTION_TOOL_NAMES_EXT = frozenset({
     "set_player_tiers", "set_top_players", "add_admin", "set_admin_active",
@@ -1469,13 +1474,15 @@ async def _list_warned_players(args):
 # ════════════════════════════════════════════════════════════════
 # دیسپچر — None یعنی این ابزار مال این ماژول نیست
 # ════════════════════════════════════════════════════════════════
-TOOL_DECLARATIONS_EXT = TOOL_DECLARATIONS_EXT + _mb.TOOL_DECLARATIONS + _srv.TOOL_DECLARATIONS
+TOOL_DECLARATIONS_EXT = TOOL_DECLARATIONS_EXT + _mb.TOOL_DECLARATIONS + _srv.TOOL_DECLARATIONS + _pro.TOOL_DECLARATIONS
 
 
 async def dispatch_ext(name, args, caller_id, caller_role, ctx):
     if name not in TOOL_PERMISSIONS_EXT:
         return None
     args = args or {}
+    if name in _pro.TOOL_PERMISSIONS:
+        return await _pro.dispatch_tool(name, args, caller_id, caller_role, ctx)
     if name in _srv.TOOL_PERMISSIONS:
         return await _srv.dispatch_tool(name, args, getattr(ctx, "job_queue", None), ctx)
     if name in _mb.TOOL_PERMISSIONS:

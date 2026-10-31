@@ -857,7 +857,7 @@ async def api_comms_overview(request):
     for a in active:
         if a["telegram_id"] != c.uid:
             recipients.append({"id": a["telegram_id"], "name": _admin_name(a), "role": ROLE_LABELS.get(a["role"], "مدیر")})
-    inbox = [{"id": m["id"], "from": names.get(m["sender_id"], "؟"), "text": m["text"],
+    inbox = [{"id": m["id"], "from": names.get(m["sender_id"], "رهگشا 🤖" if m["sender_id"] == 0 else "؟"), "text": m["text"],
               "at": _dt(m["sent_at"]), "read": bool(m["is_read"])} for m in list(inbox_rows)[:40]]
     sent = [{"id": m["id"], "to": names.get(m["receiver_id"], "؟"), "text": m["text"],
              "at": _dt(m["sent_at"]), "read": bool(m["is_read"])} for m in list(sent_rows)[:40]]

@@ -825,3 +825,51 @@ async def rg_admin_persona_reset(request):
     await ai_persona.save_prefs(tid, {})
     await db.log_action(uid, "ai_persona_reset", "بازنشانی تنظیمات رهگشا", tid)
     return _ok(summary=ai_persona._summary({}))
+
+
+# ─── پیام‌دادنِ خودکارِ رهگشا + قانون‌های «اگر فلان شد بهم بگو» ───
+@routes.get("/hub/api/rg/admin/pro")
+async def rg_admin_pro(request):
+    await _auth(request, pishva_only=True)
+    import ai_proactive
+    await ai_proactive._ensure_tables()
+    return _ok(**(await ai_proactive.admin_state()))
+
+
+@routes.post("/hub/api/rg/admin/pro")
+async def rg_admin_pro_set(request):
+    await _auth(request, pishva_only=True)
+    import ai_proactive
+    await ai_proactive._ensure_tables()
+    b = await _body(request)
+    if not await ai_proactive.admin_apply(b):
+        raise _fail("bad_request", "تغییرِ نامعتبر.")
+    return _ok(**(await ai_proactive.admin_state()))
+
+
+@routes.get("/hub/api/rg/rules")
+async def rg_rules(request):
+    uid, role, is_pishva, _c = await _auth(request)
+    import ai_proactive
+    await ai_proactive._ensure_tables()
+    rs = await ai_proactive._rows("SELECT * FROM aipro_rules WHERE active=1 " + ("" if is_pishva else "AND owner_id=? ") + "ORDER BY id DESC LIMIT 60",
+                                  () if is_pishva else (uid,))
+    return _ok(rules=[{"id": r["id"], "title": r["title"], "mine": r["owner_id"] == uid, "repeat": bool(r["repeat"]),
+                       "what": f"{ai_proactive.METRICS.get(r['metric'], ('?',))[0]} {r['op']} {r['value']:g}" + (f" ({r['target']})" if r["target"] else "")}
+                      for r in rs])
+
+
+@routes.post("/hub/api/rg/rules/del")
+async def rg_rules_del(request):
+    uid, role, is_pishva, _c = await _auth(request)
+    import ai_proactive
+    b = await _body(request)
+    try:
+        rid = int(b.get("id"))
+    except (TypeError, ValueError):
+        raise _fail("bad_request", "شناسه نامعتبر است.")
+    r = await ai_proactive._rows("SELECT owner_id FROM aipro_rules WHERE id=?", (rid,))
+    if not r or (r[0]["owner_id"] != uid and not is_pishva):
+        raise _fail("not_found", "این قانون پیدا نشد یا مالِ تو نیست.", 404)
+    await ai_proactive._exec("DELETE FROM aipro_rules WHERE id=?", (rid,))
+    return await rg_rules(request)

@@ -345,6 +345,8 @@ async def post_init(application: Application) -> None:
     # Persona: flush held Rahgosha messages outside users' delivery windows
     try:
         ai_persona.start(application)
+        import ai_proactive
+        ai_proactive.start(application)
     except Exception as e:
         logger.warning(f"Could not start persona flusher: {e}")
 
@@ -617,6 +619,13 @@ def build_application():
 
     # 🌐 روترِ چندسرور — اولین هندلرِ همه‌ی آپدیت‌ها (سرورِ جاریِ این آپدیت را تعیین می‌کند)
     app.add_handler(TypeHandler(Update, routing.route_update), group=-100)
+
+    # 💬 پیام‌دادنِ خودکارِ رهگشا (/proactive — فقط مدیر ارشد؛ دکمه‌های پیام‌ها برای همه)
+    try:
+        import ai_proactive
+        ai_proactive.register(app)
+    except Exception as _e:
+        logger.warning(f"ai_proactive register failed: {_e}")
 
     # 📊 آینه‌ی دیتابیس در گوگل‌شیت (/sheets — فقط مدیر ارشد)
     try:

@@ -459,6 +459,9 @@ TOOL_DECLARATIONS = [
             "properties": {
                 "identifier": {"type": "string", "description": "آیدی عددی، یوزرنیم یا نام کامل مدیر"},
                 "text": {"type": "string", "description": "متن پیام"},
+                "anonymous": {"type": "boolean", "description": (
+                    "true وقتی مدیر ارشد گفت «از طرف خودت / از طرف رهگشا / بدون اسم من» بفرست: در این حالت پیام فقط از «رهگشا» می‌رسد و "
+                    "هیچ اسم یا اشاره‌ای به مدیر ارشد نیست؛ در متنِ پیام هم هرگز اسمِ مدیر ارشد را ننویس.")},
             },
             "required": ["identifier", "text"],
         },
@@ -1168,8 +1171,9 @@ async def _dispatch_impl(name: str, args: dict, caller_id: int, caller_role: str
             if not text:
                 return "متن پیام نمی‌تونه خالی باشه."
             tid = a["telegram_id"]
-            msg_id = await db.send_message_db(caller_id, tid, text)
-            pname = await pishva_display()
+            anon = bool(args.get("anonymous"))
+            msg_id = await db.send_message_db(0 if anon else caller_id, tid, text)   # فرستنده‌ی 0 = «رهگشا»
+            pname = "رهگشا 🤖" if anon else await pishva_display()
             ts = now_shamsi()
             notif = (
                 f"{box('📨 پیام جدید')}\n\n"
@@ -1177,7 +1181,7 @@ async def _dispatch_impl(name: str, args: dict, caller_id: int, caller_role: str
                 f"👤 از: {pname}\n"
                 f"⏱️ `{ts}`\n\n"
                 f"💬 متن: _{text}_\n\n"
-                f"🤖 این پیام از طریق رهگشا ارسال شده"
+                + ("" if anon else "🤖 این پیام از طریق رهگشا ارسال شده")
             )
             try:
                 sent = await ctx.bot.send_message(

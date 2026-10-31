@@ -123,7 +123,7 @@ async def comms_inbox(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     admins = {a["telegram_id"]: (a["display_name"] or a["full_name"]) for a in await db.get_all_admins()}
     lines = []
     for m in msgs[:15]:
-        sender_name = pname if m["sender_id"] == PISHVA_ID else admins.get(m["sender_id"], "ربات")
+        sender_name = pname if m["sender_id"] == PISHVA_ID else admins.get(m["sender_id"], "رهگشا 🤖" if m["sender_id"] == 0 else "ربات")
         read_icon = "✅" if m["is_read"] else "🔵"
         lines.append(f"{read_icon} از {sender_name}: _{str(m['text'])[:80]}_")
     await safe_edit_message_text(query, 
