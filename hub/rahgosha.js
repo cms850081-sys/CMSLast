@@ -50,11 +50,13 @@
    proactive:['💡','پیشنهاد فعال',OO],auto_remind:['🔔','یادآوری کارهای عقب‌افتاده',OO],memory:['🧠','حافظه‌ی شخصی',OO],
    voice:['🔊','خروجی صوتی',[['0','خاموش'],['1','روشن']]],trainer:['🎓','حالت مربی',[['0','خاموش'],['1','روشن']]],
    night_mode:['🌙','حالت شب (۲۲ تا ۶)',OFFML],work_mode:['🏢','حالت ساعت کاری',OFFML],
-   deliver:['📥','ساعات دریافت پیام‌های رهگشا',[['all','همیشه'],['8-22','۸ تا ۲۲'],['9-21','۹ تا ۲۱'],['10-23','۱۰ تا ۲۳']]]
+   deliver:['📥','ساعات دریافت پیام‌های رهگشا',[['all','همیشه'],['8-22','۸ تا ۲۲'],['9-21','۹ تا ۲۱'],['10-23','۱۰ تا ۲۳']]],
+   pro_on:['📣','پیام‌دادنِ خودکارِ رهگشا',[['1','روشن'],['0','خاموش']]],
+   pro_quiet:['🌙','ساعتِ سکوتِ پیام‌های خودکار',[['23:45-09:40','۲۳:۴۵ تا ۰۹:۴۰ (پیش‌فرض)'],['22:00-08:00','۲۲ تا ۸'],['23:00-07:00','۲۳ تا ۷'],['00:00-10:00','۰ تا ۱۰'],['off','بدون ساعت سکوت']]]
   };
-  var SEC={style:['🎨','سبک گفتار',['emoji','humor','profanity','formality']],format:['📏','قالب جواب',['length','structure','result_first']],behavior:['⚙️','رفتار',['ask_or_guess','confirm','proactive','auto_remind','memory','trainer','voice']],time:['🕒','زمان و دریافت',['night_mode','work_mode','deliver']]};
+  var SEC={style:['🎨','سبک گفتار',['emoji','humor','profanity','formality']],format:['📏','قالب جواب',['length','structure','result_first']],behavior:['⚙️','رفتار',['ask_or_guess','confirm','proactive','pro_on','auto_remind','memory','trainer','voice']],time:['🕒','زمان و دریافت',['night_mode','work_mode','deliver','pro_quiet']]};
   var TXT={ai_name:['✍️','اسم دلخواه برای رهگشا',30,'اسمی که می‌خوای رهگشا با اون خودش رو معرفی کنه (مثلاً «یار»). «-» = حذف.'],user_nick:['🏷️','لقبِ تو',30,'رهگشا تو رو چی صدا بزنه؟ (مثلاً «داداش»، «رئیس»). «-» = حذف.'],dialect:['🗺️','گویش / سبک خاص',40,'مثلاً «کرمانشاهی» یا «ادبی». «-» = حذف.'],report_template:['🧾','قالب گزارش',300,'گزارش‌های مسابقه رو چه ترتیب و فیلدی بخوای؟ مثال: «اول جدول، بعد بازی‌های در انتظار، آخر هشدارها». «-» = حذف.'],persona_text:['📝','پرامپت اختصاصی',500,'هر چیزی درباره‌ی لحن و سبکِ دلخواهت. فقط روی سبک اثر می‌ذاره و قوانین سیستم رو تغییر نمی‌ده. «-» = حذف.'],shortcut_add:['⚡','میانبر جدید',400,'با این قالب بنویس: «کلمه = دستور کامل». مثال: «صبحانه = خلاصه صبحگاهی بده و وضعیت مسابقات رو بگو»'],profile_save:['💾','ذخیره‌ی پروفایل',20,'یه اسم برای این ترکیب تنظیمات بنویس (مثلاً «مسابقه»).']};
-  var HINTS={confirm:'«فقط کارهای مهم» یعنی اخطار/اخراج/حذف/اطلاعیه/تغییر تنظیمات و … قبل از اجرا از تو تأیید می‌خواد.',deliver:'یادآورها و نتیجه‌ی اقدام‌های زمان‌بندی‌شده خارج از این ساعت‌ها نگه داشته می‌شن و اول بازه‌ی بعدی میان.',voice:'(آزمایشی) نسخه‌ی صوتیِ جواب‌های کوتاه به‌صورت فایل صوتی فرستاده می‌شه.'};
+  var HINTS={pro_on:'اگه روشن باشه رهگشا فقط سرِ موضوع‌های واقعاً مهم خودش بهت پیام می‌ده (حداکثر چند پیام در روز).',pro_quiet:'در این بازه رهگشا خودش پیام نمی‌ده. ساعتِ دلخواه (مثل ۲۲:۳۰ تا ۸) رو توی چت به خودِ رهگشا بگو.',confirm:'«فقط کارهای مهم» یعنی اخطار/اخراج/حذف/اطلاعیه/تغییر تنظیمات و … قبل از اجرا از تو تأیید می‌خواد.',deliver:'یادآورها و نتیجه‌ی اقدام‌های زمان‌بندی‌شده خارج از این ساعت‌ها نگه داشته می‌شن و اول بازه‌ی بعدی میان.',voice:'(آزمایشی) نسخه‌ی صوتیِ جواب‌های کوتاه به‌صورت فایل صوتی فرستاده می‌شه.'};
 
   /* ── وضعیتِ تنظیمات (از سرور) ── */
   var stack = [], body = null, titleEl = null, backBtn = null, toastEl = null;
@@ -167,6 +169,7 @@
       row({ ic: '💾', l: 'پروفایل‌ها', v: String(pr), go: 1, fn: function () { go('پروفایل‌ها', pgProf); } })]);
     grp(f, 'ابزارها', [
       row({ ic: '🤖', l: 'کارهای زمان‌بندی‌شده', go: 1, fn: function () { go('کارهای زمان‌بندی‌شده', pgSch); } }),
+      row({ ic: '🔔', l: 'قانون‌های «اگر فلان شد بهم بگو»', go: 1, fn: function () { go('قانون‌های من', pgRules); } }),
       row({ ic: '🛠️', l: 'توانایی‌های من', go: 1, fn: function () { go('توانایی‌های من', pgAbil); } }),
       row({ ic: '❓', l: 'چرا این جواب؟', go: 1, fn: function () { go('چرا این جواب؟', pgWhy); } }),
       row({ ic: '👁', l: 'پیش‌نمایش سبک', go: 1, fn: function () { go('پیش‌نمایش سبک', pgPrev); } }),
@@ -187,6 +190,7 @@
           if (!ST.ADM) return;
           call('/hub/api/rg/admin/lock', {}).then(function (r) { ST.ADM.lock = r.lock; refresh(); }, function (e) { toast(errMsg(e)); });
         } }),
+        row({ ic: '📣', l: 'پیام‌دادنِ خودکارِ رهگشا', go: 1, fn: function () { go('پیام‌دادنِ خودکار', pgPro); } }),
         row({ ic: '🛠️', l: 'اختیارات دستیار', go: 1, fn: function () { go('اختیارات دستیار', pgPerm); } }),
         row({ ic: '🗂️', l: 'سوابق چت مدیران', go: 1, fn: function () { go('سوابق چت مدیران', pgLog); } }),
         row({ ic: '🔕', l: 'خاموشی برای ادمین', go: 1, fn: function () { go('خاموشی برای ادمین', pgOff); } }),
@@ -344,6 +348,60 @@
     if (!a.length) { f.append(el('div', 'rg-note', 'هیچ مدیری ثبت نشده.')); return f; }
     grp(f, null, a.map(function (x) { return row(rowExtra(x, function () { onTap(x); })); }));
     return f;
+  }
+  function pgRules() {
+    return lazy(function () { return call('/hub/api/rg/rules'); }, function (r) {
+      var f = doc.createDocumentFragment(), rs = r.rules || [];
+      f.append(el('div', 'rg-note', 'برای ساختنِ قانون توی چت به رهگشا بگو: «اگر … شد بهم بگو». این‌جا فقط می‌بینی یا پاک می‌کنی.'));
+      if (!rs.length) { f.append(el('div', 'rg-note', 'قانونِ فعالی نداری.')); return f; }
+      grp(f, null, rs.map(function (x) {
+        return row({ ic: '🔔', l: x.title, s: x.what + (x.repeat ? ' — تکراری' : '') + (x.mine ? '' : ' — مالِ دیگری'), v: '🗑', fn: function () {
+          call('/hub/api/rg/rules/del', { id: x.id }).then(function () { toast('حذف شد'); refresh(); }, function (e) { toast(errMsg(e)); });
+        } });
+      }));
+      return f;
+    });
+  }
+  function pgPro() {
+    return lazy(function () { return call('/hub/api/rg/admin/pro'); }, function (s) {
+      var f = doc.createDocumentFragment();
+      function act(b) { call('/hub/api/rg/admin/pro', b).then(function () { refresh(); }, function (e) { toast(errMsg(e)); }); }
+      f.append(el('div', 'rg-note', 'رهگشا فقط سرِ موضوع‌های مهم خودش پیام می‌ده؛ ساکت‌بودن پیش‌فرضه. هر مدیر برای خودش هم می‌تونه خاموش/روشن و ساعتِ سکوت رو عوض کنه.'));
+      grp(f, null, [
+        row({ ic: '📣', l: 'کلیدِ کلی', s: 'خاموش = رهگشا برای هیچ‌کس خودش پیام نمی‌ده', sw: s.on, fn: function () { act({ key: 'on' }); } }),
+        row({ ic: '📅', l: 'سقفِ روزانه برای هر نفر', v: String(s.max_day), fn: function () { act({ key: 'max_day' }); } }),
+        row({ ic: '⏱', l: 'فاصله‌ی حداقلیِ دو پیام', v: s.gap_h + ' ساعت', fn: function () { act({ key: 'gap_h' }); } }),
+        row({ ic: '🎯', l: 'آستانه‌ی اهمیت (۱ تا ۵)', s: 'بیشتر = ساکت‌تر و گزیده‌تر', v: String(s.min_imp), fn: function () { act({ key: 'min_imp' }); } }),
+        row({ ic: '🌙', l: 'ساعتِ سکوتِ پیش‌فرض', v: s.quiet === 'off' ? 'ندارد' : s.quiet, fn: function () { act({ key: 'quiet' }); } }),
+        row({ ic: '🧠', l: 'قاضیِ هوش مصنوعی', s: 'مدل می‌تونه بگه «این ارزش مزاحمت نداره»', sw: s.llm, fn: function () { act({ key: 'llm' }); } })]);
+      grp(f, null, [
+        row({ ic: '🗂', l: 'کدام موضوع‌ها بررسی شوند', v: (s.topics.filter(function (t) { return t.on; }).length) + ' / ' + s.topics.length, go: 1, fn: function () { go('موضوع‌ها', pgProTopics); } }),
+        row({ ic: '👥', l: 'کدام مدیرها پیام بگیرند', go: 1, fn: function () { go('افراد', pgProPeople); } })]);
+      return f;
+    });
+  }
+  function pgProTopics() {
+    return lazy(function () { return call('/hub/api/rg/admin/pro'); }, function (s) {
+      var f = doc.createDocumentFragment();
+      grp(f, null, s.topics.map(function (t) {
+        return row({ l: t.label, sw: t.on, fn: function () {
+          call('/hub/api/rg/admin/pro', { topic: t.key }).then(function () { refresh(); }, function (e) { toast(errMsg(e)); });
+        } });
+      }));
+      return f;
+    });
+  }
+  function pgProPeople() {
+    return lazy(function () { return call('/hub/api/rg/admin/pro'); }, function (s) {
+      var f = doc.createDocumentFragment(), ps = s.people.filter(function (p) { return p.active; });
+      f.append(el('div', 'rg-note', 'روشن = رهگشا می‌تونه برای این نفر پیام بده (خودش هم می‌تونه جدا خاموش کنه).'));
+      grp(f, null, ps.map(function (p) {
+        return row({ ic: '👤', l: p.name, sw: !p.blocked, fn: function () {
+          call('/hub/api/rg/admin/pro', { uid: p.id }).then(function () { refresh(); }, function (e) { toast(errMsg(e)); });
+        } });
+      }));
+      return f;
+    });
   }
   function pgPerm() {
     return lazy(function () { return call('/hub/api/rg/admin/overview'); }, function (r) {
