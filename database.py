@@ -2183,13 +2183,16 @@ async def record_match_result(mid: int, result: str, reason: str, updated_by: in
     return True
 
 
-async def get_matches_by_filter(period: str = "all"):
+async def get_matches_by_filter(period: str = "all", limit=50):
     """BUG FIX (امنیت): قبلاً تاریخ مستقیم با f-string توی متنِ SQL جاگذاری
     می‌شد (`WHERE m.match_date='{d}'`) — چون d همیشه از datetime خودِ سرور
     ساخته می‌شه، فعلاً قابل‌سوءاستفاده نبود، ولی سبکش برخلافِ همه‌جای بقیه‌ی
     این فایله (که پارامتری‌ان) و اگه یک روز این تابع پارامتر گرفت، دقیقاً
     همین الگو راهِ SQL injection می‌شه. الان مثل بقیه‌ی توابع، پارامتری شده."""
-    cached = _cache_get(_matches_cache, period)
+    # limit: پیش‌فرض ۵۰ (رفتارِ قبلی برای همه‌ی فراخوان‌های موجود). limit=None یعنی بدون سقف
+    # (بکاپ و شیت متصل باید همه‌ی بازی‌ها را ببینند، نه فقط ۵۰ تای آخر).
+    _ckey = period if limit == 50 else f"{period}:{limit}"
+    cached = _cache_get(_matches_cache, _ckey)
     if cached is not _CACHE_MISS:
         return cached
     from datetime import timedelta
@@ -2205,6 +2208,7 @@ async def get_matches_by_filter(period: str = "all"):
     elif period == "month":
         where = "WHERE m.created_at>=?"
         params.append((now - timedelta(days=30)).isoformat())
+    limit_sql = f"LIMIT {int(limit)}" if limit is not None else ""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -2212,11 +2216,11 @@ async def get_matches_by_filter(period: str = "all"):
                FROM matches m
                LEFT JOIN players wp ON m.white_player_id=wp.id
                LEFT JOIN players bp ON m.black_player_id=bp.id
-               {where} ORDER BY m.created_at DESC LIMIT 50""",
+               {where} ORDER BY m.created_at DESC {limit_sql}""",
             params
         ) as cur:
             rows = await cur.fetchall()
-            _cache_set(_matches_cache, period, rows, ttl=_LIST_CACHE_TTL)
+            _cache_set(_matches_cache, _ckey, rows, ttl=_LIST_CACHE_TTL)
             return rows
 
 

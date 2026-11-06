@@ -4,6 +4,7 @@ backup_utils.py — سیستم پشتیبان‌گیری کامل
 """
 import io
 import os
+import re
 import logging
 from datetime import datetime, timedelta
 
@@ -24,11 +25,34 @@ async def gather_data(period: str = "all") -> dict:
     from datetime import timedelta
     now = datetime.now()
 
-    matches = await db.get_matches_by_filter(period)
-    players = await db.get_all_players()
+    # بدون سقفِ ۵۰ تایی: بکاپ باید همه‌ی بازی‌های بازه را داشته باشد (قبلاً فقط ۵۰ بازیِ آخر می‌آمد)
+    matches = await db.get_matches_by_filter(period, limit=None)
+    all_matches = matches if period == "all" else await db.get_matches_by_filter("all", limit=None)
+    players_raw = await db.get_all_players()
     tournaments = await db.get_all_tournaments()
     classes = await db.get_all_classes()
     admins = await db.get_all_admins()
+
+    # برد/مساوی/باخت از روی جدول matches (منبعِ حقیقت) و روی «همه‌ی» بازی‌ها محاسبه می‌شود، نه شمارنده‌های ذخیره‌شده
+    # در players که با حذف/ویرایشِ بازی‌ها از واقعیت جدا می‌افتند. (بازه‌ی بکاپ فقط روی فهرستِ بازی‌ها اثر دارد.)
+    st = {}
+    for m in all_matches:
+        r = m["result"]
+        if r not in ("white", "black", "draw"):
+            continue
+        w, b = st.setdefault(m["white_player_id"], [0, 0, 0]), st.setdefault(m["black_player_id"], [0, 0, 0])
+        if r == "white":
+            w[0] += 1; b[2] += 1
+        elif r == "black":
+            b[0] += 1; w[2] += 1
+        else:
+            w[1] += 1; b[1] += 1
+    players = []
+    for pr in players_raw:
+        d = dict(pr)
+        w, dr, l = st.get(d["id"], [0, 0, 0])
+        d["wins"], d["draws"], d["losses"] = w, dr, l
+        players.append(d)
 
     return {
         "players": players,
@@ -86,6 +110,8 @@ def _write_row(ws, row_num: int, values: list):
     style = _row_style(row_num % 2 == 0)
     for col, v in enumerate(values, 1):
         cell = ws.cell(row=row_num, column=col, value=str(v) if v is not None else "")
+        if isinstance(cell.value, str) and cell.value.startswith("="):
+            cell.data_type = "s"          # متنی که با «=» شروع می‌شود (مثلاً یک نام) فرمول حساب نشود
         _apply_style(cell, style)
 
 def _auto_width(ws, min_width=12, max_width=35):
@@ -100,6 +126,134 @@ def _auto_width(ws, min_width=12, max_width=35):
                 pass
         ws.column_dimensions[col_letter].width = max_len
 
+
+
+# ──────────────────────────────────────────────────────────────
+# عکسِ کاملِ دیتابیس (همان چیزی که قبلاً فقط در شیتِ متصل بود، حالا در هر بکاپ)
+# ──────────────────────────────────────────────────────────────
+SNAP_ROW_CAP = 30000      # سقفِ ردیفِ هر جدول در فایل (جدیدترین‌ها)؛ برای جلوگیری از پُر شدنِ حافظه‌ی ربات
+SNAP_PAGE = 2000
+_XL_BAD = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+_COL_FA = {
+    "id": "شناسه", "telegram_id": "شناسه تلگرام", "username": "یوزرنیم", "full_name": "نام کامل", "display_name": "نام نمایشی",
+    "role": "نقش", "is_active": "فعال؟", "warnings": "اخطار", "joined_at": "تاریخ عضویت", "last_active": "آخرین فعالیت",
+    "permissions": "دسترسی‌ها", "name": "نام", "created_at": "زمان ایجاد", "class_id": "شناسه کلاس", "status": "وضعیت",
+    "notes": "یادداشت", "is_elite": "برتر؟", "is_special": "ویژه؟", "wins": "برد", "losses": "باخت", "draws": "مساوی",
+    "suspension_reason": "علت تعلیق", "white_player_id": "شناسه سفید", "black_player_id": "شناسه سیاه", "result": "نتیجه",
+    "draw_reason": "علت تساوی", "match_date": "تاریخ مسابقه", "tournament_id": "شناسه تورنمنت", "created_by": "ثبت‌کننده",
+    "updated_by": "ویرایش‌کننده", "updated_at": "زمان ویرایش", "is_pinned": "سنجاق؟", "is_default": "پیش‌فرض؟",
+    "ended_at": "زمان پایان", "target_type": "نوعِ هدف", "target_id": "شناسه هدف", "reason": "دلیل", "issued_by": "صادرکننده",
+    "issued_at": "زمان صدور", "text": "متن", "sent_at": "زمان ارسال", "title": "عنوان", "description": "شرح", "assigned_to": "مسئول",
+    "assigned_by": "واگذارکننده", "assigned_at": "زمان واگذاری", "completed_at": "زمان انجام", "fail_reason": "دلیل ناکامی",
+    "slogan": "شعار", "team_code": "کد تیم", "captain_id": "شناسه کاپیتان", "team_id": "شناسه تیم", "player_id": "شناسه بازیکن",
+    "level": "سطح", "is_reserve": "ذخیره؟", "team1_id": "شناسه تیم ۱", "team2_id": "شناسه تیم ۲", "match_type": "نوع مسابقه",
+    "scoring_method": "روش امتیازدهی", "round_num": "دور", "team_match_id": "شناسه مسابقه تیمی", "board_num": "شماره میز",
+    "player1_id": "شناسه بازیکن ۱", "player2_id": "شناسه بازیکن ۲", "rating": "Elo", "peak_rating": "اوج Elo",
+    "games_played": "تعداد بازی", "old_rating": "Elo قبل", "new_rating": "Elo بعد", "change": "تغییر", "opponent_id": "شناسه حریف",
+    "match_id": "شناسه بازی", "recorded_at": "زمان ثبت", "jdate": "تاریخ شمسی", "day_type": "نوع روز", "white_id": "شناسه سفید",
+    "black_id": "شناسه سیاه", "white_name": "نام سفید", "black_name": "نام سیاه", "winner_id": "شناسه برنده", "pgn": "PGN", "fen": "FEN",
+    "finished_at": "زمان پایان", "token": "توکن بازی", "action_type": "نوع اقدام", "logged_at": "زمان ثبت", "key": "کلید", "value": "مقدار",
+}
+
+
+def _xl_val(v):
+    if v is None:
+        return ""
+    if isinstance(v, (bytes, bytearray)):
+        return "[blob]"
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, (int, float)):
+        return v
+    return _XL_BAD.sub("", str(v))[:32000]
+
+
+def _xl_append(ws, vals):
+    """افزودنِ ردیف؛ متنی که با «=» شروع می‌شود فرمول حساب نشود."""
+    if any(isinstance(v, str) and v.startswith("=") for v in vals):
+        r = ws._current_row + 1
+        for ci, v in enumerate(vals, 1):
+            c = ws.cell(row=r, column=ci, value=v)
+            if isinstance(v, str) and v.startswith("="):
+                c.data_type = "s"
+    else:
+        ws.append(vals)
+
+
+def _xl_title(base: str, used: set) -> str:
+    t = re.sub(r"[\[\]\*\?/\\:]", "-", base)[:31]
+    n, out = 1, t
+    while out in used:
+        n += 1
+        out = t[:31 - len(str(n)) - 1] + "~" + str(n)
+    used.add(out)
+    return out
+
+
+async def _read_table(ss, physical, cols, logical):
+    """ردیف‌های یک جدول (جدیدترین SNAP_ROW_CAP تا) به‌ترتیبِ rowid. برمی‌گرداند: (rows, total)."""
+    sel = ",".join(f'CASE WHEN typeof("{c}")=\'blob\' THEN \'[blob]\' ELSE "{c}" END AS "{c}"' for c in cols)
+    cond = ss._SECRET_KEY_SQL.replace("NEW.", "") if logical == "system_settings" else ""
+    wh = f" WHERE {cond}" if cond else ""
+    total = int((await ss._x(f'SELECT COUNT(*) FROM "{physical}"{wh}')).rows[0][0])
+    start = 0
+    if total > SNAP_ROW_CAP:
+        r = (await ss._x(f'SELECT rowid FROM "{physical}"{wh} ORDER BY rowid LIMIT 1 OFFSET {total - SNAP_ROW_CAP}')).rows
+        start = int(r[0][0]) - 1 if r else 0
+    rows, last = [], start
+    while True:
+        q = f'SELECT rowid AS "__rid", {sel} FROM "{physical}" WHERE {cond + " AND " if cond else ""}rowid > ? ORDER BY rowid LIMIT {SNAP_PAGE}'
+        page = (await ss._x(q, [last])).rows
+        if not page:
+            break
+        rows.extend(r[1:] for r in page)
+        last = int(page[-1][0])
+        if len(page) < SNAP_PAGE:
+            break
+    return rows, total
+
+
+async def _add_snapshot_sheets(wb, ws_index):
+    """برای هر جدولِ دیتابیس (همان‌هایی که شیتِ متصل پوشش می‌داد) یک تب با «وضعیتِ فعلیِ کاملِ» جدول. توکن/رمزها کنار گذاشته می‌شوند.
+    اگر یک جدول خطا بدهد فقط همان جدول در فهرست با خطا ثبت می‌شود و بکاپ ادامه پیدا می‌کند."""
+    import sheets_sync as ss
+    import srvctx
+    sid = srvctx.current()
+    used = set(wb.sheetnames)
+    index = []
+    for physical, logical in await ss._tables_of(sid):
+        title = _xl_title(ss._tab_title(logical), used)
+        try:
+            cols = ss._vis(await ss._columns(physical), logical)
+            if not cols:
+                used.discard(title)
+                continue
+            rows, total = await _read_table(ss, physical, cols, logical)
+            ws = wb.create_sheet(title)
+            ws.sheet_view.rightToLeft = True
+            _write_header(ws, [f"{_COL_FA[c]} ({c})" if c in _COL_FA else c for c in cols])
+            for r in rows:
+                _xl_append(ws, [_xl_val(v) for v in r])
+            ws.freeze_panes = "A2"
+            for ci, c in enumerate(cols, 1):
+                w = len(_COL_FA.get(c, c)) + len(c) + 4 if c in _COL_FA else len(c) + 4
+                for r in rows[:200]:
+                    v = r[ci - 1]
+                    w = max(w, min(len(str(v)) if v is not None else 0, 50) + 2)
+                ws.column_dimensions[ws.cell(row=1, column=ci).column_letter].width = min(max(w, 10), 55)
+            note = "" if len(rows) >= total else f"فقط {len(rows)} ردیفِ آخر از {total} در این فایل است"
+            index.append((title, logical, total, len(rows), note))
+        except Exception as e:
+            logger.warning("backup: snapshot of %s failed: %s", physical, e)
+            index.append((title, logical, "؟", 0, f"خطا: {str(e)[:120]}"))
+            if title in wb.sheetnames and wb[title].max_row <= 1:
+                del wb[title]
+    _write_header(ws_index, ["تب", "جدول", "تعداد ردیف در دیتابیس", "ردیف در این فایل", "توضیح"])
+    for i, r in enumerate(index, 1):
+        _write_row(ws_index, i + 1, list(r))
+    _auto_width(ws_index)
+    return index
 
 # ──────────────────────────────────────────────────────────────
 # تولید فایل Excel
@@ -209,6 +363,19 @@ async def generate_excel_backup(period: str = "all") -> io.BytesIO:
         _auto_width(ws_s)
     except Exception as _e:
         logger.warning(f"backup: sheets info skipped: {_e}")
+
+    # ─── عکسِ کاملِ دیتابیس: یک تب برای هر جدول (همیشه «از ابتدا»، مستقل از بازه‌ی بالا) ───
+    try:
+        ws_idx = wb.create_sheet("فهرست عکس دیتابیس")
+        ws_idx.sheet_view.rightToLeft = True
+        index = await _add_snapshot_sheets(wb, ws_idx)
+        n = ws_info.max_row + 1
+        ws_info.cell(row=n, column=1, value="عکس کامل دیتابیس").font = Font(bold=True, name="Arial")
+        ws_info.cell(row=n, column=2, value=f"{len(index)} جدول · {sum(r[3] for r in index)} ردیف (فهرست در تب «فهرست عکس دیتابیس»)").font = Font(name="Arial")
+        ws_info.cell(row=n + 1, column=1, value="توجه").font = Font(bold=True, name="Arial")
+        ws_info.cell(row=n + 1, column=2, value="تب‌های «بازیکنان / مسابقات / تورنمنت‌ها / کلاس‌ها» بازه‌ی انتخابی را دنبال می‌کنند؛ عکس کامل همیشه از ابتدا است.").font = Font(name="Arial")
+    except Exception as _e:
+        logger.warning(f"backup: full snapshot skipped: {_e}", exc_info=True)
 
     buf = io.BytesIO()
     wb.save(buf)
