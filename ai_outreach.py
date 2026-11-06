@@ -85,7 +85,7 @@ def _parse(ts):
 
 
 def _clean(s, n=MAX_TEXT) -> str:
-    return " ".join(str(s or "").replace("\u200c", "\u200c").split())[:n] if False else str(s or "").strip()[:n]
+    return str(s or "").strip()[:n]
 
 
 def _fmt(dt: datetime) -> str:

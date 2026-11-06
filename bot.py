@@ -350,6 +350,8 @@ async def post_init(application: Application) -> None:
         ai_persona.start(application)
         import ai_proactive
         ai_proactive.start(application)
+        import ai_outreach
+        ai_outreach.start(application)
     except Exception as e:
         logger.warning(f"Could not start persona flusher: {e}")
 
@@ -627,6 +629,8 @@ def build_application():
     try:
         import ai_proactive
         ai_proactive.register(app)
+        import ai_outreach
+        ai_outreach.register(app)
     except Exception as _e:
         logger.warning(f"ai_proactive register failed: {_e}")
 

@@ -98,15 +98,21 @@ import ai_proactive as _pro
 TOOL_PERMISSIONS_EXT.update(_pro.TOOL_PERMISSIONS)
 CATEGORIES_EXT.append(_pro.CATEGORY)
 
+# ── پیام از طرفِ رهگشا به افرادِ دارای استارت (تأییدِ اجباری) ──
+import ai_outreach as _out
+TOOL_PERMISSIONS_EXT.update(_out.TOOL_PERMISSIONS)
+CATEGORIES_EXT.append(_out.CATEGORY)
+
 # ابزارهایی که واقعاً چیزی رو تغییر می‌دن (گزارش سیستم + اطلاع به مدیر ارشد)
-ACTION_TOOL_NAMES_EXT = frozenset({
+ACTION_TOOL_NAMES_EXT = frozenset(_out.ACTION_NAMES | {
     "set_player_tiers", "set_top_players", "add_admin", "set_admin_active",
     "set_admin_display_name", "set_admin_permissions", "resolve_access_request",
     "create_team", "edit_team", "manage_team_members", "warn_team", "delete_team",
     "brief_times_set",
 })
 
-SCHEDULABLE_TOOL_NAMES_EXT = frozenset(TOOL_PERMISSIONS_EXT.keys())
+# پیام‌های outreach نباید از مسیرِ schedule_action / batch_execute دور از گیتِ تأیید اجرا شوند
+SCHEDULABLE_TOOL_NAMES_EXT = frozenset(TOOL_PERMISSIONS_EXT.keys()) - frozenset(_out.TOOL_PERMISSIONS)
 
 # ════════════════════════════════════════════════════════════════
 # اعلان ابزارها برای Gemini
@@ -1474,13 +1480,15 @@ async def _list_warned_players(args):
 # ════════════════════════════════════════════════════════════════
 # دیسپچر — None یعنی این ابزار مال این ماژول نیست
 # ════════════════════════════════════════════════════════════════
-TOOL_DECLARATIONS_EXT = TOOL_DECLARATIONS_EXT + _mb.TOOL_DECLARATIONS + _srv.TOOL_DECLARATIONS + _pro.TOOL_DECLARATIONS
+TOOL_DECLARATIONS_EXT = TOOL_DECLARATIONS_EXT + _mb.TOOL_DECLARATIONS + _srv.TOOL_DECLARATIONS + _pro.TOOL_DECLARATIONS + _out.TOOL_DECLARATIONS
 
 
 async def dispatch_ext(name, args, caller_id, caller_role, ctx):
     if name not in TOOL_PERMISSIONS_EXT:
         return None
     args = args or {}
+    if name in _out.TOOL_PERMISSIONS:
+        return await _out.dispatch_tool(name, args, caller_id, caller_role, ctx)
     if name in _pro.TOOL_PERMISSIONS:
         return await _pro.dispatch_tool(name, args, caller_id, caller_role, ctx)
     if name in _srv.TOOL_PERMISSIONS:

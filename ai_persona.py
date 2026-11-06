@@ -408,22 +408,29 @@ async def expand_shortcut(uid: int, text: str) -> str:
 # ════════════════════════════════════════════════════════════════
 async def confirm_gate(ctx, uid: int, fname: str, fargs: dict):
     """اگه نیاز به تأیید باشه (متن، کیبورد) برمی‌گردونه؛ وگرنه None."""
+    import ai_outreach
+    forced = fname in ai_outreach.ALWAYS_CONFIRM      # پیام به آدم‌ها: همیشه تأیید، مستقل از تنظیم confirm
     prefs = await get_prefs(uid)
     mode = prefs.get("confirm") or "never"
-    if mode == "never":
-        return None
-    if mode == "important" and fname not in IMPORTANT_TOOLS:
-        return None
-    if mode == "always" and fname not in _all_action_names():
-        return None
+    if not forced:
+        if mode == "never":
+            return None
+        if mode == "important" and fname not in IMPORTANT_TOOLS:
+            return None
+        if mode == "always" and fname not in _all_action_names():
+            return None
     ud = ctx.user_data
     pend = ud.get("_aip_confirmed")
     if pend and pend == (fname, json.dumps(fargs, sort_keys=True, ensure_ascii=False, default=str)):
-        ud.pop("_aip_confirmed", None)
+        if not forced:
+            ud.pop("_aip_confirmed", None)
         return None
     ud["_aip_pending"] = {"name": fname, "args": fargs, "ts": time.time()}
-    args_txt = "، ".join(f"{k}={_clean_text(v, 60)}" for k, v in (fargs or {}).items()) or "—"
-    text = f"🛡️ قبل از اجرا تأیید می‌خوام:\n🛠 {fname}\n📝 {args_txt}"
+    if forced:
+        text = await ai_outreach.describe_for_confirm(fname, fargs)
+    else:
+        args_txt = "، ".join(f"{k}={_clean_text(v, 60)}" for k, v in (fargs or {}).items()) or "—"
+        text = f"🛡️ قبل از اجرا تأیید می‌خوام:\n🛠 {fname}\n📝 {args_txt}"
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("✅ انجام بده", callback_data="aip_cf_yes"),
                                 InlineKeyboardButton("❌ لغو", callback_data="aip_cf_no")]])
     return text, kb
