@@ -40,6 +40,7 @@ TOOL_PERMISSIONS_OV = {
     "set_player_style": ONLY_PISHVA,
     "plan_title_path": ONLY_PISHVA,
     "set_enforcement_lock": ONLY_PISHVA,
+    "lookup_bot_users": ONLY_PISHVA,
 }
 
 CATEGORIES_OV = [
@@ -48,6 +49,7 @@ CATEGORIES_OV = [
     ("scenario", "🧭 سبک بازیکن و سناریوی رتبه‌ی اول",
      ["set_player_style", "plan_title_path"]),
     ("enforcement_lock", "🔐 قفل دستور مدیر ارشد", ["set_enforcement_lock"]),
+    ("user_lookup", "🔎 ردیابیِ هر کسی که با ربات کار داشته (آیدی/یوزرنیم)", ["lookup_bot_users"]),
 ]
 
 # فقط این‌ها «اقدام واقعی» حساب می‌شن (گزارش + اطلاع به مدیر ارشد)
@@ -123,6 +125,21 @@ TOOL_DECLARATIONS_OV = [
             "period": {"type": "string", "enum": ["today", "week", "month", "all"]},
             "session_id": _INT,
             "limit": {**_INT, "description": "حداکثر گفتگو/پیام (پیش‌فرض ۸، سقف ۲۰)"},
+        }},
+    },
+    {
+        "name": "lookup_bot_users",
+        "description": (
+            "پیدا کردنِ هر کسی که تا حالا (در هر تاریخی، هر شکلی، حتی فقط یک /start) با ربات تماس داشته: "
+            "آیدی عددیِ تلگرام + یوزرنیم + نام + اولین/آخرین فعالیت + تعداد اقدام + وضعیت (مدیر/بلاک‌شده/درخواست‌دهنده/غریبه) + آخرین کارهاش. "
+            "query = یوزرنیم، آیدی عددی یا بخشی از نام (حروف تزئینی مثل 𝑨 هم با A یکی حساب می‌شن). "
+            "خالی = لیستِ جدیدترین‌ها. «آیدی عددی فلانی رو بده / این آدم کیه / کی استارت زده» = این ابزار. "
+            "فقط چیزی رو بگو که ابزار برگردونده؛ اگه پیدا نشد بگو در سوابق نیست و چیزی از خودت نساز."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "query": _STR,
+            "limit": {**_INT, "description": "حداکثر نفرات (پیش‌فرض ۲۰، سقف ۶۰)"},
+            "with_actions": {"type": "boolean", "description": "نمایش آخرین اقدام‌های هر نفر (پیش‌فرض: بله وقتی نتیجه ≤ ۵ نفر است)"},
         }},
     },
     {
@@ -751,6 +768,111 @@ async def _set_enforcement_lock(args, caller_id):
 # ════════════════════════════════════════════════════════════════
 # دیسپچر — None یعنی این ابزار مالِ این ماژول نیست
 # ════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════
+# ۶) ردیابیِ هر کسی که با ربات تماس داشته
+# ════════════════════════════════════════════════════════════════
+def _fold(t) -> str:
+    """یکسان‌سازی برای جست‌وجو: حروف تزئینیِ یونیکد (𝑨 → A)، فاصله/نیم‌فاصله، @، حروف کوچک."""
+    import unicodedata
+    t = unicodedata.normalize("NFKC", str(t or ""))
+    return norm(t).replace(" ", "").replace("\u200c", "").lstrip("@")
+
+
+async def _fetch_all(conn, sql, params=()):
+    try:
+        async with conn.execute(sql, params) as cur:
+            return await cur.fetchall()
+    except Exception as e:   # جدولِ اختیاری (مثلاً سرورها) ممکنه هنوز ساخته نشده باشه
+        logger.info("lookup_bot_users: %s skipped: %s", sql[:40], e)
+        return []
+
+
+async def _lookup_bot_users(args):
+    q_raw = str(args.get("query") or "").strip()
+    q = _fold(q_raw)
+    try:
+        limit = max(1, min(60, int(args.get("limit") or 20)))
+    except (TypeError, ValueError):
+        limit = 20
+
+    people = {}   # telegram_id -> dict
+
+    def P(tid):
+        if tid is None:
+            return None
+        return people.setdefault(int(tid), {"names": set(), "users": set(), "tags": set(), "first": None, "last": None, "n": 0})
+
+    def touch(pp, ts):
+        ts = str(ts or "")
+        if ts:
+            pp["first"] = ts if not pp["first"] or ts < pp["first"] else pp["first"]
+            pp["last"] = ts if not pp["last"] or ts > pp["last"] else pp["last"]
+
+    def ident(pp, username, full_name):
+        if username:
+            pp["users"].add(str(username).lstrip("@"))
+        if full_name:
+            pp["names"].add(str(full_name))
+
+    async with turso_db.connect(DB_PATH) as conn:
+        conn.row_factory = turso_db.Row
+        for r in await _fetch_all(conn, "SELECT telegram_id, username, full_name, MIN(ts) AS f, MAX(ts) AS l, COUNT(*) AS n "
+                                        "FROM stranger_log GROUP BY telegram_id, username, full_name"):
+            pp = P(r["telegram_id"]); ident(pp, r["username"], r["full_name"]); touch(pp, r["f"]); touch(pp, r["l"])
+            pp["n"] += r["n"] or 0; pp["tags"].add("غریبه/استارت‌زده")
+        for r in await _fetch_all(conn, "SELECT telegram_id, username, full_name, display_name, role, is_active, joined_at, last_active FROM admins"):
+            pp = P(r["telegram_id"]); ident(pp, r["username"], r["full_name"]); ident(pp, None, r["display_name"])
+            touch(pp, r["joined_at"]); touch(pp, r["last_active"])
+            pp["tags"].add(f"مدیر ({r['role']}، {'فعال' if r['is_active'] else 'غیرفعال'})")
+        for r in await _fetch_all(conn, "SELECT telegram_id, username, full_name, reason, blocked_at FROM blocked_users"):
+            pp = P(r["telegram_id"]); ident(pp, r["username"], r["full_name"]); touch(pp, r["blocked_at"])
+            pp["tags"].add("بلاک‌شده" + (f" ({_clip(r['reason'], 60)})" if r["reason"] else ""))
+        for r in await _fetch_all(conn, "SELECT telegram_id, username, full_name, status, requested_at FROM access_requests"):
+            pp = P(r["telegram_id"]); ident(pp, r["username"], r["full_name"]); touch(pp, r["requested_at"])
+            pp["tags"].add(f"درخواست دسترسی ({r['status']})")
+        for r in await _fetch_all(conn, "SELECT telegram_id, username, full_name, status, created_at FROM server_requests"):
+            pp = P(r["telegram_id"]); ident(pp, r["username"], r["full_name"]); touch(pp, r["created_at"])
+            pp["tags"].add(f"درخواست سرور ({r['status']})")
+        for r in await _fetch_all(conn, "SELECT telegram_id, joined_at FROM server_members"):
+            pp = P(r["telegram_id"]); touch(pp, r["joined_at"]); pp["tags"].add("عضو سرور")
+        for r in await _fetch_all(conn, "SELECT user_id, MIN(started_at) AS f, MAX(last_message_at) AS l FROM ai_chat_sessions GROUP BY user_id"):
+            pp = P(r["user_id"]); touch(pp, r["f"]); touch(pp, r["l"]); pp["tags"].add("چت با رهگشا")
+
+        # فیلتر
+        def match(tid, pp):
+            if not q:
+                return True
+            if q.isdigit() and str(tid) == q:
+                return True
+            return any(q in _fold(u) for u in pp["users"]) or any(q in _fold(n) for n in pp["names"])
+
+        hits = sorted(((t, pp) for t, pp in people.items() if match(t, pp)),
+                      key=lambda x: x[1]["last"] or "", reverse=True)
+        total = len(hits)
+        hits = hits[:limit]
+        if not hits:
+            return (f"❌ در سوابقِ ربات کسی با «{q_raw}» پیدا نشد. (فقط کسانی ثبت می‌شن که واقعاً به ربات پیام/دکمه/استارت فرستاده باشن؛ "
+                    "فعالیت‌های قبل از ساخت لاگِ غریبه‌ها ثبت نشده.)")
+
+        show_actions = args.get("with_actions")
+        show_actions = (len(hits) <= 5) if show_actions is None else bool(show_actions)
+        out = [f"🔎 {total} نفر در سوابقِ ربات" + (f" برای «{q_raw}»" if q_raw else " (جدیدترین‌ها)") + (f" — {len(hits)} تا نمایش" if total > len(hits) else "")]
+        for tid, pp in hits:
+            users = " / ".join("@" + u for u in sorted(pp["users"])) or "— (یوزرنیم ندارد/ثبت نشده)"
+            names = " / ".join(sorted(pp["names"])) or "—"
+            out.append(f"\n• آیدی عددی: {tid}\n  یوزرنیم: {users}\n  نام: {names}\n  وضعیت: {'، '.join(sorted(pp['tags'])) or '—'}\n"
+                       f"  اولین: {_short_date(pp['first'])} | آخرین: {_short_date(pp['last'])} | اقدام‌های ثبت‌شده: {pp['n']}")
+            if show_actions:
+                rows = await _fetch_all(conn, "SELECT action, ts FROM stranger_log WHERE telegram_id=? ORDER BY id DESC LIMIT 8", (tid,))
+                for r in rows:
+                    out.append(f"    - {_short_date(r['ts'])} | {_clip(r['action'], 100)}")
+    try:
+        await db.log_action(PISHVA_ID, "lookup_bot_users", f"ردیابی کاربران ربات: «{_clip(q_raw, 60) or 'جدیدترین‌ها'}»", None)
+    except Exception:
+        pass
+    return _cap(out)
+
+
 async def dispatch_ov(name, args, caller_id, caller_role, ctx):
     if name not in TOOL_PERMISSIONS_OV:
         return None
@@ -769,6 +891,8 @@ async def dispatch_ov(name, args, caller_id, caller_role, ctx):
         return await _plan_title_path(args, caller_id)
     if name == "set_enforcement_lock":
         return await _set_enforcement_lock(args, caller_id)
+    if name == "lookup_bot_users":
+        return await _lookup_bot_users(args)
     return None
 
 
@@ -784,6 +908,9 @@ PISHVA_PROMPT_BLOCK = (
     "set_player_style ثبتشون کن). خروجی رو به‌شکل سناریوی مرحله‌به‌مرحله بگو: چه حریف‌هایی، چه رنگی، چه نتیجه‌ای "
     "لازمه و چه بازی‌هایی (بین رقبا) باید به نفعش تموم بشه. این تحلیله؛ هیچ نتیجه‌ی ساختگی ثبت نکن — "
     "نتایج رو فقط وقتی ثبت کن که واقعاً بازی شده و مدیر ارشد نتیجه‌ی واقعی رو داده.\n"
+    "- «آیدی/یوزرنیمِ فلانی رو بده / این آدم کیه / کی استارت زده» = lookup_bot_users (query = یوزرنیم، آیدی یا بخشی از نام؛ \n"
+    "بدونِ query = جدیدترین‌ها). فقط همون چیزی رو بگو که ابزار برگردونده؛ آیدی عددی رو هرگز از خودت حدس نزن و اگه ابزار چیزی نیاورد \n"
+    "بگو در سوابق نیست.\n"
     "- اخطار/اخراج/حذف رو فقط وقتی انجام بده که خودِ مدیر ارشد صریحاً دستور داده (warn_player، kick_player، "
     "delete_match، set_admin_active و ...)."
 )
