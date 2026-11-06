@@ -419,9 +419,12 @@ def _est_height(row, widths, scale, fsize, base):
 def _grid_requests(gid, grid, T, o, color):
     """همه‌ی درخواست‌های لازم برای نوشتنِ یک Grid در یک تب (به‌ترتیب: پاک‌کردن ← ابعاد/ظاهرِ پایه ← داده ← ادغام ← ارتفاع/عرض)."""
     scale = T.cw / 160.0
+    fc = grid.freeze_cols
+    if fc and any(c0 < fc <= c1 for _r0, c0, _r1, c1 in grid.merges):
+        fc = 0  # ادغامِ تمام‌عرض با ستونِ ثابت سازگار نیست (خطای 400 گوگل)
     props = {"sheetId": gid, "rightToLeft": True,
              "gridProperties": {"rowCount": max(len(grid.rows) + 5, 20), "columnCount": grid.ncols, "frozenRowCount": grid.freeze_rows,
-                                "frozenColumnCount": grid.freeze_cols, "hideGridlines": True}}
+                                "frozenColumnCount": fc, "hideGridlines": True}}
     if o.get("tabcolor"):
         props["tabColor"] = _rgb(color)
     reqs = [
