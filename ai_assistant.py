@@ -601,6 +601,12 @@ async def ai_assistant_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
+    # چت با رهگشا فقط در پیوی است. «ai_mode» توی user_data نگه‌داری می‌شه و user_data مالِ خودِ کاربره
+    # (نه مالِ چت)، پس بدون این چک، کسی که توی پیوی رهگشا رو فعال کرده بود توی هر گروهی هم که
+    # ربات عضوش بود جواب می‌گرفت.
+    chat = update.effective_chat
+    if chat is None or chat.type != "private":
+        return
     text = update.message.text.strip()
     uid = update.effective_user.id
 

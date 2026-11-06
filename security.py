@@ -51,6 +51,11 @@ async def _track_activity(update: Update, admin=None):
             return
 
         # ─── غریبه: نه مدیر ارشد، نه ادمینِ فعال ───
+        # فقط تعاملِ پیوی ثبت می‌شه. پیامِ آدم‌های عادیِ توی گروه‌هایی که ربات عضوشونه تعاملِ
+        # «با ربات» نیست و نباید لاگِ غریبه حساب بشه.
+        _chat = update.effective_chat
+        if _chat is None or _chat.type != "private":
+            return
         action = None
         if update.callback_query is not None:
             action = f"دکمه: {(update.callback_query.data or '')[:80]}"
