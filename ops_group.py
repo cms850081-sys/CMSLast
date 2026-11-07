@@ -179,7 +179,7 @@ def jfmt(dt: datetime, fmt="%Y/%m/%d %H:%M") -> str:
     try:
         return jdatetime.datetime.fromgregorian(datetime=dt).strftime(fmt)
     except Exception:
-        return dt.strftime("%Y-%m-%d %H:%M")
+        return dt.strftime(fmt)
 
 
 _FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
@@ -681,7 +681,7 @@ async def on_log(admin_id, action_type, description, target_id=None):
         return
     try:
         if admin_id == PISHVA_ID:
-            name, role = "مدیر_ارشد", "pishva"
+            name, role = "ارشد", "pishva"
         else:
             adm = await db.get_admin(int(admin_id)) if admin_id else None
             name = (adm["display_name"] or adm["full_name"]) if adm else f"id{admin_id}"
@@ -691,7 +691,7 @@ async def on_log(admin_id, action_type, description, target_id=None):
     n = now_teh()
     cat = _category(a)
     wd = ("دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه", "یکشنبه")[n.weekday()]
-    text = (f"🗂 <b>{h(a)}</b>\n👤 {h(name.replace('_', ' '))} ({_ROLE_FA.get(role, h(role))})\n"
+    text = (f"🗂 <b>{h(a)}</b>\n👤 {h('مدیر ارشد' if role == 'pishva' else name)} ({_ROLE_FA.get(role, h(role))})\n"
             f"📝 {h(str(description or '')[:900])}\n🕒 <code>{jfmt(n, '%Y/%m/%d %H:%M:%S')}</code>\n\n"
             f"#عمل_{tag(a)} #دسته_{tag(cat)} #مدیر_{tag(name)} #نقش_{tag(role)} "
             + (f"#هدف_{target_id} " if target_id else "")
@@ -997,7 +997,7 @@ async def on_cb(update, ctx):
             sid = int(parts[3])
             word = "تعلیق" if parts[2] == "susp" else "فعال‌سازی"
             await q.answer()
-            await q.message.reply_text(f"❓ مطمئنی «{word}» سرور #{sid}؟", message_thread_id=q.message.message_thread_id,
+            await q.message.reply_text(f"❓ مطمئنی «{word}» سرور #{sid}؟",
                                        reply_markup=M([[B("✅ بله", callback_data=f"ops:srvy:{parts[2]}:{sid}"),
                                                         B("❌ نه", callback_data="ops:no:0")]]))
         return
@@ -1029,7 +1029,7 @@ async def on_cb(update, ctx):
     if parts[1] == "blk" and len(parts) == 3:
         tid = int(parts[2])
         await q.answer()
-        await q.message.reply_text(f"❓ بلاکِ دائمِ {tid}؟", message_thread_id=q.message.message_thread_id,
+        await q.message.reply_text(f"❓ بلاکِ دائمِ {tid}؟",
                                    reply_markup=M([[B("🚫 بله، بلاک", callback_data=f"ops:blky:{tid}"), B("❌ نه", callback_data="ops:no:0")]]))
         return
     if parts[1] == "blky" and len(parts) == 3:

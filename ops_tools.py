@@ -15,9 +15,10 @@ logger = logging.getLogger(__name__)
 BOSS = [ROLE_PISHVA]
 TOOL_PERMISSIONS = {n: BOSS for n in (
     "ops_status", "ops_post", "ops_topic_create", "ops_topic_edit", "ops_topic_delete", "ops_route_set",
-    "ops_matches_time_set", "ops_digest_now", "ops_security_review", "ops_refresh")}
+    "ops_matches_time_set", "ops_digest_now", "ops_security_review", "ops_refresh",
+    "ops_cmd_create", "ops_cmd_edit", "ops_cmd_delete", "ops_cmd_list")}
 CATEGORY = ("opsgroup", "🏛️ گروه فرماندهی (تاپیک‌ها، مسیردهی، گزارش‌ها)", list(TOOL_PERMISSIONS))
-ACTION_NAMES = frozenset({"ops_post", "ops_topic_create", "ops_topic_edit", "ops_topic_delete", "ops_route_set",
+ACTION_NAMES = frozenset({"ops_cmd_create", "ops_cmd_edit", "ops_cmd_delete", "ops_post", "ops_topic_create", "ops_topic_edit", "ops_topic_delete", "ops_route_set",
                           "ops_matches_time_set"})
 
 _S = {"type": "string"}
@@ -44,6 +45,27 @@ TOOL_DECLARATIONS = [
      "parameters": {"type": "object", "properties": {"date": {**_S, "description": "YYYY-MM-DD میلادی (پیش‌فرض: امروز)"}}}},
     {"name": "ops_security_review", "description": "اجرای بررسیِ امنیتی: پنلِ زنده را تازه می‌کند و خلاصه‌ی مرتبِ رهگشا (خلاصه/ریسک‌ها/اقدام) را در تاپیکِ امنیت می‌گذارد.",
      "parameters": {"type": "object", "properties": {}}},
+    {"name": "ops_cmd_create", "description": (
+        "ساختنِ یک دستورِ جدید برای تاپیکِ «مدیریت بازیکن» (هم با «/اسم» هم با کلمه‌ی فارسی). سه نوع: "
+        "reply = جوابِ ثابت؛ alias = میان‌بُر برای یک دستورِ اصلی (مثلاً «/late علی» اخطارِ تأخیر می‌دهد؛ از همان مجوزهای دستورِ اصلی رد می‌شود)؛ "
+        "ai = قالبِ پرسش از رهگشا (with_player=true پرونده‌ی بازیکن را هم می‌دهد). در template می‌توان {args} (کلِ ورودی)، {name} (نام، قبل از | یا :)، "
+        "{rest} (بعد از |) و {me} (نامِ اجراکننده) گذاشت. دستورهای اصلی (warn, note, player, …) را نمی‌شود بازنویسی کرد. "
+        "اگر مدیر ارشد جزئیاتِ کافی نداد (چه کاری، چه ورودی‌ای، چه خروجی‌ای) اول بپرس. مثال alias: name=late, base=warn, template='{name} | تأخیر {rest}'."),
+     "parameters": {"type": "object", "properties": {
+         "name": {**_S, "description": "نامِ یکتای دستور (بدونِ فاصله)"}, "kind": {**_S, "description": "reply | alias | ai"},
+         "template": _S, "base": {**_S, "description": "فقط alias: دستورِ اصلی (warn|unwarn|note|notes|watch|unwatch|player|history|find|class|warnings|top|recent|summary|suspended|watchlist؛ suspend/revive/clearwarn/clearnotes فقط برای مدیر ارشد)"},
+         "slash": {"type": "array", "items": _S, "description": "نام‌های «/…» (پیش‌فرض: خودِ name)"},
+         "words": {"type": "array", "items": _S, "description": "کلمه‌های فارسی/متنی که بدونِ / هم دستور را اجرا می‌کنند"},
+         "with_player": {"type": "boolean"}, "boss_only": {"type": "boolean"}, "help": {**_S, "description": "توضیحِ یک‌خطی برای /phelp"}},
+         "required": ["name", "kind"]}},
+    {"name": "ops_cmd_edit", "description": "ویرایشِ یک دستورِ سفارشی (قالب، نام‌های فراخوانی، راهنما، فعال/غیرفعال).",
+     "parameters": {"type": "object", "properties": {
+         "name": _S, "kind": _S, "template": _S, "base": _S, "slash": {"type": "array", "items": _S}, "words": {"type": "array", "items": _S},
+         "with_player": {"type": "boolean"}, "boss_only": {"type": "boolean"}, "help": _S, "active": {"type": "boolean"}}, "required": ["name"]}},
+    {"name": "ops_cmd_delete", "description": "حذفِ یک دستورِ سفارشی.",
+     "parameters": {"type": "object", "properties": {"name": _S}, "required": ["name"]}},
+    {"name": "ops_cmd_list", "description": "فهرستِ دستورهای سفارشی (نوع، نام‌های فراخوانی، قالب، فعال).",
+     "parameters": {"type": "object", "properties": {}}},
     {"name": "ops_refresh", "description": "تازه‌سازیِ پنل‌های زنده‌ی گروه.",
      "parameters": {"type": "object", "properties": {"what": {**_S, "description": "security | admins | servers | all"}}}},
 ]
@@ -68,6 +90,25 @@ async def dispatch_tool(name, args, caller_id, caller_role, ctx):
         return "⛔ این ابزار فقط برای مدیر ارشد است."
     bot = ctx.bot
     og._BOT = og._BOT or bot
+    if name.startswith("ops_cmd_"):
+        import ops_players as opp
+        if name == "ops_cmd_list":
+            rows = await opp.list_commands()
+            if not rows:
+                return "📭 هنوز دستورِ سفارشی‌ای ساخته نشده."
+            return "\n".join(
+                f"- {r['name']} [{r['kind']}{'/' + r['base'] if r['base'] else ''}] {'فعال' if r['active'] else 'غیرفعال'}"
+                f"{' (فقط مدیر ارشد)' if r['boss_only'] else ''} | " + " ".join([f"/{x}" for x in r['slash_l']] + r['words_l'])
+                + f" | قالب: {(r['template'] or '')[:80]}" for r in rows)
+        if name == "ops_cmd_delete":
+            return (await opp.delete_command(args.get("name")))[1]
+        keys = ("kind", "template", "base", "slash", "words", "with_player", "boss_only", "help")
+        kw = {k: args[k] for k in keys if k in args}
+        if name == "ops_cmd_edit":
+            if "active" in args:
+                kw["active"] = args["active"]
+            return (await opp.save_command(name=args.get("name"), update=True, **kw))[1]
+        return (await opp.save_command(name=args.get("name"), created_by=caller_id, **kw))[1]
     cfg = await og.load_cfg(force=True)
 
     if name == "ops_status":

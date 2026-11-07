@@ -9,6 +9,7 @@ ops_players.py — دستورات «مدیریت بازیکن» (فقط در ت�
 import html
 import json
 import logging
+import re
 from datetime import datetime
 
 import turso_db
@@ -93,6 +94,9 @@ async def _ensure():
         return
     async with turso_db.connect(DB_PATH) as c:
         await c.execute("CREATE TABLE IF NOT EXISTS ops_watch (player_id INTEGER PRIMARY KEY, reason TEXT, by_id INTEGER, at TEXT)")
+        await c.execute("CREATE TABLE IF NOT EXISTS ops_commands (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, slash TEXT, "
+                        "words TEXT, kind TEXT, base TEXT, template TEXT, with_player INTEGER DEFAULT 0, boss_only INTEGER DEFAULT 0, "
+                        "help TEXT, active INTEGER DEFAULT 1, created_by INTEGER, created_at TEXT)")
         await c.commit()
     _ok = True
 
@@ -209,11 +213,22 @@ async def handle(update, ctx, text: str, role: str):
     m, uid = update.effective_message, update.effective_user.id
     cmd, arg = _parse(text)
     if cmd is None:
-        if (text or "").startswith("/"):
+        custom = await _find_custom(text)
+        if custom:
+            row, carg = custom
+            try:
+                out = await _run_custom(ctx, uid, role, row, carg)
+                await db.log_action(uid, "ops_custom_command", f"{row['name']}: {(text or '')[:120]}")
+            except Exception:
+                logger.warning("ops_players: custom %s failed", row["name"], exc_info=True)
+                out = "❌ اجرای این دستور خطا داد."
+            if out:
+                await m.reply_text(out[:4000], parse_mode="HTML")
+        elif (text or "").startswith("/"):
             await m.reply_text("❔ دستورِ ناشناخته. راهنما: /phelp")
         return
     if cmd == "help":
-        await m.reply_text(HELP, parse_mode="HTML")
+        await m.reply_text(HELP + await _custom_help(), parse_mode="HTML")
         return
     try:
         out = await _run(ctx, uid, role, cmd, arg)
@@ -430,4 +445,218 @@ async def _run(ctx, uid, role, cmd, arg):
         await db.update_player(pid, status="active", warnings=0)
         await db.log_action(uid, "revive_player", f"احیا: {pname}", pid)
         return f"🔄 <b>{h(pname)}</b> احیا شد و اخطارهایش صفر شد."
+    return None
+
+
+# ═══════════════════════ دستورهای سفارشی (ساخته‌شده توسط رهگشا) ═══════════════════════
+# سه نوع:
+#   reply — جوابِ ثابت (متن با {args} {name} {rest} {me})
+#   alias — میان‌بُر برای یک دستورِ اصلی (مثلاً «/late علی» = اخطارِ «تأخیر»)؛ از همان مجوزهای دستورِ اصلی رد می‌شود
+#   ai    — پرسش از رهگشا با قالبِ دلخواه (اختیاری: همراهِ پرونده‌ی بازیکن)
+# هر دستور می‌تواند هم «/اسم» داشته باشد هم «کلمه»‌ی فارسی. نمی‌تواند دستورهای اصلی را بپوشاند.
+SAFE_BASES = {"warn", "unwarn", "note", "notes", "watch", "unwatch", "player", "history", "find", "class", "warnings",
+              "top", "recent", "summary", "suspended", "watchlist"}
+BOSS_BASES = {"suspend", "revive", "clearwarn", "clearnotes"}        # میان‌بُر به این‌ها همیشه فقط برای مدیر ارشد
+KINDS = ("reply", "alias", "ai")
+_TRIG_RE = re.compile(r"^[\w\u0600-\u06FF]{2,32}$", re.UNICODE)
+_cmd_cache = {"t": 0.0, "rows": []}
+
+
+def _norm_trig(x):
+    t = str(x or "").strip().lstrip("/").lower().replace(" ", "_").replace("\u200c", "_")
+    return t if _TRIG_RE.match(t) else None
+
+
+def _jl(v):
+    try:
+        return json.loads(v) if v else []
+    except Exception:
+        return []
+
+
+async def _custom_rows(force=False):
+    import time
+    if not force and time.monotonic() - _cmd_cache["t"] < 30:
+        return _cmd_cache["rows"]
+    rows = [dict(r) for r in await _q("SELECT * FROM ops_commands WHERE active=1")]
+    for r in rows:
+        r["slash_l"], r["words_l"] = _jl(r["slash"]), _jl(r["words"])
+    _cmd_cache["rows"], _cmd_cache["t"] = rows, time.monotonic()
+    return rows
+
+
+async def _find_custom(text: str):
+    t = (text or "").strip()
+    if not t:
+        return None
+    rows = await _custom_rows()
+    first, _, rest = t.partition(" ")
+    if first.startswith("/"):
+        w = first[1:].split("@")[0].lower()
+        for r in rows:
+            if w in r["slash_l"]:
+                return r, rest.strip()
+        return None
+    f = first.lower().replace("\u200c", "_")
+    toks = t.split()
+    two = "_".join(toks[:2]).lower() if len(toks) > 1 else None
+    if two:                                     # کلمه‌ی دوبخشی اولویت دارد («قوانین باشگاه» روی «قوانین»)
+        for r in rows:
+            if two in r["words_l"]:
+                return r, " ".join(toks[2:]).strip()
+    for r in rows:
+        if f in r["words_l"]:
+            return r, rest.strip()
+    return None
+
+
+def _taken(rows, slash, words, skip_name=None):
+    for r in rows:
+        if r["name"] == skip_name:
+            continue
+        for x in slash:
+            if x in r["slash_l"]:
+                return f"«/{x}» قبلاً برای دستورِ «{r['name']}» است."
+        for x in words:
+            if x in r["words_l"]:
+                return f"کلمه‌ی «{x}» قبلاً برای دستورِ «{r['name']}» است."
+    for x in list(slash) + list(words):
+        if x in _LOOKUP:
+            return f"«{x}» یکی از دستورهای اصلی است و نمی‌شود رویش نوشت."
+    return None
+
+
+async def save_command(*, name, kind=None, template=None, base=None, slash=None, words=None, with_player=None,
+                       boss_only=None, help=None, active=None, created_by=0, update=False):
+    """ساخت یا ویرایشِ دستور. → (ok, پیام)"""
+    nm = _norm_trig(name)
+    if not nm:
+        return False, "نامِ دستور باید ۲ تا ۳۲ حرف/عدد/زیرخط باشد (بدونِ فاصله)."
+    rows = await _custom_rows(force=True)
+    cur = next((r for r in rows if r["name"] == nm), None)
+    if update and not cur:
+        all_rows = await _q("SELECT * FROM ops_commands WHERE name=?", (nm,))
+        if not all_rows:
+            return False, f"دستوری با نامِ «{nm}» نیست."
+        cur = dict(all_rows[0])
+        cur["slash_l"], cur["words_l"] = _jl(cur["slash"]), _jl(cur["words"])
+    if not update and cur:
+        return False, f"دستوری با نامِ «{nm}» از قبل هست؛ برای تغییر از ویرایش استفاده کنید."
+    if not update:
+        if (await _q("SELECT 1 FROM ops_commands WHERE name=?", (nm,))):
+            return False, f"دستوری با نامِ «{nm}» از قبل هست (غیرفعال)؛ ویرایشش کنید."
+
+    k = kind or (cur["kind"] if cur else None)
+    if k not in KINDS:
+        return False, "kind باید reply | alias | ai باشد."
+    tpl = template if template is not None else (cur["template"] if cur else "")
+    b = base if base is not None else (cur["base"] if cur else None)
+    if slash is None and words is None and not cur:
+        slash = [nm]
+    sl = [_norm_trig(x) for x in (slash if slash is not None else (cur["slash_l"] if cur else []))]
+    wd = [_norm_trig(x) for x in (words if words is not None else (cur["words_l"] if cur else []))]
+    if None in sl or None in wd:
+        return False, "هر نامِ دستور/کلمه باید ۲ تا ۳۲ حرف/عدد/زیرخط باشد."
+    sl, wd = list(dict.fromkeys(sl)), list(dict.fromkeys(wd))
+    if not sl and not wd:
+        return False, "حداقل یک «/دستور» یا یک «کلمه» لازم است."
+    bad = _taken(rows, sl, wd, skip_name=nm)
+    if bad:
+        return False, bad
+    bo = bool(boss_only if boss_only is not None else (cur["boss_only"] if cur else 0))
+    if k == "alias":
+        b = (b or "").strip().lower()
+        b = _LOOKUP.get(b, b)
+        if b not in SAFE_BASES | BOSS_BASES:
+            return False, "برای alias، base باید یکی از این‌ها باشد: " + "، ".join(sorted(SAFE_BASES | BOSS_BASES))
+        if b in BOSS_BASES:
+            bo = True
+        tpl = tpl or "{args}"
+    else:
+        b = None
+        if not (tpl or "").strip():
+            return False, "برای این نوع، template (متنِ جواب/دستورِ رهگشا) لازم است."
+    if len(tpl) > 1500:
+        return False, "template بیش از ۱۵۰۰ نویسه است."
+    wp = int(bool(with_player if with_player is not None else (cur["with_player"] if cur else 0)))
+    hp = (help if help is not None else (cur["help"] if cur else "")) or ""
+    act = int(bool(active if active is not None else (cur["active"] if cur else 1)))
+    now = datetime.now().isoformat()
+    if update:
+        await _x("UPDATE ops_commands SET slash=?, words=?, kind=?, base=?, template=?, with_player=?, boss_only=?, help=?, active=? WHERE name=?",
+                 (json.dumps(sl), json.dumps(wd, ensure_ascii=False), k, b, tpl, wp, int(bo), hp[:200], act, nm))
+    else:
+        await _x("INSERT INTO ops_commands(name, slash, words, kind, base, template, with_player, boss_only, help, active, created_by, created_at) "
+                 "VALUES (?,?,?,?,?,?,?,?,?,1,?,?)",
+                 (nm, json.dumps(sl), json.dumps(wd, ensure_ascii=False), k, b, tpl, wp, int(bo), hp[:200], created_by, now))
+    _cmd_cache["t"] = 0.0
+    trig = "، ".join([f"/{x}" for x in sl] + wd)
+    return True, f"✅ دستورِ «{nm}» {'ویرایش' if update else 'ساخته'} شد — فراخوانی: {trig}" + (" (فقط مدیر ارشد)" if bo else "")
+
+
+async def delete_command(name):
+    nm = _norm_trig(name)
+    if not nm or not (await _q("SELECT 1 FROM ops_commands WHERE name=?", (nm,))):
+        return False, f"دستوری با نامِ «{name}» نیست."
+    await _x("DELETE FROM ops_commands WHERE name=?", (nm,))
+    _cmd_cache["t"] = 0.0
+    return True, f"🗑️ دستورِ «{nm}» حذف شد."
+
+
+async def list_commands():
+    rows = [dict(r) for r in await _q("SELECT * FROM ops_commands ORDER BY id")]
+    for r in rows:
+        r["slash_l"], r["words_l"] = _jl(r["slash"]), _jl(r["words"])
+    return rows
+
+
+async def _custom_help() -> str:
+    rows = await _custom_rows(force=True)
+    if not rows:
+        return ""
+    out = ["\n\n🧩 <b>دستورهای سفارشی</b>"]
+    for r in rows:
+        trig = " ".join([f"/{x}" for x in r["slash_l"]] + r["words_l"])
+        out.append(f"• <code>{h(trig)}</code> — {h(r['help'] or r['name'])}" + (" 👑" if r["boss_only"] else ""))
+    return "\n".join(out)
+
+
+def _fill(tpl: str, arg: str, name: str, rest: str, me: str) -> str:
+    return tpl.replace("{args}", arg).replace("{name}", name).replace("{rest}", rest).replace("{me}", me)
+
+
+async def _run_custom(ctx, uid, role, r, arg):
+    if r["boss_only"] and uid != PISHVA_ID:
+        return "⛔ این دستور فقط برای مدیر ارشد است."
+    name, rest = _split(arg)
+    me = await _name_of(uid)
+    kind = r["kind"]
+    if kind == "reply":
+        return h(_fill(r["template"], arg, name, rest, me))
+    if kind == "alias":
+        built = _fill(r["template"] or "{args}", arg, name, rest, me).strip()
+        cmd2, arg2 = _parse(f"/{r['base']} {built}")
+        if cmd2 is None:
+            return "❌ دستورِ پایه‌ی این میان‌بر دیگر معتبر نیست."
+        return await _run(ctx, uid, role, cmd2, arg2)
+    if kind == "ai":
+        import ai_assistant as aia
+        if not await aia._is_ai_online():
+            return "⚠️ رهگشا فعلاً خاموش است."
+        if not await aia._can_use_ai(uid, role):
+            return "⛔ دسترسیِ شما به رهگشا بسته است."
+        card = ""
+        if r["with_player"]:
+            p, err = await _resolve(name)
+            if not p:
+                return err
+            card = re.sub(r"<[^>]+>", "", await _run(ctx, uid, role, "player", f"#{p['id']}") or "")
+            card += "\n" + re.sub(r"<[^>]+>", "", await _run(ctx, uid, role, "history", f"#{p['id']}") or "")
+        prompt = (f"تو «رهگشا» هستی و در تاپیکِ مدیریتِ بازیکنانِ یک باشگاهِ شطرنجِ مدرسه جواب می‌دهی.\n"
+                  f"درخواست: {_fill(r['template'], arg, name, rest, me)}\n"
+                  + (f"\nداده‌ی بازیکن:\n{card}\n" if card else "")
+                  + "\nقوانین: فقط از داده‌ی بالا استفاده کن و چیزی نساز؛ فارسی؛ حداکثر ۱۲ خط؛ بدونِ مارک‌داون.")
+        data = await aia._call_gemini([{"role": "user", "parts": [{"text": prompt}]}], None)
+        txt = "".join(x.get("text", "") for x in aia._extract_parts(data)).strip()
+        return ("🤖 " + h(txt[:3000])) if txt else "⚠️ رهگشا جوابی نداد."
     return None

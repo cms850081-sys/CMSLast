@@ -295,7 +295,7 @@ def _system_prompt(role: str, display_name: str = "", memory_rows=None, user_tex
         "players (دستورات اخطار/یادداشت)، announce، access (درخواست‌های دسترسی با دکمه)، strangers (کارتِ زنده‌ی هر غریبه)، "
         "matches (گزارش روزانه)، rahgosha، logs (هر اقدام یک پیام + هشتگ)، servers، admins. رویدادها خودکار طبق جدولِ مسیردهی به تاپیکِ خودشان "
         "می‌روند. ابزارها: ops_status (قبل از هر تغییر بگیر)، ops_post، ops_topic_create/edit/delete، ops_route_set (چه رویدادی به کدام تاپیک)، "
-        "ops_matches_time_set، ops_digest_now، ops_security_review، ops_refresh. وقتی مدیر ارشد داده‌ی جدیدی داد، تصمیم بگیر کدام تاپیکِ "
+        "ops_matches_time_set، ops_digest_now، ops_security_review، ops_refresh. دستورهای تاپیکِ players را هم می‌توانی خودت بسازی/ویرایش/حذف کنی: ops_cmd_create/edit/delete/list (نوع reply=جوابِ ثابت، alias=میان‌بُر برای دستورِ اصلی، ai=پرسش از رهگشا؛ هم «/اسم» هم کلمه‌ی فارسی). اگر مدیر ارشد فقط گفت «یه دستور بساز» و جزئیات نداد، بپرس چه کاری/چه ورودی‌ای/چه خروجی‌ای. وقتی مدیر ارشد داده‌ی جدیدی داد، تصمیم بگیر کدام تاپیکِ "
         "موجود مناسب است یا تاپیکِ تازه بساز و مسیر را وصل کن؛ ops_topic_delete همیشه تأیید می‌گیرد. اگر گروه وصل نیست مراحل را از ops_status بگو.\n"
         "- پیام به کسی که مدیر ثبت‌شده نیست (دسترسیش تأیید نشده یا فقط ربات رو استارت کرده): message_admin پیداش نمی‌کنه؛ "
         "از message_contact (فوری) یا schedule_outreach (یک‌بار/روزانه/هفتگی، متن ثابت یا موضوع‌های چرخشی) استفاده کن. "
