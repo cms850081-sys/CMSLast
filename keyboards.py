@@ -494,6 +494,7 @@ _PISHVA_PANEL_PAGES = [
          ("🛡️ پنل امنیتی APS", "security_panel", None)],
         [("🧑‍💻 مدیریت دستیار", "ai_manage_menu", None), ("⏰ یادآورها", "pishva_reminders", None)],
         [("🤖 کارهای دستیار", "pishva_ai_scheduled", None), ("🌅 خلاصه صبحگاهی", "pishva_brief", None)],
+        [("🏛️ گروه فرماندهی", "ops_menu", None)],
     ],
 ]
 

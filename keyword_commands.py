@@ -170,6 +170,14 @@ async def panel_ownership_guard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not msg:
         return
 
+    # گروهِ فرماندهی: پنل «مالک» ندارد؛ دکمه‌هایش (درخواست دسترسی، کارت‌ها، …) را هر هندلر با نقشِ کلیک‌کننده چک می‌کند.
+    try:
+        import ops_group
+        if await ops_group.is_ops_chat(chat.id):
+            return
+    except Exception:
+        pass
+
     requester_id = query.from_user.id
     callback_data = query.data or ""
 

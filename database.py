@@ -762,6 +762,8 @@ async def set_setting(key: str, value: str):
         )
         await db.commit()
     _invalidate_setting_cache(key)
+    if key in ("system_status", "bot_update_mode", "bot_active_for_admins", "working_hours_active"):
+        _fire_and_forget(_ops_mirror("on_status_change", key, value))
 
 
 # ─── Admins ───────────────────────────────────────────────────
@@ -2561,6 +2563,7 @@ async def create_feedback(sender_id, fb_type, title, content):
             (sender_id, fb_type, title, content, now)
         )
         await db.commit()
+    _fire_and_forget(_ops_mirror("on_feedback", sender_id, fb_type, title, content))
 
 
 async def get_all_feedback():
@@ -2603,6 +2606,16 @@ async def log_action(admin_id, action_type, description, target_id=None, snapsho
             await db.commit()
 
     _fire_and_forget(_write())
+    _fire_and_forget(_ops_mirror("on_log", admin_id, action_type, description, target_id))
+
+
+async def _ops_mirror(fn_name, *args):
+    """آینه‌ی رویدادها به «گروه فرماندهی» (ops_group). هر خطایی بی‌صدا نادیده گرفته می‌شود؛ هیچ‌وقت کارِ اصلی را خراب نمی‌کند."""
+    try:
+        import ops_group
+        await getattr(ops_group, fn_name)(*args)
+    except Exception:
+        pass
 
 
 TRAIL_PREFIX = "trail_"   # ردیف‌های «ردیابیِ کامل» (هر کلیک/درخواست) با این پیشوند در action_logs ذخیره می‌شن

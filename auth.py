@@ -807,7 +807,10 @@ async def on_access_request_msg(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "📝 " + (msg or "—") + "\n"
         "⏱️ `" + ts + "`"
     )
-    await notify_pishva(ctx.bot, notif, reply_markup=kb.kb_access_request(req_id))
+    import ops_group
+    _posted = await ops_group.post_event("access_request", notif, kb.kb_access_request(req_id), parse_mode="Markdown")
+    if _posted is None:      # گروهِ فرماندهی وصل نیست/ارسال نشد → مثلِ قبل پیوی
+        await notify_pishva(ctx.bot, notif, reply_markup=kb.kb_access_request(req_id))
     await update.message.reply_text("✅ درخواست ارسال شد. منتظر تأیید مدیر ارشد باشید.")
     return ConversationHandler.END
 

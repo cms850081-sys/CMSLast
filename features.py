@@ -473,6 +473,11 @@ async def weekly_champion_job(context):
         f"⏱️ `{now_shamsi()}`"
     )
     await broadcast_to_admins(context.bot, text)
+    try:
+        import ops_group
+        await ops_group.on_champion(text)
+    except Exception:
+        pass
     group_on = await db.get_setting("broadcast_champion_group_enabled", "1")
     channel_on = await db.get_setting("broadcast_champion_channel_enabled", "1")
     send_targets = []

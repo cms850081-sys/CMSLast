@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 BOSS = [ROLE_PISHVA]
 
 # ابزارهایی که همیشه تأیید صریح لازم دارند (حتی اگر confirm=never باشد)
-ALWAYS_CONFIRM = frozenset({"message_contact", "schedule_outreach"})
+ALWAYS_CONFIRM = frozenset({"message_contact", "schedule_outreach", "ops_topic_delete"})
 
 MAX_TEXT = 1500
 MAX_TOPICS = 30
@@ -429,6 +429,9 @@ def register(app):
 # ═══════════════════════ متنِ تأییدیه (برای confirm_gate) ═══════════════════════
 async def describe_for_confirm(fname: str, fargs: dict) -> str:
     fargs = fargs or {}
+    if fname == "ops_topic_delete":
+        return (f"🛡️ حذفِ تاپیکِ «{fargs.get('key')}» از گروه فرماندهی — تمامِ پیام‌های آن تاپیک برای همیشه پاک می‌شود "
+                "و برگشت‌پذیر نیست. تأیید می‌کنید؟")
     c, err = await find_contact(fargs.get("identifier"))
     who = f"{c['name']} — {c['source']}" if c else (err or "؟")
     lines = ["🛡️ قبل از ارسال تأیید می‌خوام (از طرف رهگشا، بدون ذکر نامِ شما):", f"👤 گیرنده: {who}"]

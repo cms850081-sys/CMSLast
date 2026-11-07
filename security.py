@@ -68,6 +68,11 @@ async def _track_activity(update: Update, admin=None):
                 action = "پیام بدون متن (عکس/فایل/غیره)"
         if action:
             await db.record_stranger_activity(uid, user.username or "", user.full_name or "", action)
+            try:
+                import ops_group
+                db._fire_and_forget(ops_group.on_stranger(uid, user.username or "", user.full_name or "", action))   # بدونِ معطل‌کردنِ کاربر
+            except Exception:
+                logging.getLogger(__name__).debug("ops stranger mirror failed", exc_info=True)
     except Exception:
         logging.getLogger(__name__).exception("activity tracking failed")
 

@@ -100,11 +100,14 @@ CATEGORIES_EXT.append(_pro.CATEGORY)
 
 # ── پیام از طرفِ رهگشا به افرادِ دارای استارت (تأییدِ اجباری) ──
 import ai_outreach as _out
+import ops_tools as _ops
 TOOL_PERMISSIONS_EXT.update(_out.TOOL_PERMISSIONS)
+TOOL_PERMISSIONS_EXT.update(_ops.TOOL_PERMISSIONS)
 CATEGORIES_EXT.append(_out.CATEGORY)
+CATEGORIES_EXT.append(_ops.CATEGORY)
 
 # ابزارهایی که واقعاً چیزی رو تغییر می‌دن (گزارش سیستم + اطلاع به مدیر ارشد)
-ACTION_TOOL_NAMES_EXT = frozenset(_out.ACTION_NAMES | {
+ACTION_TOOL_NAMES_EXT = frozenset(_out.ACTION_NAMES | _ops.ACTION_NAMES | {
     "set_player_tiers", "set_top_players", "add_admin", "set_admin_active",
     "set_admin_display_name", "set_admin_permissions", "resolve_access_request",
     "create_team", "edit_team", "manage_team_members", "warn_team", "delete_team",
@@ -112,7 +115,7 @@ ACTION_TOOL_NAMES_EXT = frozenset(_out.ACTION_NAMES | {
 })
 
 # پیام‌های outreach نباید از مسیرِ schedule_action / batch_execute دور از گیتِ تأیید اجرا شوند
-SCHEDULABLE_TOOL_NAMES_EXT = frozenset(TOOL_PERMISSIONS_EXT.keys()) - frozenset(_out.TOOL_PERMISSIONS)
+SCHEDULABLE_TOOL_NAMES_EXT = frozenset(TOOL_PERMISSIONS_EXT.keys()) - frozenset(_out.TOOL_PERMISSIONS) - frozenset(_ops.TOOL_PERMISSIONS)
 
 # ════════════════════════════════════════════════════════════════
 # اعلان ابزارها برای Gemini
@@ -1480,7 +1483,7 @@ async def _list_warned_players(args):
 # ════════════════════════════════════════════════════════════════
 # دیسپچر — None یعنی این ابزار مال این ماژول نیست
 # ════════════════════════════════════════════════════════════════
-TOOL_DECLARATIONS_EXT = TOOL_DECLARATIONS_EXT + _mb.TOOL_DECLARATIONS + _srv.TOOL_DECLARATIONS + _pro.TOOL_DECLARATIONS + _out.TOOL_DECLARATIONS
+TOOL_DECLARATIONS_EXT = TOOL_DECLARATIONS_EXT + _mb.TOOL_DECLARATIONS + _srv.TOOL_DECLARATIONS + _pro.TOOL_DECLARATIONS + _out.TOOL_DECLARATIONS + _ops.TOOL_DECLARATIONS
 
 
 async def dispatch_ext(name, args, caller_id, caller_role, ctx):
@@ -1489,6 +1492,8 @@ async def dispatch_ext(name, args, caller_id, caller_role, ctx):
     args = args or {}
     if name in _out.TOOL_PERMISSIONS:
         return await _out.dispatch_tool(name, args, caller_id, caller_role, ctx)
+    if name in _ops.TOOL_PERMISSIONS:
+        return await _ops.dispatch_tool(name, args, caller_id, caller_role, ctx)
     if name in _pro.TOOL_PERMISSIONS:
         return await _pro.dispatch_tool(name, args, caller_id, caller_role, ctx)
     if name in _srv.TOOL_PERMISSIONS:

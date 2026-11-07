@@ -578,7 +578,15 @@ async def _send(bot, uid, role, finding, text):
     log_id = await _exec("INSERT INTO aipro_log(user_id,topic,dkey,importance,outcome,text,at) VALUES(?,?,?,?,?,?,?)",
                          (uid, finding["topic"], finding["dkey"], finding["imp"], "sent", text, now))
     try:
-        await bot.send_message(uid, f"🤖 {text}", reply_markup=_kb(log_id))
+        _posted = None
+        if uid == PISHVA_ID:     # پیشنهادهای رهگشا برای مدیر ارشد → تاپیکِ «رهگشا» (اگر گروه وصل است)
+            try:
+                import ops_group
+                _posted = await ops_group.post_event("rahgosha_msg", f"🤖 {ops_group.h(text)}", _kb(log_id))
+            except Exception:
+                _posted = None
+        if _posted is None:
+            await bot.send_message(uid, f"🤖 {text}", reply_markup=_kb(log_id))
     except Exception:
         await _exec("UPDATE aipro_log SET outcome='failed' WHERE id=?", (log_id,))
         logger.info("aipro: could not deliver to %s", uid)

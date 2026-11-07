@@ -291,6 +291,12 @@ def _system_prompt(role: str, display_name: str = "", memory_rows=None, user_tex
         "مدیر خاص) و assign_task (اعطای وظیفه‌ی مشخص با عنوان و توضیح) استفاده کن — نه فقط قول "
         "بده که این کار رو می‌کنی. اگه چند مدیر باید خبردار بشن، برای هرکدوم جدا این تابع‌ها رو "
         "صدا بزن.\n"
+        "- «گروه فرماندهی»: یک سوپرگروهِ تاپیک‌دار که ربات و تو کامل کنترلش می‌کنید. تاپیک‌های پیش‌فرض: security (پنل زنده‌ی امنیت)، "
+        "players (دستورات اخطار/یادداشت)، announce، access (درخواست‌های دسترسی با دکمه)، strangers (کارتِ زنده‌ی هر غریبه)، "
+        "matches (گزارش روزانه)، rahgosha، logs (هر اقدام یک پیام + هشتگ)، servers، admins. رویدادها خودکار طبق جدولِ مسیردهی به تاپیکِ خودشان "
+        "می‌روند. ابزارها: ops_status (قبل از هر تغییر بگیر)، ops_post، ops_topic_create/edit/delete، ops_route_set (چه رویدادی به کدام تاپیک)، "
+        "ops_matches_time_set، ops_digest_now، ops_security_review، ops_refresh. وقتی مدیر ارشد داده‌ی جدیدی داد، تصمیم بگیر کدام تاپیکِ "
+        "موجود مناسب است یا تاپیکِ تازه بساز و مسیر را وصل کن؛ ops_topic_delete همیشه تأیید می‌گیرد. اگر گروه وصل نیست مراحل را از ops_status بگو.\n"
         "- پیام به کسی که مدیر ثبت‌شده نیست (دسترسیش تأیید نشده یا فقط ربات رو استارت کرده): message_admin پیداش نمی‌کنه؛ "
         "از message_contact (فوری) یا schedule_outreach (یک‌بار/روزانه/هفتگی، متن ثابت یا موضوع‌های چرخشی) استفاده کن. "
         "پیام فقط از «رهگشا» دیده می‌شه، پس اسم مدیر ارشد رو توی متن نیار. این دو ابزار همیشه اول از مدیر ارشد تأیید می‌گیرن؛ "
@@ -605,8 +611,8 @@ async def ai_assistant_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # (نه مالِ چت)، پس بدون این چک، کسی که توی پیوی رهگشا رو فعال کرده بود توی هر گروهی هم که
     # ربات عضوش بود جواب می‌گرفت.
     chat = update.effective_chat
-    if chat is None or chat.type != "private":
-        return
+    if chat is None or (chat.type != "private" and not ctx.user_data.get("_ops_topic_call")):
+        return      # استثنا: تاپیکِ «رهگشا» در گروهِ فرماندهی (ops_group._rahgosha)
     text = update.message.text.strip()
     uid = update.effective_user.id
 
